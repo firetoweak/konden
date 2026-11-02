@@ -25,7 +25,6 @@ export function FileAccessPanel({ sessionId, connectionId, active }: {
   return <Stack gap="xs">
     <FileAccessFields value={value} disabled={saving.isLoading || connectionId === null}
       onSelectingChange={setSelecting} onChange={(next) => { setDraft(next); setSaved(false); saving.reset(); }} />
-    <Text size="xs" c="dimmed">保存后用于下一次任务。修改前需停止当前任务、后台命令并回收子任务。此设置不限制命令运行后的系统访问。</Text>
     {saveError === undefined ? null : <Alert color="red" title="无法保存访问范围">
       {typeof saveError === "string" ? saveError : "保存失败，请重试。"}
     </Alert>}

@@ -43,10 +43,7 @@ export function FileAccessFields({ value, onChange, disabled = false, onSelectin
         <Radio value="full" label="完全访问" disabled={locked} />
       </Stack>
     </Radio.Group>
-    <Text size="xs" c="dimmed">个人工作目录始终可用，同事目录与收到的材料保持只读。</Text>
-    {value.mode === "full"
-      ? <Text size="xs" c="dimmed">允许访问当前系统账户可访问的所有磁盘和目录，不提供系统提权。</Text>
-      : <>
+    {value.mode === "directories" ? <>
         {value.directories.map((path, index) => <Group key={index} gap={4} wrap="nowrap">
           <TextInput aria-label={`访问目录 ${index + 1}`} placeholder="本机目录的绝对路径" value={path}
             onChange={(event) => changeDirectory(index, event.currentTarget.value)} disabled={locked}
@@ -61,9 +58,7 @@ export function FileAccessFields({ value, onChange, disabled = false, onSelectin
         <Button variant="subtle" color="gray" size="compact-xs" leftSection={<IconPlus size={14} />}
           disabled={locked} style={{ alignSelf: "flex-start" }}
           onClick={() => onChange({ ...value, directories: [...value.directories, ""] })}>添加目录</Button>
-        {value.directories.length === 0 ? <Text size="xs" c="dimmed">尚未添加外部目录。</Text> : null}
-        <Text size="xs" c="dimmed">文件夹选择窗口在运行后端的电脑上打开。</Text>
-      </>}
+      </> : null}
     {error === null ? null : <Text size="xs" c="red" role="alert">{error}</Text>}
   </Stack>;
 }
