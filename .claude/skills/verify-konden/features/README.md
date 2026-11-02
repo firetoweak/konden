@@ -8,6 +8,8 @@
 
 ## 基线前置条件
 
+2026-11-02 默认目录访问增量：Windows 隔离 Web + 本机受控模型，验证新建 Bot 无目录权限选项、E 盘文件写入与命令 cwd、关闭自动放行后逐项批准，以及 714px 资料抽屉。见 [tool-coding-round.md](tool-coding-round.md)，不代表其他功能全量重验。
+
 编码 Skill 增量：编码方法与 Git 协作分别按需加载，普通目录支持自定义 Skill；验证见 tool-coding-round 与 extensions，既有记录不代表全部重验。
 
 Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 `projects` 列表描述挂载关系，落地、同步需要项目名；子任务共享父工作区，委派可选择已有工作目录。

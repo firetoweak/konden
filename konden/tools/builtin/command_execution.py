@@ -36,7 +36,7 @@ COMMAND_DESCRIPTION = """
 class ForegroundCommandInput(BaseModel):
     cwd: str | None = Field(
         default=None,
-        description="命令启动目录；省略时为工作区",
+        description="命令启动目录，须在当前可写范围内；省略时为工作目录",
     )
     command: str = Field(description="要交给 Shell 执行的完整命令字符串")
 

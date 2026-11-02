@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from functools import partial
 from pathlib import Path
 import tempfile
@@ -50,6 +51,39 @@ async def until(predicate, timeout=30):
 
 
 class SupervisorTest(unittest.IsolatedAsyncioTestCase):
+    async def test_bot_writes_external_files_and_uses_external_command_cwd_by_default(self):
+        from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
+        from tests.execution.test_host_process_process import shell
+
+        outside = self.root / "outside-bot"
+        outside.mkdir()
+
+        class WriteOutside(ProcessLlm):
+            calls = 0
+
+            async def chat(client, messages, model, **kwargs):
+                client.calls += 1
+                if client.calls == 1:
+                    return LLMCallResult(LLMResponse(calls=(
+                        ToolCall("write-outside", "write_file", json.dumps({
+                            "path": str(outside / "file.txt"), "content": "written",
+                        })),
+                        ToolCall("run-outside", "execute_command", json.dumps({
+                            "cwd": str(outside),
+                            "command": shell(sys.executable, "-c", "from pathlib import Path;Path('command.txt').write_text('executed')"),
+                        })),
+                    )), LLMUsage(input_tokens=10, output_tokens=5))
+                return LLMCallResult(LLMResponse(content="done"), LLMUsage(input_tokens=10, output_tokens=5))
+
+        agent = await self.host.create_agent(name="default-access-bot")
+        await asyncio.wait_for(self.host.wait_quiescent(agent.session_id), 30)
+        self.host.llm = WriteOutside(self.root)
+        await self.host.accept_input(agent.session_id, "write and run outside the personal directory", delivery_id="outside")
+        await asyncio.wait_for(self.host.wait_quiescent(agent.session_id), 30)
+        self.assertEqual((outside / "file.txt").read_text(), "written")
+        self.assertEqual((outside / "command.txt").read_text(), "executed")
+        self.assertTrue(self.host.failures.empty())
+
     async def test_large_cli_catalog_does_not_crash_worker_or_hide_registered_clis(self):
         from dataclasses import replace
 

@@ -27,6 +27,8 @@ from konden.automation.once import (
 )
 from konden.assistant.control import pending_approval_view, project_control, project_control_message
 from konden.assistant.host.auto_authorize import AutoAuthorizeStore
+from konden.assistant.builtin_tools import bind_files
+from konden.filesystem.workspace import EnvironmentInputError
 from konden.assistant.compact.host import CompactHost
 from konden.assistant.attachments import AttachmentGateway, AttachmentRejected
 from konden.assistant.host.ipc import PipePeer, ProcessFailure, WorkerFailed
@@ -445,8 +447,16 @@ class HostSupervisor:
                     directory = (parent_workspace.task_root / expected_task.cwd).resolve()
                     if not directory.is_dir():
                         return {"ok": False, "code": "CWD_NOT_FOUND", "error": "子任务工作目录不存在。"}
-                    if not parent_workspace.full_access and not directory.is_relative_to(parent_workspace.task_root.resolve()):
-                        return {"ok": False, "code": "CWD_OUTSIDE_WORKSPACE", "error": "子任务工作目录不在你的工作区内。"}
+                    try:
+                        bind_files(
+                            parent_workspace,
+                            personal_root=child_directory,
+                            materials_root=AttachmentGateway(self.store.root).for_session(expected_task.parent_session_id).files.materials,
+                            colleague_roots=(self.home.agent_directories_root, self.home.agent_worktrees_root)
+                            if child_directory is not None else (),
+                        ).resolver.resolve(str(directory), access="write")
+                    except EnvironmentInputError as error:
+                        return {"ok": False, "code": error.code, "error": str(error)}
                 if not self.store.path(session_id).parent.exists():
                     await self.store.create(
                         session_id,

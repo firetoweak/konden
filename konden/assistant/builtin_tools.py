@@ -76,15 +76,13 @@ class BuiltinToolRunner:
         return verdict
 
 
-async def build_builtin_tools(
+def bind_files(
     workspace: WorkspaceRecord | FileWorkspace,
     *,
     materials_root: Path | None = None,
     personal_root: Path | None = None,
     colleague_roots: tuple[Path, ...] = (),
-    command_environment: Mapping[str, str] | None = None,
-    commands: CommandControl | None = None,
-) -> BuiltinToolRunner:
+) -> FileAccess:
     view = workspace_view(workspace)
     read_only = set()
     if materials_root is not None:
@@ -104,10 +102,6 @@ async def build_builtin_tools(
             RootBinding(f"colleague_worktrees_{index}", WorkspaceScope.COLLEAGUES, root),
         ))
         read_only.add(f"colleague_worktrees_{index}")
-    environment = None
-    if commands is not None:
-        environment = replace(create_local_command_environment(command_environment),
-                              command_executor=commands, background_supported=True)
     binding = FileAccess(
         environment_id="local",
         workspace_view=view,
@@ -124,6 +118,24 @@ async def build_builtin_tools(
                 ),
             ),
         )
+    return binding
+
+
+async def build_builtin_tools(
+    workspace: WorkspaceRecord | FileWorkspace,
+    *,
+    materials_root: Path | None = None,
+    personal_root: Path | None = None,
+    colleague_roots: tuple[Path, ...] = (),
+    command_environment: Mapping[str, str] | None = None,
+    commands: CommandControl | None = None,
+) -> BuiltinToolRunner:
+    binding = bind_files(workspace, materials_root=materials_root, personal_root=personal_root,
+                         colleague_roots=colleague_roots)
+    environment = None
+    if commands is not None:
+        environment = replace(create_local_command_environment(command_environment),
+                              command_executor=commands, background_supported=True)
     interrupts = CommandInterrupts()
     registry = BUILTIN_TOOL_REGISTRY.clone()
     for spec in create_workspace_tool_specs(binding, environment, interrupts):

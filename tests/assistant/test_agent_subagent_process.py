@@ -60,8 +60,8 @@ class DelegatingLlm:
         return LLMCallResult(LLMResponse(content=text), LLMUsage(input_tokens=1, output_tokens=1))
 
 
-@pytest.mark.parametrize("long", [False, True])
-def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_commands(tmp_path, long):
+@pytest.mark.parametrize(("long", "external"), [(False, False), (True, False), (False, True)])
+def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_commands(tmp_path, long, external):
     async def scenario():
         project = tmp_path / "project"
         project.mkdir()
@@ -77,8 +77,10 @@ def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_command
         try:
             parent = await host.create_agent(name="parent", workspace_id=workspace.workspace_id)
             root = tree(parent)
-            llm.directory = root
-            (root / "note.txt").write_text("uncommitted")
+            execution_root = tmp_path / "external" if external else root
+            execution_root.mkdir(exist_ok=True)
+            llm.directory = execution_root
+            (execution_root / "note.txt").write_text("uncommitted")
             before = git(root, "rev-parse", "HEAD")
             await host.set_auto_authorize(not long)
             await host.accept_input(parent.session_id, "运行子任务", delivery_id="start")
@@ -96,11 +98,11 @@ def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_command
                 [item] = await queries.list_inbox()
                 assert item.session_id == parent.session_id
                 assert item.command_session_id == child
-                assert not (root / "child.txt").exists()
+                assert not (execution_root / "child.txt").exists()
                 assert (await queries.agent_entry(parent.session_id)).status == "authorization"
                 await host.resolve_child_authorization(parent.session_id, child, item.command_id, approved=True)
                 async def ready():
-                    return (root / "ready").exists()
+                    return (execution_root / "ready").exists()
                 await until(ready)
                 await host.accept_input(parent.session_id, "先回答这个新问题", delivery_id="question")
                 async def answered():
@@ -111,7 +113,7 @@ def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_command
                 assert listing["data"]["subagents"][0]["status"] == "running"
                 await host._route("reclaim_child", child, {"parent_session_id": parent.session_id, "reason": "测试回收"})
                 assert all(command["state"] != "running" for command in await host.list_commands(child))
-                assert not (root / "late").exists()
+                assert not (execution_root / "late").exists()
                 from konden.execution.command import CommandStartError
                 with pytest.raises(CommandStartError):
                     await host.commands.manager.execute(child, "after-reclaim", "echo should-not-run", root, 0)
@@ -119,7 +121,7 @@ def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_command
                 async def reclaimed():
                     return child in project_reclaimed(await host.store.journal(parent.session_id).snapshot(parent.session_id))
                 await until(reclaimed)
-            assert (root / "child.txt").read_text() == "shared"
+            assert (execution_root / "child.txt").read_text() == "shared"
             assert git(root, "rev-parse", "HEAD") == before
             assert not (project / "child.txt").exists()
             child_events = await host.store.journal(child).snapshot(child)

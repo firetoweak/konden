@@ -66,7 +66,7 @@ def bound_workspace(
 ) -> WorkspaceRecord | FileWorkspace:
     directory = bound_directory(events)
     if directory is not None:
-        return FileWorkspace(directory)
+        return FileWorkspace(directory, full_access=True)
     workspace_id = bound_workspace_id(events)
     if workspace_id is None:
         raise UnboundSessionError(session_id)

@@ -4,6 +4,8 @@
 
 ## Sub-features
 
+- `host-directory-access`：Bot 及其子任务默认可以使用当前系统账户可访问的目录。创建页与资料页没有目录权限选择；文件工具可通过绝对路径读写个人目录外的文件，`execute_command.cwd` 和 `delegate.cwd` 也可指定外部目录。同事目录与材料仍按文件工具的只读规则处理，不代表命令进程沙箱。
+
 - `coding-tools`：一条消息内跑 `read_file` → `apply_patch` → `execute_command`。
 - `command-exit-codes`：`execute_command` 退出码 0 → `code=COMMAND_COMPLETED`；非 0 → `code=COMMAND_EXIT_NONZERO`（`ok=true`，工具状态仍为 `succeeded`/「完成」而非工具失败），`hint` 含「退出码非零」/「不要当作成功」，`data.exit_code` 为实际退出码。
 - `command-errors`：`execute_command` 的其他结果码（`command_execution.py`）：
@@ -50,7 +52,7 @@ Windows 将第三条命令换成 `Write-Output edited`；不要在 PowerShell �
     2. 再跑 `printf 'ok\n'`（或 `true`）→ `code=COMMAND_COMPLETED`、`data.exit_code=0`。
     Windows 上用 `cmd /c exit 2` 核对原生退出码为 2，再用 `Write-Output ok` 核对成功；`Write-Error "failed"` 可作纯 PowerShell 失败对照。
   - (c) 工作区里除 `note.txt` 外没有新增/修改文件（在 Agent 工作树里对比运行前后的 `git status --porcelain`）；`$SCRATCH_WORKSPACE` 本身不变；`$KONDEN_HOME` 不出现在工作区内。
-  - (d) 错误路径①：预置一个在所有允许读取目录之外的哨兵文件，让模型 `read_file` 读取 → 非完全访问工作区应返回工具错误，文件内容不得出现在回复里。同事工作树是允许只读的目录，不能拿它作越界判据。错误路径②：`apply_patch` 打一个上下文不匹配的补丁 → 工具报错，`note.txt` 不变。错误路径③：让模型 `execute_command` 用 `cwd` 指向不存在的子目录 → `CWD_NOT_FOUND`；`wait_seconds=1` 跑 `sleep 5`（Windows 用 `Start-Sleep -Seconds 5`）→ `COMMAND_BACKGROUND`，进程继续运行，稍后收到完成事实。
+  - (d) 外部目录：在个人目录之外准备测试目录；让模型通过绝对路径写文件，并以该目录作为命令 `cwd`，两者均应成功。Windows 可用另一磁盘的测试目录验证跨盘。错误路径①：修改同事目录中的哨兵文件 → 文件工具拒绝，原文不变。错误路径②：`apply_patch` 打一个上下文不匹配的补丁 → 工具报错，`note.txt` 不变。错误路径③：让模型 `execute_command` 用 `cwd` 指向不存在的子目录 → `CWD_NOT_FOUND`；`wait_seconds=1` 跑 `sleep 5`（Windows 用 `Start-Sleep -Seconds 5`）→ `COMMAND_BACKGROUND`，进程继续运行，稍后收到完成事实。
 - **错误路径（工具结果，不打崩会话）**：`glob` 的 pattern 为 `""` / `"."` / 仅空白时返回工具结果 `ok:false`、`code:EMPTY_PATTERN`，会话与 Worker 继续存活。参数不合 schema → `VALIDATION_ERROR`。handler 抛出的普通 `Exception`（如未预期 `ValueError`）由 `ToolsExecutor._execute_spec` 转为工具结果 `ok:false`、`code:TOOL_HANDLER_ERROR`（`data.exception_type` 为异常类名），**不**升级为调度器/Worker failure；`asyncio.CancelledError` / `KeyboardInterrupt` / `SystemExit` 等 `BaseException` 仍上抛。
 - **搜索/写入**：让模型 `glob` 找 `*.txt`、`grep` 找 `edited`、`write_file` 新建 `new.txt` 写 `hi`、`replace_all` 把 `hi` 换成 `yo`。(a) `new.txt` 为 `yo`。(d) 实例 PATH 里没有 `fd`/`fdfind` 时 `glob` → `GLOB_NOT_FOUND`，记录为环境问题而非功能通过。
 - **结果引用**：某个工具或历史检索实际返回 `data.reference` 后，请模型用 `read_content` 先连续读取，再用 `query` 找一个已知标识。(a) `CONTENT_READ` 的片段与原文一致，续读使用真实 `next_offset`。(b) 时间线出现 `read_content` 调用。(c) 读取不修改源文件。(d) 合法格式但不存在的引用 → `CONTENT_NOT_FOUND`；偏移超出原文 → `OFFSET_OUT_OF_RANGE`。没有取得真实引用时记录未覆盖，不编造成功路径。
@@ -91,3 +93,5 @@ Windows 将第三条命令换成 `Write-Output edited`；不要在 PowerShell �
 - 2026-10-20 编码 Skill 增量：隔离 Web + deepseek-flash，普通讨论未加载编码 Skill；无 Git Bot 按需加载 builtin:coding 和 project:file-handoff，读取 AGENTS.md 与独立需求文档、修复函数、执行 unittest（2 个通过）、生成交接文件，用户原文件保留且无 Git 操作。项目 Bot 在实施任务与集成任务中分别加载编码、Git Skill；首轮提议未修改文件。证据 `.tools/verify-coding-skill/evidence/`。未复验所有命令错误码、压缩后重读与子任务实机路径。
 
 - 2026-10-22 全量维护（`origin/main@4c000ca`，Windows Chrome/ConPTY，隔离 home、真实 DeepSeek）：真实 read_file/apply_patch/write_file/execute_command 通过，文件只改在挂载项目内；后台命令与非零退出未重验。
+
+- 2026-11-02 默认目录访问增量（Windows 隔离 Web + 本机受控模型）：创建页无目录权限选项，新 Bot 直接写入 E 盘测试目录并以该目录启动命令成功。关闭自动放行后两项操作先待批准，批准后成功；714px 资料抽屉无目录设置且分区正常。真实 Worker 用例覆盖主 Bot 外部文件与命令 cwd、子任务外部 cwd；文件工具与委派保留同事目录及材料只读。证据 `.tools/full-default-evidence/`；未验证真实模型自主行为、Linux/macOS 界面。

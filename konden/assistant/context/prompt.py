@@ -26,6 +26,7 @@ def environment_prompt(
         *((f"个人工作目录：{personal_directory}（可读写，用于存放你的文件和笔记）",)
           if personal_directory is not None and personal_directory != workspace_root else ()),
         f"相对路径从工作目录开始。{access}",
+        "命令的启动目录须在可写范围内；同事目录和收到的材料保持只读。",
         file_rules,
         "命令没有进程、系统或网络隔离；它们可以访问这台电脑的其他部分。",
         "</environment>",

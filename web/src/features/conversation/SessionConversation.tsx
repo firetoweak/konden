@@ -52,6 +52,7 @@ export function SessionConversation() {
         <Tabs.Tab value="routines">例行任务</Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="details">
+      <div className="bot-details-sections">
       <div className="agent-details-section">
         <Text className="agent-details-label" size="xs" c="dimmed">代码项目</Text>
         {agent.projects.map((project) => <div key={project.workspace_id}>
@@ -79,7 +80,6 @@ export function SessionConversation() {
           <IconUsersGroup size={16} /><span>{group.name}</span>
         </Link>)}
       </div>}
-      <div className="bot-execution-sections">
         <BackgroundCommands key={`commands-${agent.session_id}`} sessionId={agent.session_id} connectionId={connectionId} />
         <SubagentList sessionId={agent.session_id}
           onObserve={(commandId) => {
