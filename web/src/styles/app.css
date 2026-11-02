@@ -163,9 +163,9 @@ body {
 .bot-details-tab-list { flex-shrink: 0; padding-inline: 20px; }
 .bot-details-tab-list button { min-height: 42px; font-size: 12px; }
 .bot-details-tab-panel { flex: 1; min-height: 0; overflow-y: auto; padding-top: 20px; }
-.bot-execution-sections { display: flex; flex-direction: column; gap: 20px; margin-bottom: 28px; padding-inline: 20px; }
-.bot-execution-sections > .agent-details-section { min-width: 0; margin: 0; padding: 0; }
-.bot-execution-sections > .agent-details-section + .agent-details-section { padding-top: 20px; border-top: 1px solid var(--konden-border); }
+.bot-details-sections { display: flex; flex-direction: column; gap: 20px; margin-bottom: 28px; padding-inline: 20px; }
+.bot-details-sections > .agent-details-section { min-width: 0; margin: 0; padding: 0; }
+.bot-details-sections > .agent-details-section + .agent-details-section { padding-top: 20px; border-top: 1px solid var(--konden-border); }
 .subagent-summary-row { align-items: flex-start; padding-block: 12px; border-top: 1px solid var(--konden-border); }
 .subagent-summary-row:first-child { padding-top: 0; border-top: 0; }
 .subagent-summary-task { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }

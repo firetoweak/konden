@@ -53,6 +53,7 @@ export function SessionConversation() {
         <Tabs.Tab value="routines">例行任务</Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="details">
+      <div className="bot-details-sections">
       <div className="agent-details-section">
         <FileAccessPanel key={agent.session_id} sessionId={agent.session_id} connectionId={connectionId}
           active={detailsOpened && detailsTab === "details"} />
@@ -84,7 +85,6 @@ export function SessionConversation() {
           <IconUsersGroup size={16} /><span>{group.name}</span>
         </Link>)}
       </div>}
-      <div className="bot-execution-sections">
         <BackgroundCommands key={`commands-${agent.session_id}`} sessionId={agent.session_id} connectionId={connectionId} />
         <SubagentList sessionId={agent.session_id}
           onObserve={(commandId) => {
