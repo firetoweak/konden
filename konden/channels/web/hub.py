@@ -29,6 +29,9 @@ class WebEventHub:
     async def avatars_changed(self) -> None:
         await self._broadcast("avatars_changed", {})
 
+    async def file_access_changed(self, session_id: str) -> None:
+        await self._broadcast("file_access_changed", {"session_id": session_id})
+
     async def auto_authorize_changed(self) -> None:
         await self._broadcast("auto_authorize_changed", {})
 

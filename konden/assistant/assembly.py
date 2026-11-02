@@ -131,6 +131,11 @@ async def build_assistant_assembly(
         parent_events = await SessionStore(sessions_root).journal(task.parent_session_id).snapshot(task.parent_session_id)
         file_owner = project_agent(parent_events)
         shared_root = bound_workspace(task.parent_session_id, parent_events, WorkspaceRegistry.load(home.workspaces_path)).task_root
+        ancestor = project_task(parent_events)
+        while file_owner is None and ancestor is not None:
+            parent_events = await SessionStore(sessions_root).journal(ancestor.parent_session_id).snapshot(ancestor.parent_session_id)
+            file_owner = project_agent(parent_events)
+            ancestor = project_task(parent_events)
     colleague_schemas = MESSAGE_SCHEMAS if agent is not None and session_transport is not None else []
     colleague_bindings = (message_bindings(session_transport, journal) if colleague_schemas else {})
     attachment_gateway = AttachmentGateway(sessions_root)
@@ -311,8 +316,14 @@ async def build_assistant_assembly(
         system_prompt=BOT_PROMPT if agent is not None else DEFAULT_ASSISTANT_PROMPT,
         environment=environment_prompt(
             workspace.task_root, full_access=workspace.full_access,
+            directories=workspace.directories if isinstance(workspace, FileWorkspace) else (),
             delegated=task is not None,
-            personal_directory=None if agent is None else agent.directory,
+            personal_directory=shared_root if file_owner is None else file_owner.directory,
+            access_guidance=None if file_owner is None or workspace.full_access else (
+                "需要扩大文件访问范围时，向父 Agent 说明目标目录，由用户调整所属 Bot 的文件访问范围。"
+                if task is not None else
+                "需要访问其他目录时，请用户在 Bot 资料的文件访问范围中添加目录或选择完全访问。"
+            ),
         ),
         surface=surface,
         skill_tools=skill_tools,

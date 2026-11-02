@@ -2,6 +2,7 @@ import {
   authorizationRequiredEventSchema,
   autoAuthorizeChangedEventSchema,
   avatarsChangedEventSchema,
+  fileAccessChangedEventSchema,
   connectedEventSchema,
   externalSessionsChangedEventSchema,
   contextUsageEventSchema,
@@ -67,7 +68,7 @@ export function openEventBridge(dispatch: AppDispatch): () => void {
   source.addEventListener("connected", (event) => {
     const payload = connectedEventSchema.parse(JSON.parse(event.data));
     dispatch(connected(payload.connection_id));
-    refresh(["Conversation", "Agents", "Groups", "Inbox", "AutoAuthorize", "Avatars", "ExternalSessions", "ExternalConnections"]);
+    refresh(["Conversation", "Agents", "Groups", "Inbox", "AutoAuthorize", "Avatars", "ExternalSessions", "ExternalConnections", "FileAccess"]);
     flushRefresh();
   });
   source.addEventListener("external_sessions_changed", (event) => {
@@ -77,6 +78,10 @@ export function openEventBridge(dispatch: AppDispatch): () => void {
   source.addEventListener("avatars_changed", (event) => {
     avatarsChangedEventSchema.parse(JSON.parse(event.data));
     refresh(["Avatars"]);
+  });
+  source.addEventListener("file_access_changed", (event) => {
+    const payload = fileAccessChangedEventSchema.parse(JSON.parse(event.data));
+    refresh([{ type: "FileAccess", id: payload.session_id }]);
   });
   source.addEventListener("auto_authorize_changed", (event) => {
     autoAuthorizeChangedEventSchema.parse(JSON.parse(event.data));

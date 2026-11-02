@@ -76,38 +76,37 @@ class BuiltinToolRunner:
         return verdict
 
 
-async def build_builtin_tools(
+def bind_files(
     workspace: WorkspaceRecord | FileWorkspace,
     *,
     materials_root: Path | None = None,
     personal_root: Path | None = None,
     colleague_roots: tuple[Path, ...] = (),
-    command_environment: Mapping[str, str] | None = None,
-    commands: CommandControl | None = None,
-) -> BuiltinToolRunner:
+) -> FileAccess:
     view = workspace_view(workspace)
     read_only = set()
     if materials_root is not None:
         materials_root.mkdir(parents=True, exist_ok=True)
         view = WorkspaceViewSnapshot((
-            *view.roots,
+            *(root for root in view.roots if root.path != materials_root.resolve()
+              and not (root.scope is WorkspaceScope.HOST and root.path.is_relative_to(materials_root.resolve()))),
             RootBinding("session_materials", WorkspaceScope.MATERIALS, materials_root),
         ))
         read_only.add("session_materials")
     if personal_root is not None and personal_root != workspace.task_root:
-        view = WorkspaceViewSnapshot((*view.roots, RootBinding("personal_directory", WorkspaceScope.TASK, personal_root)))
+        view = WorkspaceViewSnapshot((
+            *(root for root in view.roots if root.path != personal_root.resolve()),
+            RootBinding("personal_directory", WorkspaceScope.TASK, personal_root),
+        ))
     for index, root in enumerate(colleague_roots):
         # The Bot's own directories are deeper writable roots.
         root.mkdir(parents=True, exist_ok=True)
         view = WorkspaceViewSnapshot((
-            *view.roots,
+            *(binding for binding in view.roots if binding.path != root.resolve()
+              and not (binding.scope is WorkspaceScope.HOST and binding.path.is_relative_to(root.resolve()))),
             RootBinding(f"colleague_worktrees_{index}", WorkspaceScope.COLLEAGUES, root),
         ))
         read_only.add(f"colleague_worktrees_{index}")
-    environment = None
-    if commands is not None:
-        environment = replace(create_local_command_environment(command_environment),
-                              command_executor=commands, background_supported=True)
     binding = FileAccess(
         environment_id="local",
         workspace_view=view,
@@ -124,6 +123,24 @@ async def build_builtin_tools(
                 ),
             ),
         )
+    return binding
+
+
+async def build_builtin_tools(
+    workspace: WorkspaceRecord | FileWorkspace,
+    *,
+    materials_root: Path | None = None,
+    personal_root: Path | None = None,
+    colleague_roots: tuple[Path, ...] = (),
+    command_environment: Mapping[str, str] | None = None,
+    commands: CommandControl | None = None,
+) -> BuiltinToolRunner:
+    binding = bind_files(workspace, materials_root=materials_root, personal_root=personal_root,
+                         colleague_roots=colleague_roots)
+    environment = None
+    if commands is not None:
+        environment = replace(create_local_command_environment(command_environment),
+                              command_executor=commands, background_supported=True)
     interrupts = CommandInterrupts()
     registry = BUILTIN_TOOL_REGISTRY.clone()
     for spec in create_workspace_tool_specs(binding, environment, interrupts):

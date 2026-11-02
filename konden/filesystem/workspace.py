@@ -10,6 +10,7 @@ class FileWorkspace:
     """A task's file directory and access, independent of a registered project."""
     task_root: Path
     full_access: bool = False
+    directories: tuple[Path, ...] = ()
 
 
 class EnvironmentInputError(ValueError):
@@ -24,7 +25,7 @@ class PathOutsideWorkspaceView(EnvironmentInputError):
     code = "PATH_OUTSIDE_WORKSPACE_VIEW"
 
     def __init__(self, path: str) -> None:
-        super().__init__(f"path 不在工作区内: {path}")
+        super().__init__(f"路径不在当前允许的文件访问范围内：{path}")
 
 
 class EnvironmentPermissionDenied(EnvironmentInputError):

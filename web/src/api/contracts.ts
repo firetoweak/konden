@@ -193,6 +193,13 @@ export const workspaceSchema = z
 
 export type Workspace = z.infer<typeof workspaceSchema>;
 
+export const fileAccessSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("directories"), directories: z.array(z.string().min(1)) }).strict(),
+  z.object({ mode: z.literal("full") }).strict(),
+]);
+export type FileAccess = z.infer<typeof fileAccessSchema>;
+export const fileAccessChangedEventSchema = z.object({ session_id: z.string().min(1) }).strict();
+
 export const groupSummarySchema = z
   .object({
     group_id: z.string().min(1),

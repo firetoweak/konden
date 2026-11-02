@@ -119,11 +119,18 @@ class WebChannel:
         self._require_connection(connection_id)
         await self._sessions.external_messages.revoke_connection(external_id)
 
-    async def create_agent(self, connection_id: str, path: str | None, name: str):
+    async def create_agent(self, connection_id: str, path: str | None, name: str, file_access):
         connection = self._require_connection(connection_id)
-        record = await self._sessions.create_agent(name=name, path=path)
+        record = await self._sessions.create_agent(name=name, path=path, file_access=file_access)
         await self._sessions.select(connection.owner, record.session_id)
         return await self._queries.agent_entry(record.session_id)
+
+    async def get_file_access(self, session_id):
+        return await self._sessions.file_access.get(session_id)
+
+    async def save_file_access(self, connection_id, session_id, config):
+        self._require_connection(connection_id)
+        return await self._sessions.file_access.save(session_id, config)
 
     async def require_avatar_edit(self, connection_id: str, session_id: str) -> None:
         self._require_connection(connection_id)

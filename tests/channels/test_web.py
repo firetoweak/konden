@@ -156,7 +156,7 @@ class _Sessions:
     def set_model(self, session_id, model, reasoning_effort=None):
         return self.models.select(session_id, model, reasoning_effort)
 
-    async def create_agent(self, *, name, path):
+    async def create_agent(self, *, name, path, file_access):
         workspace_id = None if path is None else "workspace-old"
         self.calls.append(("create_agent", name, path))
         if name == "taken":
@@ -275,6 +275,26 @@ class _Queries:
 
 
 class WebFirstSliceTest(unittest.TestCase):
+    def test_file_access_requires_a_user_connection_and_reports_save_conflicts(self):
+        from konden.assistant.host.file_access import DirectoryAccess, FullAccess, FileAccessBusy
+
+        self.sessions.file_access = SimpleNamespace(
+            get=AsyncMock(return_value=DirectoryAccess()), save=AsyncMock(return_value=FullAccess(mode="full")))
+        self.assertEqual(self.client.get("/api/agents/session-old/file-access").json(),
+                         {"mode": "directories", "directories": []})
+        body = {"connection_id": self.connection.connection_id, "config": {"mode": "full"}}
+        response = self.client.put("/api/agents/session-old/file-access", json=body)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"mode": "full"})
+        self.sessions.file_access.save.reset_mock()
+        response = self.client.put("/api/agents/session-old/file-access", json={**body, "connection_id": "expired"})
+        self.assertEqual(response.status_code, 409)
+        self.sessions.file_access.save.assert_not_awaited()
+        self.sessions.file_access.save.side_effect = FileAccessBusy("请先停止后台命令")
+        response = self.client.put("/api/agents/session-old/file-access", json=body)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"], "请先停止后台命令")
+
     def setUp(self):
         self._directory = TemporaryDirectory()
         self.queries = _Queries()
@@ -1027,6 +1047,11 @@ class WebFirstSliceTest(unittest.TestCase):
         self.assertNotIn("branch", body)
         self.assertEqual(self.sessions.calls[0], ("create_agent", "konden", "C:/project"))
         self.assertEqual(self.sessions.calls[1][0], "select")
+
+        self.assertEqual(self.client.post("/api/agents", json={
+            "connection_id": self.connection.connection_id, "name": "full-access",
+            "file_access": {"mode": "full", "directories": []},
+        }).status_code, 422)
 
         self.assertEqual(self.client.post("/api/agents", json={
             "connection_id": self.connection.connection_id,

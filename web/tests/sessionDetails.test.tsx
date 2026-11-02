@@ -42,6 +42,9 @@ vi.mock("../src/features/conversation/Conversation", () => ({
   },
 }));
 vi.mock("../src/api/kondenApi", () => ({
+  useGetFileAccessQuery: () => ({ currentData: { mode: "directories", directories: [] } }),
+  useSaveFileAccessMutation: () => [vi.fn(), { isLoading: false, error: undefined, reset: vi.fn() }],
+  useSelectWorkspaceDirectoryMutation: () => [vi.fn(), { isLoading: false }],
   useGetPersonalMemoryQuery: (sessionId: string) => ({ currentData: memory.notes[sessionId], refetch: memory.refetch }),
   useSavePersonalMemoryMutation: () => [memory.save, { isLoading: false, error: undefined, reset: memory.reset }],
   useGetConversationQuery: () => ({ currentData: undefined }),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 import json
 from functools import partial
 from pathlib import Path
@@ -50,6 +51,46 @@ async def until(predicate, timeout=30):
 
 
 class SupervisorTest(unittest.IsolatedAsyncioTestCase):
+    async def test_access_change_replaces_selected_worker_and_revokes_external_file_access(self):
+        from konden.assistant.host.file_access import DirectoryAccess, FullAccess
+        from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
+        from konden.runtime import CommandOutcomeReceived
+
+        class WriteOutside(ProcessLlm):
+            calls = 0
+
+            async def chat(client, messages, model, **kwargs):
+                client.calls += 1
+                if client.calls == 1:
+                    return LLMCallResult(LLMResponse(calls=(ToolCall(
+                        "write-outside", "write_file", json.dumps({"path": str(target), "content": "written"}),
+                    ),)), LLMUsage(input_tokens=10, output_tokens=5))
+                return LLMCallResult(LLMResponse(content="done"), LLMUsage(input_tokens=10, output_tokens=5))
+
+        agent = await self.host.create_agent(name="access-bot")
+        sid = agent.session_id
+        await self.host.select("access-page", sid)
+        await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
+        target = self.root / "external-allowed.txt"
+        await self.host.file_access.save(sid, FullAccess(mode="full"))
+        self.host.llm = WriteOutside(self.root)
+        await self.host.accept_input(sid, "write the external file", delivery_id="write-allowed")
+        await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
+        self.assertEqual(target.read_text(), "written")
+
+        await self.host.file_access.save(sid, DirectoryAccess())
+        target = self.root / "external-blocked.txt"
+        self.host.llm = WriteOutside(self.root)
+        await self.host.accept_input(sid, "check the reduced scope", delivery_id="write-blocked")
+        await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
+        self.assertFalse(target.exists())
+        events = await self.store.journal(sid).snapshot(sid)
+        codes = [event.payload.outcome.value.get("code") for event in events
+                 if isinstance(event.payload, CommandOutcomeReceived) and isinstance(event.payload.outcome.value, Mapping)]
+        self.assertIn("FILE_CREATED", codes)
+        self.assertIn("PATH_OUTSIDE_WORKSPACE_VIEW", codes)
+        self.assertTrue(self.host.failures.empty())
+
     async def test_large_cli_catalog_does_not_crash_worker_or_hide_registered_clis(self):
         from dataclasses import replace
 

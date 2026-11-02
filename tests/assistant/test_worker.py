@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from konden.assistant.host.worker import run_worker
+from konden.filesystem.workspace import FileWorkspace
 
 
 class WorkerFailureTest(unittest.IsolatedAsyncioTestCase):
@@ -23,6 +24,6 @@ class WorkerFailureTest(unittest.IsolatedAsyncioTestCase):
                 self.assertRaises(ExceptionGroup) as caught,
             ):
                 await run_worker(
-                    None, "child", Path(directory) / "journal.sqlite", None, directory, {}
+                    None, "child", Path(directory) / "journal.sqlite", None, directory, {}, FileWorkspace(Path(directory))
                 )
         self.assertEqual(caught.exception.exceptions, (original, reporting))

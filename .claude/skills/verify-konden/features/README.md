@@ -8,6 +8,8 @@
 
 ## 基线前置条件
 
+Bot 文件访问范围的增量验证见 [bot-file-access.md](bot-file-access.md)：2026-11-02 Windows 隔离 Web、受控模型，覆盖创建、跨盘操作、保存冲突与权限收窄，不代表其他功能全量重验。
+
 编码 Skill 增量：编码方法与 Git 协作分别按需加载，普通目录支持自定义 Skill；验证见 tool-coding-round 与 extensions，既有记录不代表全部重验。
 
 Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 `projects` 列表描述挂载关系，落地、同步需要项目名；子任务共享父工作区，委派可选择已有工作目录。
@@ -65,6 +67,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 |---|---|---|---|
 | web-session-chat | [web-session-chat.md](./web-session-chat.md) | 空首页 → 新建 Agent → 发消息 | 无项目 Bot 真实发送与回复、刷新历史通过；长历史、引用跳转与异常 API 未重验。 |
 | workspace-management | [workspace-management.md](./workspace-management.md) | 创建 Bot 同页选目录、按目录名展示、复用与后续关联 | 2026-10-23 增量：取消不登记、两位 Bot 复用同目录、后续关联同名仓库、路径区分、错误草稿保留及桌面与窄屏通过；原生目录窗口与解除未重验。 |
+| bot-file-access | [bot-file-access.md](./bot-file-access.md) | 创建及 Bot 资料中的指定目录、完全访问、保存与生效 | 2026-11-02 Windows 受控模型：跨盘写入与 cwd、后台命令保存冲突、收窄后拒绝、1100 抽屉保存通过；完全访问的执行由进程用例覆盖，原生选择窗口与真实模型未验。 |
 | session-sidebar | [session-sidebar.md](./session-sidebar.md) | 全局 Bot 名册、无项目创建、搜索、Bot/群聊分组与状态圆点 | 2026-10-26 首次引导：无模型时只显示模型配置且不能开始，配置可用后预填名字可改，开始后进入对话并由新 Bot 主动介绍（入口说法与界面一致）；删除唯一 Bot 后引导重新出现。此前无项目 Ada 与有项目 Lin 创建、名册切换和状态对照 GET 通过；分组与搜索未重验。 |
 | colleague-tools | [colleague-tools.md](./colleague-tools.md) | 名册工具与加入事实；共同／个人工作约束的工具读写与页面编辑 | 2026-10-27 观察追加增量：真实页面和模型验证连续轮次、共同／个人更新、Compact 后续接与清空的实际请求前缀；隔离和并发草稿沿用原轮次页面及自动化证据。 |
 | private-messages | [private-messages.md](./private-messages.md) | `send_message` 送达、停止执行的收件人仍接纳但不推进、已知拒绝与交流上限 | 有项目 Lin 向无项目 Ada 送达 PRIVATE_MAP_OK，双方可见来源与跳转；停止执行接收和交流上限未重验。 |
@@ -108,6 +111,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 
 | 接口 | 条目 |
 |---|---|
+| `GET/PUT /api/agents/{id}/file-access` | bot-file-access |
 | `GET /api/events` | realtime-events、reply-delivery（流式预览与最终回复） |
 | `GET /api/capabilities`、`PUT /api/capabilities/{kind}/{id}/enabled`（kind 为 skills 或 mcp） | extensions |
 | `GET/PUT /api/model-settings`、`POST /api/model-settings/test` | model-settings |

@@ -5,6 +5,8 @@ from pathlib import Path
 def environment_prompt(
     workspace_root: Path, *, full_access: bool, delegated: bool = False,
     personal_directory: Path | None = None,
+    directories: tuple[Path, ...] = (),
+    access_guidance: str | None = None,
 ) -> str:
     """The bound environment stays in the stable prefix; omit changing timestamps."""
     system = platform.system()
@@ -12,7 +14,10 @@ def environment_prompt(
     access = (
         "文件工具也能访问这台电脑上的其他位置；请使用系统原生的绝对路径。"
         if full_access
-        else "文件工具可以读写这个目录；其他位置能否访问由工具返回告知。"
+        else "文件工具可以读写工作目录" + (
+            "和用户指定的目录：" + "、".join(str(path) for path in directories) + "。"
+            if directories else "。"
+        )
     )
     file_rules = (
         "文件工具和命令直接作用于共享目录；改动会立即被你的父 Agent 和其他任务看到。文件没有回退。"
@@ -26,6 +31,8 @@ def environment_prompt(
         *((f"个人工作目录：{personal_directory}（可读写，用于存放你的文件和笔记）",)
           if personal_directory is not None and personal_directory != workspace_root else ()),
         f"相对路径从工作目录开始。{access}",
+        "命令的启动目录须在可写范围内；同事目录和收到的材料保持只读。",
+        *((access_guidance,) if access_guidance is not None else ()),
         file_rules,
         "命令没有进程、系统或网络隔离；它们可以访问这台电脑的其他部分。",
         "</environment>",

@@ -71,7 +71,26 @@ it.each(["", " D:/项目/助手 "])("确认时一次提交名字和可选目录�
   fireEvent.change(screen.getByRole("combobox", { name: "代码目录（可选）", exact: true }), { target: { value: path } });
   fireEvent.click(screen.getByRole("button", { name: "创建", exact: true }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith("agent-test"));
-  expect(submissions).toEqual([{ connection_id: "connection", path: path.trim() || null, name: "Ada" }]);
+  expect(submissions).toEqual([{ connection_id: "connection", path: path.trim() || null, name: "Ada",
+    file_access: { mode: "directories", directories: [] } }]);
+  store.dispatch(kondenApi.util.resetApiState());
+});
+
+it("创建时完全访问只提交所选模式，不夹带隐藏的目录草稿", async () => {
+  const submissions: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+    submissions.push(await request.json());
+    return Response.json(agent, { status: 201 });
+  }));
+  const { store, onCreated } = showModal();
+  fireEvent.change(screen.getByLabelText("名字"), { target: { value: "Ada" } });
+  fireEvent.click(screen.getByRole("button", { name: "添加目录" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "访问目录 1" }), { target: { value: "E:/myCard" } });
+  fireEvent.click(screen.getByRole("radio", { name: "完全访问" }));
+  expect(screen.queryByRole("textbox", { name: "访问目录 1" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "创建", exact: true }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  expect(submissions).toEqual([{ connection_id: "connection", path: null, name: "Ada", file_access: { mode: "full" } }]);
   store.dispatch(kondenApi.util.resetApiState());
 });
 

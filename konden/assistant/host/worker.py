@@ -18,17 +18,15 @@ from konden.assistant.host.llm_port import WorkerLlmPort
 from konden.assistant.subagent.subagent import (
     project_parent, project_task, record_interrupted_return, record_unexpected_return,
 )
-from konden.assistant.workspaces import bound_workspace
 from konden.paths import KondenHome
 from konden.runtime import SqliteJournal
-from konden.filesystem.registry import WorkspaceRegistry
 from konden.timing import install_timing_logging
 
 
-async def run_worker(connection, session_id, path, config_factory, home_root, command_environment, git_workspace=None):
+async def run_worker(connection, session_id, path, config_factory, home_root, command_environment, workspace, git_workspace=None):
     journal = SqliteJournal(path)
     try:
-        await _run_session(connection, session_id, journal, config_factory, home_root, command_environment, git_workspace)
+        await _run_session(connection, session_id, journal, config_factory, home_root, command_environment, workspace, git_workspace)
     except Exception as error:
         try:
             returned = await record_unexpected_return(journal, session_id, error)
@@ -42,18 +40,13 @@ async def run_worker(connection, session_id, path, config_factory, home_root, co
         raise
 
 
-async def _run_session(connection, session_id, journal, config_factory, home_root, command_environment, git_workspace=None):
+async def _run_session(connection, session_id, journal, config_factory, home_root, command_environment, workspace, git_workspace=None):
     # Each process owns execution clients, caches and its single Journal.
     # The model implementation lives on the Host; this Worker only holds a Port.
     home = KondenHome(Path(home_root))
     await journal.prepare_recovery(session_id)
     config = config_factory()
     events = await journal.snapshot(session_id)
-    workspace = bound_workspace(
-        session_id,
-        events,
-        WorkspaceRegistry.load(home.workspaces_path),
-    )
     task = project_task(events)
     if task is not None and task.cwd is not None:
         workspace = replace(workspace, task_root=(workspace.task_root / task.cwd).resolve())
@@ -280,7 +273,7 @@ async def _run_session(connection, session_id, journal, config_factory, home_roo
                 await asyncio.gather(*notifications)
 
 
-def worker_main(connection, session_id, path, config_factory, home_root, admitted, command_environment, git_workspace=None):
+def worker_main(connection, session_id, path, config_factory, home_root, admitted, command_environment, workspace, git_workspace=None):
     def exit_with_parent():
         multiprocessing.parent_process().join()
         os._exit(1)
@@ -291,7 +284,7 @@ def worker_main(connection, session_id, path, config_factory, home_root, admitte
         # rebuild breaks under some Linux sandbox /dev/shm setups).
         admitted.recv()
         admitted.close()
-        asyncio.run(run_worker(connection, session_id, path, config_factory, home_root, command_environment, git_workspace))
+        asyncio.run(run_worker(connection, session_id, path, config_factory, home_root, command_environment, workspace, git_workspace))
     except BaseException as error:
         # Process boundary: transport original diagnostics, then let the process fail.
         connection.send(("failure", ProcessFailure.capture(error)))

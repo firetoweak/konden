@@ -26,6 +26,7 @@ from konden.assistant.authorization import AuthorizationConflict, AuthorizationT
 from konden.assistant.host.agent_groups import GroupDissolvedError, GroupNameTaken, GroupNotFound
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNameTaken, AgentNotFound
 from konden.assistant.host.agent_projects import ProjectLinkRefused
+from konden.assistant.host.file_access import DirectoryAccess, FileAccessConfig, FileAccessBusy, FileAccessInvalid
 from konden.assistant.host.external_messages import ExternalConnectionNotFound, ExternalSessionNotFound, ExternalMessageInvalid
 from konden.assistant.external_messages import PostExternal
 from konden.assistant.host.codex_continuation import CodexContinuationInvalid, CodexExecutable
@@ -179,6 +180,11 @@ class AgentAvatarRequest(ConnectionRequest):
 
 class CreateAgentRequest(AgentNameRequest):
     path: str | None = Field(default=None, min_length=1)
+    file_access: FileAccessConfig = Field(default_factory=DirectoryAccess)
+
+
+class FileAccessRequest(ConnectionRequest):
+    config: FileAccessConfig
 
 
 class LinkProjectRequest(ConnectionRequest):
@@ -375,6 +381,14 @@ def create_web_app(
     @app.exception_handler(ModelConfigurationError)
     async def invalid_model_configuration(_request: Request, error: ModelConfigurationError):
         return JSONResponse(status_code=400, content={"detail": str(error)})
+
+    @app.exception_handler(FileAccessInvalid)
+    async def file_access_invalid(_request: Request, error: FileAccessInvalid):
+        return JSONResponse(status_code=400, content={"detail": str(error)})
+
+    @app.exception_handler(FileAccessBusy)
+    async def file_access_busy(_request: Request, error: FileAccessBusy):
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(ModelInUseError)
     async def model_in_use(_request: Request, error: ModelInUseError):
@@ -710,8 +724,18 @@ def create_web_app(
     @app.post("/api/agents", status_code=201)
     async def create_agent(body: CreateAgentRequest, request: Request):
         return await _channel(request).create_agent(
-            body.connection_id, body.path, body.name,
+            body.connection_id, body.path, body.name, body.file_access,
         )
+
+    @app.get("/api/agents/{session_id}/file-access")
+    async def get_file_access(session_id: str, request: Request):
+        return await _channel(request).get_file_access(session_id)
+
+    @app.put("/api/agents/{session_id}/file-access")
+    async def save_file_access(session_id: str, body: FileAccessRequest, request: Request):
+        config = await _channel(request).save_file_access(body.connection_id, session_id, body.config)
+        await request.app.state.hub.file_access_changed(session_id)
+        return config
 
     @app.delete("/api/agents/{session_id}", status_code=204)
     async def delete_agent(session_id: str, body: ConnectionRequest, request: Request):

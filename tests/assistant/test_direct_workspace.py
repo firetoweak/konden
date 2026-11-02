@@ -61,6 +61,7 @@ class DirectWorkspaceTest(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("file_access", command["parameters"]["properties"])
                 environment = next(message["content"] for message in llm.messages if "<environment>" in str(message["content"]))
                 self.assertIn("文件没有回退。", environment)
+                self.assertNotIn("Bot 资料", environment)
                 for skill in assembly.runtime.step_runner._decision_maker._skill_tools._catalog.bundled_skills:
                     self.assertIn(skill.id, str(llm.messages))
                     self.assertNotIn(skill.bundle.main_instructions, environment)
