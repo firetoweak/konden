@@ -114,12 +114,12 @@ class BotFileAccess:
                 events, state = await self.host.store.projected(session_id)
                 if (state.waiting_command_ids or session_view(state).should_wake
                         or project_pending(events) or self.host.compact.store.job(session_id) is not None):
-                    raise FileAccessBusy("请先停止当前任务并回收子任务，再修改文件访问范围。")
+                    raise FileAccessBusy("请先停止当前任务并回收子任务，再修改可用目录。")
                 if self.host.commands is not None and any(
                     command["state"] == "running"
                     for command in await self.host.commands.manager.list(session_id)
                 ):
-                    raise FileAccessBusy("请先停止后台命令，再修改文件访问范围。")
+                    raise FileAccessBusy("请先停止后台命令，再修改可用目录。")
                 worker = self.host.workers.get(session_id)
                 if worker is not None and not worker.exited.is_set():
                     if worker.requests or worker.running:

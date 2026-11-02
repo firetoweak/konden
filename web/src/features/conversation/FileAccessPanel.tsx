@@ -16,8 +16,8 @@ export function FileAccessPanel({ sessionId, connectionId, active }: {
   const data = query.currentData;
   const saveError: unknown = saving.error;
   if (data === undefined) return <Stack gap="xs">
-    <Text size="xs" c="dimmed">文件访问范围</Text>
-    {query.isError ? <><Text size="xs" role="alert">读取失败</Text><Button variant="subtle" size="compact-xs" onClick={() => void query.refetch()}>重试读取访问范围</Button></>
+    <Text size="xs" c="dimmed">可用目录</Text>
+    {query.isError ? <><Text size="xs" role="alert">读取失败</Text><Button variant="subtle" size="compact-xs" onClick={() => void query.refetch()}>重试读取可用目录</Button></>
       : <Text size="xs" c="dimmed">正在读取…</Text>}
   </Stack>;
   const value = draft ?? accessDraft(data);
@@ -25,7 +25,7 @@ export function FileAccessPanel({ sessionId, connectionId, active }: {
   return <Stack gap="xs">
     <FileAccessFields value={value} disabled={saving.isLoading || connectionId === null}
       onSelectingChange={setSelecting} onChange={(next) => { setDraft(next); setSaved(false); saving.reset(); }} />
-    {saveError === undefined ? null : <Alert color="red" title="无法保存访问范围">
+    {saveError === undefined ? null : <Alert color="red" title="无法保存可用目录">
       {typeof saveError === "string" ? saveError : "保存失败，请重试。"}
     </Alert>}
     <Group gap="xs">
@@ -39,7 +39,7 @@ export function FileAccessPanel({ sessionId, connectionId, active }: {
             setDraft(null);
             setSaved(true);
           } catch { /* The mutation keeps the error and the draft for retry. */ }
-        }}>保存访问范围</Button>
+        }}>保存可用目录</Button>
       {saved ? <Text size="xs" role="status">已保存</Text> : null}
     </Group>
   </Stack>;

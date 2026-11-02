@@ -320,9 +320,9 @@ async def build_assistant_assembly(
             delegated=task is not None,
             personal_directory=shared_root if file_owner is None else file_owner.directory,
             access_guidance=None if file_owner is None or workspace.full_access else (
-                "需要扩大文件访问范围时，向父 Agent 说明目标目录，由用户调整所属 Bot 的文件访问范围。"
+                "需要增加可用目录时，向父 Agent 说明目标目录，由用户调整所属 Bot 的可用目录。"
                 if task is not None else
-                "需要访问其他目录时，请用户在 Bot 资料的文件访问范围中添加目录或选择完全访问。"
+                "需要访问其他目录时，请用户在 Bot 资料的可用目录中添加目录或选择全部目录。"
             ),
         ),
         surface=surface,

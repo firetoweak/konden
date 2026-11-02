@@ -76,7 +76,7 @@ it.each(["", " D:/项目/助手 "])("确认时一次提交名字和可选目录�
   store.dispatch(kondenApi.util.resetApiState());
 });
 
-it("创建时完全访问只提交所选模式，不夹带隐藏的目录草稿", async () => {
+it("创建时全部目录只提交所选模式，不夹带隐藏的目录草稿", async () => {
   const submissions: unknown[] = [];
   vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
     submissions.push(await request.json());
@@ -86,7 +86,7 @@ it("创建时完全访问只提交所选模式，不夹带隐藏的目录草稿"
   fireEvent.change(screen.getByLabelText("名字"), { target: { value: "Ada" } });
   fireEvent.click(screen.getByRole("button", { name: "添加目录" }));
   fireEvent.change(screen.getByRole("textbox", { name: "访问目录 1" }), { target: { value: "E:/myCard" } });
-  fireEvent.click(screen.getByRole("radio", { name: "完全访问" }));
+  fireEvent.click(screen.getByRole("radio", { name: "全部目录" }));
   expect(screen.queryByRole("textbox", { name: "访问目录 1" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "创建", exact: true }));
   await waitFor(() => expect(onCreated).toHaveBeenCalled());

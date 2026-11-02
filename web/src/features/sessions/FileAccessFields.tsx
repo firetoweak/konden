@@ -36,11 +36,11 @@ export function FileAccessFields({ value, onChange, disabled = false, onSelectin
   }
   const locked = disabled || selection.isLoading;
   return <Stack gap="xs">
-    <Radio.Group label="文件访问范围" value={value.mode}
+    <Radio.Group label="可用目录" value={value.mode}
       onChange={(mode) => onChange({ ...value, mode: mode as FileAccessDraft["mode"] })}>
       <Stack gap="xs" mt={6}>
         <Radio value="directories" label="指定目录" disabled={locked} />
-        <Radio value="full" label="完全访问" disabled={locked} />
+        <Radio value="full" label="全部目录" disabled={locked} />
       </Stack>
     </Radio.Group>
     {value.mode === "directories" ? <>
