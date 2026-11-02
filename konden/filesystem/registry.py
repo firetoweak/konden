@@ -240,12 +240,6 @@ def workspace_view(record: WorkspaceRecord | FileWorkspace) -> WorkspaceViewSnap
     ]
     if record.full_access:
         roots.extend(discover_host_roots())
-    elif isinstance(record, FileWorkspace):
-        roots.extend(
-            RootBinding(f"external_directory_{index}", WorkspaceScope.HOST, path)
-            for index, path in enumerate(record.directories)
-            if path.resolve() != record.task_root.resolve()
-        )
     return WorkspaceViewSnapshot(tuple(roots))
 
 

@@ -17,7 +17,6 @@ import { BackgroundCommands } from "./BackgroundCommands";
 import { BotDetailsPanel } from "./BotDetailsPanel";
 import { SubagentList } from "./SubagentList";
 import { PersonalMemoryPanel } from "./PersonalMemoryPanel";
-import { FileAccessPanel } from "./FileAccessPanel";
 
 export function SessionConversation() {
   const { sessionId } = useParams();
@@ -54,10 +53,6 @@ export function SessionConversation() {
       </Tabs.List>
       <Tabs.Panel value="details">
       <div className="bot-details-sections">
-      <div className="agent-details-section">
-        <FileAccessPanel key={agent.session_id} sessionId={agent.session_id} connectionId={connectionId}
-          active={detailsOpened && detailsTab === "details"} />
-      </div>
       <div className="agent-details-section">
         <Text className="agent-details-label" size="xs" c="dimmed">代码项目</Text>
         {agent.projects.map((project) => <div key={project.workspace_id}>

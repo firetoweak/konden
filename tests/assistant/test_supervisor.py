@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 import json
+import sys
 from functools import partial
 from pathlib import Path
 import tempfile
@@ -51,10 +51,12 @@ async def until(predicate, timeout=30):
 
 
 class SupervisorTest(unittest.IsolatedAsyncioTestCase):
-    async def test_access_change_replaces_selected_worker_and_revokes_external_file_access(self):
-        from konden.assistant.host.file_access import DirectoryAccess, FullAccess
+    async def test_bot_writes_external_files_and_uses_external_command_cwd_by_default(self):
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
-        from konden.runtime import CommandOutcomeReceived
+        from tests.execution.test_host_process_process import shell
+
+        outside = self.root / "outside-bot"
+        outside.mkdir()
 
         class WriteOutside(ProcessLlm):
             calls = 0
@@ -62,33 +64,24 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
             async def chat(client, messages, model, **kwargs):
                 client.calls += 1
                 if client.calls == 1:
-                    return LLMCallResult(LLMResponse(calls=(ToolCall(
-                        "write-outside", "write_file", json.dumps({"path": str(target), "content": "written"}),
-                    ),)), LLMUsage(input_tokens=10, output_tokens=5))
+                    return LLMCallResult(LLMResponse(calls=(
+                        ToolCall("write-outside", "write_file", json.dumps({
+                            "path": str(outside / "file.txt"), "content": "written",
+                        })),
+                        ToolCall("run-outside", "execute_command", json.dumps({
+                            "cwd": str(outside),
+                            "command": shell(sys.executable, "-c", "from pathlib import Path;Path('command.txt').write_text('executed')"),
+                        })),
+                    )), LLMUsage(input_tokens=10, output_tokens=5))
                 return LLMCallResult(LLMResponse(content="done"), LLMUsage(input_tokens=10, output_tokens=5))
 
-        agent = await self.host.create_agent(name="access-bot")
-        sid = agent.session_id
-        await self.host.select("access-page", sid)
-        await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
-        target = self.root / "external-allowed.txt"
-        await self.host.file_access.save(sid, FullAccess(mode="full"))
+        agent = await self.host.create_agent(name="default-access-bot")
+        await asyncio.wait_for(self.host.wait_quiescent(agent.session_id), 30)
         self.host.llm = WriteOutside(self.root)
-        await self.host.accept_input(sid, "write the external file", delivery_id="write-allowed")
-        await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
-        self.assertEqual(target.read_text(), "written")
-
-        await self.host.file_access.save(sid, DirectoryAccess())
-        target = self.root / "external-blocked.txt"
-        self.host.llm = WriteOutside(self.root)
-        await self.host.accept_input(sid, "check the reduced scope", delivery_id="write-blocked")
-        await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
-        self.assertFalse(target.exists())
-        events = await self.store.journal(sid).snapshot(sid)
-        codes = [event.payload.outcome.value.get("code") for event in events
-                 if isinstance(event.payload, CommandOutcomeReceived) and isinstance(event.payload.outcome.value, Mapping)]
-        self.assertIn("FILE_CREATED", codes)
-        self.assertIn("PATH_OUTSIDE_WORKSPACE_VIEW", codes)
+        await self.host.accept_input(agent.session_id, "write and run outside the personal directory", delivery_id="outside")
+        await asyncio.wait_for(self.host.wait_quiescent(agent.session_id), 30)
+        self.assertEqual((outside / "file.txt").read_text(), "written")
+        self.assertEqual((outside / "command.txt").read_text(), "executed")
         self.assertTrue(self.host.failures.empty())
 
     async def test_large_cli_catalog_does_not_crash_worker_or_hide_registered_clis(self):

@@ -27,7 +27,6 @@ from konden.automation.once import (
 )
 from konden.assistant.control import pending_approval_view, project_control, project_control_message
 from konden.assistant.host.auto_authorize import AutoAuthorizeStore
-from konden.assistant.host.file_access import BotFileAccess, DirectoryAccess, normalize_access
 from konden.assistant.builtin_tools import bind_files
 from konden.filesystem.workspace import EnvironmentInputError
 from konden.assistant.compact.host import CompactHost
@@ -70,7 +69,7 @@ from konden.assistant.subagent.subagent import (
     return_data,
     task_from_arguments,
 )
-from konden.assistant.workspaces import bound_workspace_id, bound_directory
+from konden.assistant.workspaces import bound_workspace_id, bound_directory, bound_workspace
 from konden.assistant.host.spawn import start_worker
 from konden.assistant.host.worker import worker_main
 from konden.runtime import AgentRuntime, SqliteJournal, replay, DomainFactCommitted
@@ -212,7 +211,6 @@ class HostSupervisor:
         self.external_messages = ExternalMessages(self)
         self.agent_worktrees = AgentWorktrees(home, self.command_environment)
         self.agent_projects = AgentProjects(self)
-        self.file_access = BotFileAccess(self)
         self._agent_creation_lock = asyncio.Lock()
 
     async def resume_unfinished_sessions(self) -> None:
@@ -445,7 +443,7 @@ class HostSupervisor:
             child_directory = bound_directory(parent_events)
             async with self.locks.setdefault(session_id, asyncio.Lock()):
                 if expected_task.cwd is not None:
-                    parent_workspace = await self.file_access.workspace(expected_task.parent_session_id, parent_events)
+                    parent_workspace = bound_workspace(expected_task.parent_session_id, parent_events, self.workspaces)
                     directory = (parent_workspace.task_root / expected_task.cwd).resolve()
                     if not directory.is_dir():
                         return {"ok": False, "code": "CWD_NOT_FOUND", "error": "子任务工作目录不存在。"}
@@ -668,7 +666,6 @@ class HostSupervisor:
         path = self.store.require(session_id)
         events = await SqliteJournal(path).snapshot(session_id)
         is_subagent = project_parent(events) is not None
-        workspace = await self.file_access.workspace(session_id, events)
         reader_job = self.compact.store.reader_job(session_id)
         # Background compaction keeps the source's execution root and assembly.
         git_workspace = await self._git_workspace(session_id if reader_job is None else reader_job["source"])
@@ -803,7 +800,6 @@ class HostSupervisor:
                 self.home.root,
                 admit_recv,
                 self.command_environment,
-                workspace,
                 git_workspace,
             ),
             name=f"session:{session_id}",
@@ -1199,11 +1195,9 @@ class HostSupervisor:
 
     async def create_agent(
         self, *, name: str, workspace_id: str | None = None, path: str | None = None,
-        file_access=None,
     ) -> AgentRecord:
         """Create a persistent Bot directory, optionally preparing a coding project."""
         project = None if workspace_id is None else self.workspaces.get(workspace_id)
-        file_access = normalize_access(DirectoryAccess() if file_access is None else file_access)
         if self.models is not None:
             self.models.require_default_ready()
         session_id = f"agent-{uuid4().hex}"
@@ -1219,9 +1213,9 @@ class HostSupervisor:
             # A cancelled request must not leave a worktree without its identity fact.
             if path is not None:
                 project = self.agent_projects.resolve(path=path)
-            return await _settle(self._create_agent(project, session_id, identity, file_access))
+            return await _settle(self._create_agent(project, session_id, identity))
 
-    async def _create_agent(self, project, session_id, identity, file_access) -> AgentRecord:
+    async def _create_agent(self, project, session_id, identity) -> AgentRecord:
         colleagues = tuple(entry.session_id for entry in await self.agents.list())
         directory = Path(identity.directory)
         directory.mkdir(parents=True)
@@ -1235,7 +1229,6 @@ class HostSupervisor:
                 initial_fact=fact_arguments(identity, delivery_id="created"),
                 additional_facts=(() if linked is None else (fact_arguments(linked, delivery_id="link:created"),)),
                 agent_colleagues=colleagues,
-                file_access=file_access.model_dump(),
             )
         except BaseException as error:
             try:

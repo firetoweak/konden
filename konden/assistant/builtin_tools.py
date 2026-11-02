@@ -88,22 +88,17 @@ def bind_files(
     if materials_root is not None:
         materials_root.mkdir(parents=True, exist_ok=True)
         view = WorkspaceViewSnapshot((
-            *(root for root in view.roots if root.path != materials_root.resolve()
-              and not (root.scope is WorkspaceScope.HOST and root.path.is_relative_to(materials_root.resolve()))),
+            *view.roots,
             RootBinding("session_materials", WorkspaceScope.MATERIALS, materials_root),
         ))
         read_only.add("session_materials")
     if personal_root is not None and personal_root != workspace.task_root:
-        view = WorkspaceViewSnapshot((
-            *(root for root in view.roots if root.path != personal_root.resolve()),
-            RootBinding("personal_directory", WorkspaceScope.TASK, personal_root),
-        ))
+        view = WorkspaceViewSnapshot((*view.roots, RootBinding("personal_directory", WorkspaceScope.TASK, personal_root)))
     for index, root in enumerate(colleague_roots):
         # The Bot's own directories are deeper writable roots.
         root.mkdir(parents=True, exist_ok=True)
         view = WorkspaceViewSnapshot((
-            *(binding for binding in view.roots if binding.path != root.resolve()
-              and not (binding.scope is WorkspaceScope.HOST and binding.path.is_relative_to(root.resolve()))),
+            *view.roots,
             RootBinding(f"colleague_worktrees_{index}", WorkspaceScope.COLLEAGUES, root),
         ))
         read_only.add(f"colleague_worktrees_{index}")

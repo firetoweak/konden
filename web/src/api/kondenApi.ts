@@ -10,7 +10,6 @@ import {
 } from "../realtime/runtimeSlice";
 import {
   agentRosterEntrySchema,
-  fileAccessSchema, type FileAccess,
   externalConnectionSchema,
   createdExternalConnectionSchema,
   type ExternalConnection,
@@ -129,7 +128,7 @@ function putConversation(
 export const kondenApi = createApi({
   reducerPath: "kondenApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities", "FileAccess"],
+  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities"],
   endpoints: (build) => ({
     getCapabilities: build.query<CapabilityInventory, void>({
       query: () => "/capabilities",
@@ -482,12 +481,12 @@ export const kondenApi = createApi({
     }),
     createAgent: build.mutation<
       AgentRosterEntry,
-      { connectionId: string; path: string | null; name: string; fileAccess?: FileAccess }
+      { connectionId: string; path: string | null; name: string }
     >({
-      query: ({ connectionId, path, name, fileAccess }) => ({
+      query: ({ connectionId, path, name }) => ({
         url: "/agents",
         method: "POST",
-        body: { connection_id: connectionId, path, name, file_access: fileAccess },
+        body: { connection_id: connectionId, path, name },
       }),
       transformResponse: (value: unknown) => agentRosterEntrySchema.parse(value),
       transformErrorResponse: (response) => {
@@ -501,20 +500,6 @@ export const kondenApi = createApi({
         const { data } = await queryFulfilled;
         dispatch(bindOwner(data.session_id));
       },
-    }),
-    getFileAccess: build.query<FileAccess, string>({
-      query: (sessionId) => `/agents/${encodeURIComponent(sessionId)}/file-access`,
-      transformResponse: (value: unknown) => fileAccessSchema.parse(value),
-      providesTags: (_data, _error, id) => [{ type: "FileAccess", id }],
-    }),
-    saveFileAccess: build.mutation<FileAccess, { connectionId: string; sessionId: string; config: FileAccess }>({
-      query: ({ connectionId, sessionId, config }) => ({
-        url: `/agents/${encodeURIComponent(sessionId)}/file-access`, method: "PUT",
-        body: { connection_id: connectionId, config },
-      }),
-      transformResponse: (value: unknown) => fileAccessSchema.parse(value),
-      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
-      invalidatesTags: (_data, _error, { sessionId }) => [{ type: "FileAccess", id: sessionId }],
     }),
     renameAgent: build.mutation<AgentRosterEntry, { connectionId: string; sessionId: string; name: string }>({
       query: ({ connectionId, sessionId, name }) => ({
@@ -746,8 +731,6 @@ export const {
   useUnlinkProjectMutation,
   useGetModelSettingsQuery,
   useGetSharedMemoryQuery,
-  useGetFileAccessQuery,
-  useSaveFileAccessMutation,
   useSaveSharedMemoryMutation,
   useGetPersonalMemoryQuery,
   useSavePersonalMemoryMutation,

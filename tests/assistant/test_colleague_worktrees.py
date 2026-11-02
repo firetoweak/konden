@@ -7,10 +7,16 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
 from konden.assistant.builtin_tools import build_builtin_tools
+from konden.assistant.agents import AgentCreated, fact_arguments
 from konden.assistant.context.projection import ModelContextSettings
 from konden.assistant.decision import bind_executor_tools
+from konden.assistant.host.session_store import SessionStore
+from konden.assistant.host.supervisor import HostSupervisor
+from konden.assistant.subagent.subagent import DelegateIntent, task_fact_arguments
+from konden.config import AssistantConfig
 from konden.filesystem.registry import WorkspaceRecord
 from konden.filesystem.workspace import FileWorkspace
+from konden.paths import KondenHome
 from konden.runtime import (
     AgentRuntime,
     CommandOutcomeReceived,
@@ -23,6 +29,30 @@ from tests.fixtures.memory_journal import MemoryJournal
 
 
 class ColleagueWorktreeAccessTest(unittest.IsolatedAsyncioTestCase):
+    async def test_child_cwd_cannot_make_colleague_directories_or_materials_writable(self):
+        with TemporaryDirectory() as directory:
+            home = KondenHome(Path(directory) / "home")
+            store = SessionStore(home.runtime_sessions_root)
+            own = home.agent_directories_root / "own"
+            own.mkdir(parents=True)
+            await store.create("bot", directory=own, initial_fact=fact_arguments(
+                AgentCreated(name="Bot", directory=str(own)), delivery_id="created"))
+            host = HostSupervisor(store, AssistantConfig, home, None, llm=None)
+            try:
+                from konden.assistant.attachments import AttachmentGateway
+
+                materials = AttachmentGateway(store.root).for_session("bot").files.materials
+                colleague = home.agent_directories_root / "other-bot"
+                for index, target in enumerate((materials, colleague)):
+                    target.mkdir(parents=True, exist_ok=True)
+                    child_id = f"bot/sub-readonly-{index}"
+                    result = await host._route("create_child", child_id, task_fact_arguments(
+                        DelegateIntent(f"readonly-{index}", "bot", child_id, "inspect files", cwd=str(target))))
+                    self.assertEqual(result["code"], "ENVIRONMENT_PERMISSION_DENIED")
+                    self.assertFalse(store.path(child_id).parent.exists())
+            finally:
+                await host.close()
+
     async def test_forbidden_writes_return_denial_without_requesting_authorization(self):
         with TemporaryDirectory() as directory:
             project = Path(directory)
