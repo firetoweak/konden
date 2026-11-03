@@ -1,4 +1,6 @@
 import argparse
+from copy import deepcopy
+import logging
 import os
 import subprocess
 from pathlib import Path
@@ -10,6 +12,12 @@ from konden.assistant.host.process_env import host_process_environment
 
 
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "dist"
+
+
+class _FailedRequestFilter(logging.Filter):
+    def filter(self, record):
+        # Uvicorn access records use the same five fields as its AccessFormatter.
+        return record.args[4] >= 400
 
 
 def production_app(workspace_path: Path | None = None):
@@ -46,6 +54,11 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
+    log_config = deepcopy(uvicorn.config.LOGGING_CONFIG)
+    if not args.dev:
+        log_config["filters"] = {"failed_requests": {"()": _FailedRequestFilter}}
+        log_config["handlers"]["access"]["filters"] = ["failed_requests"]
+
     frontend = None
     if args.dev:
         web = Path(__file__).parent / "web"
@@ -64,6 +77,7 @@ def main(argv: list[str] | None = None) -> None:
             port=args.port,
             reload=args.dev,
             reload_dirs=[str(Path(__file__).parent)] if args.dev else None,
+            log_config=log_config,
             timeout_graceful_shutdown=1,
         )
     finally:

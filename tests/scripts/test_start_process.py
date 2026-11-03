@@ -5,7 +5,7 @@ import shutil
 import socket
 import subprocess
 import time
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, build_opener
 
 import pytest
@@ -51,6 +51,15 @@ def test_start_serves_built_web_without_node_from_another_directory(tmp_path, pr
                     time.sleep(0.1)
             else:
                 pytest.fail("Prepared Web did not become available")
+            # Routine browser requests must stay quiet without hiding failed requests.
+            with opener.open(f"http://127.0.0.1:{port}/api/model-settings", timeout=5) as response:
+                assert response.status == 200
+                response.read()
+            for path, status in (("/mcp/", 401), ("/api/missing", 404)):
+                with pytest.raises(HTTPError) as failure:
+                    opener.open(f"http://127.0.0.1:{port}{path}", timeout=5)
+                assert failure.value.code == status
+                failure.value.close()
         finally:
             if os.name == "nt":
                 subprocess.run([str(Path(os.environ["SystemRoot"]) / "System32/taskkill.exe"),
@@ -58,3 +67,9 @@ def test_start_serves_built_web_without_node_from_another_directory(tmp_path, pr
             else:
                 process.terminate()
             process.wait(timeout=10)
+    output = (tmp_path / "server.log").read_text(encoding="utf-8")
+    assert "Uvicorn running on" in output
+    assert '"GET / HTTP/1.1" 200' not in output
+    assert '"GET /api/model-settings HTTP/1.1" 200' not in output
+    assert '"GET /mcp/ HTTP/1.1" 401' in output
+    assert '"GET /api/missing HTTP/1.1" 404' in output
