@@ -81,7 +81,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | subagents | [subagents.md](./subagents.md) | `delegate`、`instruct_subagent`、`list_subagents`、`reclaim`、内容页 `子 Agent`、共享文件、命令授权与资源回收 | 2026-10-26 Windows Chrome、受控模型：无项目共享写入、子命令在父处授权、运行中插话与显式回收通过；真实供应商及多子并行未重验。 |
 | work-plan | [work-plan.md](./work-plan.md) | 计划生命周期：创建、状态标记、更新、回收（结束/中断/compact/另一个 Agent/子 Agent）、完成归档 | 真实 update_plan 建两步计划并全部完成，展开归档与 GET 一致；中断、compact 和跨 Agent 回收未重验。 |
 | work-plan-and-usage | [work-plan-and-usage.md](./work-plan-and-usage.md) | 消息时间、`上下文用量`、compact（计划部分指向 work-plan） | 真实回合时间与上下文用量环、200K 阈值和 GET 一致，不再有轮次耗时；compact 未触发。 |
-| model-settings | [model-settings.md](./model-settings.md) | `设置 → 模型配置` 抽屉、`测试`、`保存配置`、会话切换模型 | 设置抽屉编辑当前模型阈值，加入待保存配置并保存，GET 确认生效；连接测试、模型切换和表单边界未重验。 |
+| model-settings | [model-settings.md](./model-settings.md) | `设置 → 模型配置` 抽屉、`测试`、`保存配置`、会话切换模型 | 2026-11-05 增量：失效模型带历史会话引用仍可删除保存，原历史保留并可选新模型续聊，另一会话不变，重启与窄屏通过；使用受控本地接口，未实调供应商失效密钥。 |
 | scheduling | [scheduling.md](./scheduling.md) | `schedule_once` / `cancel_schedule` 定时唤醒 | 真实 schedule_once 45 秒倒计时可见，无新用户输入即 MAP_WAKE；取消、重启持久化与错参未重验。 |
 | routines | [routines.md](./routines.md) | `Bot 资料` 侧栏／窄屏 `Agent 资料` 抽屉的 `例行任务` 页签：开关 `暂停 <名字>` / `恢复 <名字>`，`删除 <名字>` → `确认删除 <名字>`；`查看 <名字>` 看意图与执行记录 | 真实 save_routine，1100 宽度资料抽屉查看与暂停，状态变为人暂停且下次未安排；删除、失败和无人查看策略未重验。 |
 | reply-delivery | [reply-delivery.md](./reply-delivery.md) | 长期 Agent 的普通结尾直接给人看，实时与历史一致；协作消息仍须显式发送 | 普通回复、私信与定时触发的结果可见，刷新后原文一致；正文右键复制消息的剪贴板为原文。send_file 未重验。 |

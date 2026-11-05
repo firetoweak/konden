@@ -76,7 +76,7 @@ export function SelectedModelsPanel({ models, preferences, saving, onChange, onR
   testModel: ModelSettingsApi["testModel"];
 }) {
   return <>
-    <div className="selected-models-intro"><Text size="sm" c="dimmed">每个测试只检查当前模型与推理强度，不改变会话设置。</Text></div>
+    <div className="selected-models-intro"><Text size="sm" c="dimmed">每个测试只检查当前模型与推理强度，不改变会话设置。删除模型不会删除会话历史。</Text></div>
     <div className="selected-models-scroll">
       <div className="selected-models-column-head" aria-hidden="true"><span>模型</span><span>默认推理强度</span><span>连接测试</span><span /></div>
       <div role="list" aria-label="已选模型">

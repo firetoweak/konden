@@ -34,7 +34,7 @@ from konden.assistant.model_connection import check_model_connection
 from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
 from konden.assistant.personal_memory import UpdatePersonalMemory
 from konden.automation.routines import RoutineNotFound
-from konden.model_settings import ModelCatalogUnavailable, ModelConfigurationError, ModelInUseError
+from konden.model_settings import ModelCatalogUnavailable, ModelConfigurationError
 from konden.search import SearchConfig, SearchSettings
 from konden.media.images import ImageConfig, ImageGeneration
 from konden.media.openai_images import ImageProviderError
@@ -375,10 +375,6 @@ def create_web_app(
     @app.exception_handler(ModelConfigurationError)
     async def invalid_model_configuration(_request: Request, error: ModelConfigurationError):
         return JSONResponse(status_code=400, content={"detail": str(error)})
-
-    @app.exception_handler(ModelInUseError)
-    async def model_in_use(_request: Request, error: ModelInUseError):
-        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(ModelCatalogUnavailable)
     async def unavailable_model_catalog(_request: Request, error: ModelCatalogUnavailable):
