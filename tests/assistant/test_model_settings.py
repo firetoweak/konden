@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from konden.config import write_json
-from konden.model_settings import ModelSettings, ModelConfigurationError, ModelInUseError
+from konden.model_settings import ModelSettings, ModelConfigurationError
 from konden.paths import KondenHome
 
 PRO = {"model": "deepseek/pro", "compact_threshold_tokens": 200000}
@@ -54,15 +54,28 @@ class ModelSettingsTest(unittest.TestCase):
         self.assertEqual(self.models.for_decision("session"), FLASH)
         self.assertFalse(self.models.selection("session")["pending"])
 
-    def test_default_and_session_references_prevent_deletion(self):
+    def test_removing_a_used_model_preserves_choices_and_inflight_profile_until_reselected(self):
         self.models.initialize_session("session")
-        with self.assertRaises(ModelInUseError):
-            self.models.save({"model": {"default": FLASH["model"], "candidates": [FLASH]}})
-        self.models.save({"model": {"default": FLASH["model"], "candidates": [PRO, FLASH]}})
-        with self.assertRaises(ModelInUseError):
-            self.models.save({"model": {"default": FLASH["model"], "candidates": [FLASH]}})
-        self.models.select("session", FLASH["model"])
+        self.models.initialize_session("child", parent="session")
+        captured = self.models.for_decision("session")
+        selections_path = self.home.runtime_sessions_root / "models.json"
+        before = selections_path.read_bytes()
         self.models.save({"model": {"default": FLASH["model"], "candidates": [FLASH]}})
+        self.assertEqual(selections_path.read_bytes(), before)
+        self.assertEqual(captured, PRO)
+        self.assertEqual(self.models.selection("session"), {"selected": None, "effective": PRO, "pending": True})
+        self.assertIsNone(self.models.selection("child")["selected"])
+        self.assertIsNone(self.models.for_decision("session", apply=False))
+        with self.assertRaisesRegex(ModelConfigurationError, "选择可用模型"):
+            self.models.for_decision("session")
+        with self.assertRaisesRegex(ModelConfigurationError, "选择可用模型"):
+            self.models.require_ready("session")
+        reloaded = ModelSettings(self.home, self.home.runtime_sessions_root, path=self.home.config_path)
+        self.assertEqual(reloaded.selected("session"), PRO["model"])
+        self.assertIsNone(reloaded.selection("session")["selected"])
+        reloaded.select("session", FLASH["model"])
+        self.assertEqual(reloaded.for_decision("session"), FLASH)
+        self.assertEqual(reloaded.selected("child"), PRO["model"])
 
     def test_new_default_and_removing_the_unused_old_default_are_saved_together(self):
         self.models.save({"model": {"default": FLASH["model"], "candidates": [FLASH]}})

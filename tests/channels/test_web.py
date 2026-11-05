@@ -785,12 +785,23 @@ class WebFirstSliceTest(unittest.TestCase):
             with self.assertRaises(LookupError):
                 self.client.get("/api/model-settings/images/catalog")
 
-    def test_model_settings_rejects_deleting_referenced_model(self):
+    def test_model_settings_allows_removal_and_restoring_a_referenced_model(self):
         response = self.client.put("/api/model-settings", json={
             "connection_id": self.connection.connection_id,
             "config": {"model": {"default": None, "candidates": []}},
         })
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.get("/api/model-settings").json()["config"],
+                         {"model": {"default": None, "candidates": []}})
+        selection = self.client.get("/api/sessions/session-old/model")
+        self.assertEqual(selection.status_code, 200)
+        self.assertIsNone(selection.json()["selected"])
+        restored = self.client.put("/api/model-settings", json={
+            "connection_id": self.connection.connection_id, "config": MODEL_CONFIG,
+        })
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(self.client.get("/api/sessions/session-old/model").json()["selected"],
+                         MODEL_CONFIG["model"]["candidates"][0])
 
     def test_selecting_unknown_session_is_a_client_error(self):
         response = self.client.post(

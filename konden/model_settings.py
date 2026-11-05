@@ -17,10 +17,6 @@ class ModelConfigurationError(ValueError):
     pass
 
 
-class ModelInUseError(ModelConfigurationError):
-    pass
-
-
 class ModelCatalogUnavailable(RuntimeError):
     pass
 
@@ -107,7 +103,7 @@ class ModelSettings:
         try:
             return config.get_model(model)
         except ValueError as error:
-            raise ModelConfigurationError(str(error)) from error
+            raise ModelConfigurationError(f"模型 {model} 不在已选模型中，请在会话输入区选择可用模型") from error
 
     def initialize_session(self, session_id: str, *, parent: str | None = None):
         if session_id in self._selected:
@@ -124,7 +120,9 @@ class ModelSettings:
         selected = self._selected[session_id]
         if selected["model"] is None:
             return None
-        candidate = self.config().get_model(selected["model"])
+        candidate = next((item for item in self.config().models if item.model == selected["model"]), None)
+        if candidate is None:
+            return None
         return ModelConfig(candidate.model, candidate.compact_threshold_tokens, selected["reasoning_effort"]).to_dict()
 
     def selection(self, session_id: str) -> dict:
@@ -133,12 +131,11 @@ class ModelSettings:
                 "pending": profile != self._applied.get(session_id)}
 
     def for_decision(self, session_id: str, *, apply: bool = True) -> dict | None:
-        model = self.selected(session_id)
-        if model is None:
+        profile = self._profile(session_id)
+        if profile is None:
             if not apply:
                 return None
-            raise ModelConfigurationError("请先为会话选择模型")
-        profile = self._profile(session_id)
+            raise ModelConfigurationError("请先在会话输入区选择可用模型")
         if apply:
             self._applied[session_id] = profile
         return profile
@@ -170,7 +167,7 @@ class ModelSettings:
         self._require_usable(model)
 
     def _require_usable(self, model: str):
-        self.config().get_model(model)
+        self.require_candidate(model)
         provider = model.partition("/")[0]
         status = next(item for item in self.provider_states() if item["provider"] == provider)
         if not status["configured"]:
@@ -199,14 +196,9 @@ class ModelSettings:
         }
 
     def save(self, data: object) -> dict:
-        current = self.config()
         try:
             updated = parse_app_config(data)
         except ValueError as error:
             raise ModelConfigurationError(str(error)) from error
-        removed = {item.model for item in current.models} - {item.model for item in updated.models}
-        users = [sid for sid, choice in self._selected.items() if choice["model"] in removed]
-        if users:
-            raise ModelInUseError("请先切换以下会话的模型：" + "、".join(users))
         write_json(self.path, updated.to_dict())
         return self.view()
