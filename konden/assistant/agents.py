@@ -348,7 +348,7 @@ def agent_fact_for_model(payload: DomainFactCommitted) -> dict:
         return {"group": fact.group, "message_id": fact.message_id, "notice": (
             "请回应这条群消息。如果你有值得补充的内容，就用 send_group_message 发送，"
             "并用 reply_to 引用这条消息；如果没有新内容，就不要发群消息。"
-            "绝不要透露私下一对一交流的内容。")}
+            "只分享已获授权的协作所需信息，不转发无关或未获授权的私聊内容。")}
     if isinstance(fact, GroupCreated):
         return {"group": fact.group, "members": fact.members, "notice": (
             "你是这个群聊的成员。用 send_group_message 发言，群里所有人都能看到。")}
