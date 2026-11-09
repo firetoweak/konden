@@ -466,6 +466,19 @@ def create_web_app(
     async def list_capabilities(request: Request):
         return await request.app.state.capabilities.read()
 
+    @app.post("/api/capabilities/mcp/{capability_id}/test")
+    async def test_mcp_capability(capability_id: str, body: ConnectionRequest, request: Request):
+        _channel(request)._require_connection(body.connection_id)
+        try:
+            runtime = await request.app.state.capabilities.mcp.test_server(capability_id)
+        except McpServerNotFoundError as error:
+            return JSONResponse(status_code=404, content={"detail": str(error)})
+        return {
+            "last_status": runtime.status.value,
+            "last_checked_at": runtime.last_checked_at.isoformat(),
+            "last_error_summary": runtime.last_error_summary or None,
+        }
+
     @app.put("/api/capabilities/{kind}/{capability_id}/enabled")
     async def set_capability_enabled(
         kind: Literal["skills", "mcp"], capability_id: str,

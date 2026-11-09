@@ -1,7 +1,8 @@
 import { ActionIcon, Alert, Button, Skeleton, Stack, Switch, Tabs, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { IconChevronDown, IconPackage, IconPlugConnected, IconRefresh, IconSearch, IconTerminal2, IconX } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
-import { useGetCapabilitiesQuery, useSetCapabilityEnabledMutation } from "../../api/kondenApi";
+import { useGetCapabilitiesQuery, useSetCapabilityEnabledMutation, useTestMcpServerMutation } from "../../api/kondenApi";
+import type { CapabilityInventory } from "../../api/capabilities";
 import { useAppSelector } from "../../app/hooks";
 import "./capabilities.css";
 
@@ -23,6 +24,24 @@ function EnabledSwitch({ kind, id, name, enabled }: { kind: "skills" | "mcp"; id
         }} />
     </Tooltip>
     {error === undefined ? null : <Text role="alert" size="xs" c="red">{typeof error === "string" ? error : "修改失败，请重试。"}</Text>}
+  </div>;
+}
+
+function McpControls({ item }: { item: CapabilityInventory["mcp"][number] }) {
+  const connectionId = useAppSelector((state) => state.runtime.connectionId);
+  const [testServer, { isLoading, error }] = useTestMcpServerMutation();
+  return <div className="capability-mcp-control">
+    <div className="capability-mcp-actions">
+      <Text className="capability-check" role="status" size="xs" c={item.last_status === "unavailable" ? "red" : "dimmed"}>
+        {isLoading ? "检测中…" : checkLabels[item.last_status]}</Text>
+      <Button size="xs" variant="default" aria-label={`检测 ${item.name} 连接`}
+        loading={isLoading} disabled={connectionId === null}
+        onClick={() => { if (connectionId !== null) void testServer({ connectionId, id: item.id }); }}>
+        检测连接
+      </Button>
+      {item.origin === "builtin" ? null : <EnabledSwitch kind="mcp" {...item} />}
+    </div>
+    {error === undefined ? null : <Text role="alert" size="xs" c="red">{typeof error === "string" ? error : "检测请求失败，请重试。"}</Text>}
   </div>;
 }
 
@@ -90,8 +109,7 @@ export function CapabilitiesPage() {
               fields={[["来源", item.source], ["版本", item.version ?? "随产品更新"], ["安装位置", item.path], ["状态", item.enabled ? "已启用" : "已停用"]]} />) : null}
             {category === "mcp" ? data.mcp.filter(matches).map((item) => <CapabilityRow key={item.id} name={item.name}
               description={item.description} origin={originLabel(item.origin)} inactive={!item.enabled} icon={<IconPlugConnected size={21} />}
-              control={<><Text className="capability-check" size="xs" c={item.last_status === "unavailable" ? "red" : "dimmed"}>{checkLabels[item.last_status]}</Text>
-                {item.origin === "builtin" ? null : <EnabledSwitch kind="mcp" {...item} />}</>}
+              control={<McpControls item={item} />}
               fields={[["连接方式", item.transport === "stdio" ? "本地进程（stdio）" : "HTTP"], ["只读声明", item.read_only ? "只读" : "未声明只读"],
                 ["启用状态", item.enabled ? "已启用" : "已停用"], ["最近检测", checkLabels[item.last_status]], ["检测时间", checkedAt(item.last_checked_at)],
                 ...(item.last_error_summary === null ? [] : [["错误原因", item.last_error_summary] as [string, string]])]} />) : null}
@@ -102,7 +120,7 @@ export function CapabilitiesPage() {
                 ["最近体检", item.health === null ? "未检测" : item.health.help_ok && item.health.version_ok ? "通过" : "存在异常"],
                 ["体检时间", checkedAt(item.health?.checked_at ?? null)]]} />) : null}
           </ul>
-          <Text className="capabilities-scope" size="xs" c="dimmed">{category === "cli" ? "显示 konden 已登记的 CLI，版本与体检信息来自登记时的记录。" : category === "mcp" ? "系统共享项的启停对所有 Bot 生效；检测结果仅表示最近一次检测时的状态。" : "系统共享项的启停对所有 Bot 生效；工作目录中的项目 Skill 在各自目录中维护。"}</Text>
+          <Text className="capabilities-scope" size="xs" c="dimmed">{category === "cli" ? "显示 konden 已登记的 CLI，版本与体检信息来自登记时的记录。" : category === "mcp" ? "检测只检查连接与工具清单，不会执行工具或改变启用状态；结果仅代表最近一次检测。系统共享项的启停对所有 Bot 生效。" : "系统共享项的启停对所有 Bot 生效；工作目录中的项目 Skill 在各自目录中维护。"}</Text>
         </>}
       </Tabs.Panel>
       </Tabs>

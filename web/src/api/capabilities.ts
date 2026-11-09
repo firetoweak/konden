@@ -6,6 +6,10 @@ const identity = {
   description: z.string(),
 };
 const origin = z.enum(["builtin", "installed"]);
+export const mcpCheckSchema = z.object({
+  last_status: z.enum(["unknown", "available", "unavailable"]),
+  last_checked_at: z.string().nullable(), last_error_summary: z.string().nullable(),
+}).strict();
 export const capabilityInventorySchema = z.object({
   skills: z.array(z.object({
     ...identity, origin, enabled: z.boolean(), source: z.string(),
@@ -13,8 +17,7 @@ export const capabilityInventorySchema = z.object({
   }).strict()),
   mcp: z.array(z.object({
     ...identity, origin, enabled: z.boolean(), transport: z.enum(["stdio", "streamable_http"]),
-    read_only: z.boolean(), last_status: z.enum(["unknown", "available", "unavailable"]),
-    last_checked_at: z.string().nullable(), last_error_summary: z.string().nullable(),
+    read_only: z.boolean(), ...mcpCheckSchema.shape,
   }).strict()),
   cli: z.array(z.object({
     ...identity, source: z.string(), version: z.string().nullable(), path: z.string().nullable(),
@@ -26,3 +29,4 @@ export const capabilityInventorySchema = z.object({
 
 export const capabilityEnabledSchema = z.object({ enabled: z.boolean() }).strict();
 export type CapabilityInventory = z.infer<typeof capabilityInventorySchema>;
+export type McpCheck = z.infer<typeof mcpCheckSchema>;

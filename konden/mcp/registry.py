@@ -2,20 +2,37 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
 
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter
+
+from konden.config import write_json
 from konden.file_lock import exclusive
 from konden.paths import KondenHome
 from konden.mcp.models import (
     McpServerRecord,
+    McpServerRuntimeState,
     RuntimeAvailability,
     utc_now,
 )
 
 
+class _BundledCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revision: int = Field(strict=True, gt=0)
+    status: RuntimeAvailability
+    checked_at: AwareDatetime
+    error_summary: str | None
+
+
+_bundled_checks = TypeAdapter(dict[str, _BundledCheck])
+
+
 class McpRegistry:
-    """MCP Server 安装配置的持久读写。"""
+    """用户安装配置与 MCP 检测结果的持久读写。"""
 
     def __init__(self, root: Path) -> None:
         self._root = root.resolve()
@@ -43,6 +60,32 @@ class McpRegistry:
         """同步读取一次文件快照，供 Toolset 目录投影。"""
         with exclusive(self._lock_path):
             return self._read_unlocked()
+
+    def bundled_with_checks(self, records: tuple[McpServerRecord, ...]) -> tuple[McpServerRecord, ...]:
+        with exclusive(self._lock_path):
+            checks = self._read_bundled_checks()
+        return tuple(
+            replace(record, last_status=check.status, last_checked_at=check.checked_at,
+                    last_error_summary=check.error_summary or "")
+            if (check := checks.get(record.id)) is not None and check.revision == record.revision
+            else record
+            for record in records
+        )
+
+    async def mark_bundled_tested(self, record: McpServerRecord, runtime: McpServerRuntimeState) -> None:
+        # Only the observation is stored; product configuration remains owned by the bundled provider.
+        check = _BundledCheck(revision=record.revision, status=runtime.status,
+                              checked_at=runtime.last_checked_at, error_summary=runtime.last_error_summary)
+        with exclusive(self._lock_path):
+            checks = self._read_bundled_checks()
+            checks[record.id] = check
+            write_json(self._root / "builtin-checks.json", _bundled_checks.dump_python(checks, mode="json"))
+
+    def _read_bundled_checks(self) -> dict[str, _BundledCheck]:
+        path = self._root / "builtin-checks.json"
+        if not path.exists():
+            return {}
+        return _bundled_checks.validate_json(path.read_text(encoding="utf-8"))
 
     async def get(self, server_id: str) -> McpServerRecord | None:
         with exclusive(self._lock_path):

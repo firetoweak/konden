@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -16,6 +17,7 @@ from konden.cli.models import CliHealth, CliRecord, CliSourceRef
 from konden.cli.registry import CliRegistry
 from konden.llm.config import initial_connections
 from konden.mcp.composition import build_mcp
+from konden.mcp.models import McpServerRuntimeState, RuntimeAvailability
 from konden.paths import KondenHome
 from konden.skills.application import SkillApplicationService
 from konden.skills.errors import SkillInstalledPackageError
@@ -27,7 +29,7 @@ def capabilities(tmp_path):
     home = KondenHome(tmp_path / "home")
     home.initialize()
     skills = SkillApplicationService(home)
-    mcp = build_mcp(home, client_manager=SimpleNamespace(invalidate=AsyncMock())).service
+    mcp = build_mcp(home, client_manager=SimpleNamespace(invalidate=AsyncMock(), test_connection=AsyncMock())).service
     views = CapabilityViews(skills, mcp, CliRegistry(home.clis_root))
     channel = WebChannel(SimpleNamespace(note_web_connected=Mock()), None)
     connection = channel.connect()
@@ -82,6 +84,59 @@ def test_inventory_includes_disabled_and_builtin_capabilities_without_connecting
     assert deepseek["enabled"] and deepseek["read_only"]
     assert "private-deepseek-key" not in updated.text
     views.mcp.client_manager.invalidate.assert_not_awaited()
+    views.mcp.client_manager.test_connection.assert_not_awaited()
+
+
+@pytest.mark.parametrize("server_id", ["reports", "builtin-officecli"])
+def test_connection_check_is_explicit_persistent_and_does_not_enable_or_call_tools(capabilities, server_id):
+    """A successful local handshake must survive refresh/restart without silently enabling a capability."""
+    client, views, connection = capabilities
+    manager = views.mcp.client_manager
+    before = next(item for item in client.get("/api/capabilities").json()["mcp"] if item["id"] == server_id)
+    url = f"/api/capabilities/mcp/{server_id}/test"
+    assert client.post(url, json={"connection_id": "expired"}).status_code == 409
+    assert client.post(url, json={**connection, "enabled": True}).status_code == 422
+    manager.test_connection.assert_not_awaited()
+    runtime = McpServerRuntimeState()
+    runtime.mark_available(negotiated_version="test", capabilities={"tools": {}})
+    runtime.tools = ({"description": "tool-content-must-not-be-exposed"},)
+    manager.test_connection.return_value = runtime
+    response = client.post(url, json=connection)
+    assert response.status_code == 200
+    assert response.json() == {
+        "last_status": "available", "last_checked_at": runtime.last_checked_at.isoformat(), "last_error_summary": None,
+    }
+    assert "tool-content" not in response.text
+    assert "secret-value" not in response.text
+    record = manager.test_connection.await_args.args[0]
+    assert record.id == server_id and record.enabled == before["enabled"]
+    saved = next(item for item in client.get("/api/capabilities").json()["mcp"] if item["id"] == server_id)
+    assert saved["last_status"] == "available" and saved["enabled"] == before["enabled"]
+    runtime.mark_unavailable("连接已断开，请检查服务地址。")
+    failed = client.post(url, json=connection)
+    assert failed.status_code == 200 and failed.json()["last_status"] == "unavailable"
+    home = KondenHome(views.skills.skills_root.parent)
+    restored = CapabilityViews(SkillApplicationService(home), build_mcp(home).service, CliRegistry(home.clis_root))
+    item = next(item for item in asyncio.run(restored.read())["mcp"] if item["id"] == server_id)
+    assert item["enabled"] == before["enabled"]
+    assert item["last_status"] == "unavailable" and item["last_error_summary"] == runtime.last_error_summary
+    assert item["last_checked_at"] is not None
+    manager.invalidate.assert_not_awaited()
+    if before["origin"] == "builtin":
+        assert asyncio.run(views.mcp.registry.get(server_id)) is None
+
+
+def test_builtin_check_does_not_claim_a_changed_product_configuration_was_tested(capabilities):
+    """After a product update the new connection configuration needs its own observation."""
+    client, views, connection = capabilities
+    record = next(item for item in views.mcp.bundled_servers() if item.id == "builtin-officecli")
+    runtime = McpServerRuntimeState()
+    runtime.mark_available(negotiated_version="test")
+    views.mcp.client_manager.test_connection.return_value = runtime
+    assert client.post("/api/capabilities/mcp/builtin-officecli/test", json=connection).status_code == 200
+    (changed,) = views.mcp.registry.bundled_with_checks((replace(record, revision=record.revision + 1),))
+    assert changed.last_status is RuntimeAvailability.UNKNOWN and changed.last_checked_at is None
+    assert client.post("/api/capabilities/mcp/missing/test", json=connection).status_code == 404
 
 
 def test_enable_requires_a_live_human_connection_and_changes_the_shared_registry(capabilities):
