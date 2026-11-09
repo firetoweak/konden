@@ -4,7 +4,7 @@
 
 ## Sub-features
 
-- `capability-inventory`：侧栏底部 `能力` 图标直接打开 `/capabilities`，不经过设置。Skill、MCP、CLI 页签展示数量、搜索与可展开的清单；产品内置项与用户安装项一起呈现，停用项仍可查。用户安装的 Skill、MCP 可启停，CLI 没有启停开关。MCP 检测结果与启用状态分开；CLI 体检、版本均为已有记录。页面不连接外部 MCP、不运行 CLI，不展示 MCP 凭据与连接配置。
+- `capability-inventory`：侧栏底部 `能力` 图标直接打开 `/capabilities`，不经过设置。Skill、MCP、CLI 页签展示数量、搜索与可展开的清单；产品内置项与用户安装项一起呈现，停用项仍可查。用户安装的 Skill、MCP 可启停，CLI 没有启停开关。MCP 可逐项 `检测连接`，结果与启用状态分开；CLI 体检、版本均为已有记录。读取清单不连接 MCP、不运行 CLI；主动检测只连接 MCP 并读取工具清单，不执行工具，不展示 MCP 凭据与连接配置。
 
 - `bundled-browsers`：空安装登记的 Bot 默认可见 `mcp:builtin-chrome-devtools` 与 `mcp:builtin-playwright`；通过 `load_toolset` 按需加载，具体工具下一步才可调用，不产生安装提案或安装记录。每个连接使用独立的无头 Chrome，会话关闭后不保留登录状态；只读子 Agent 的能力目录排除两者。内置能力随产品更新，安装管理清单仍只列用户安装的 Server。
 
@@ -38,6 +38,7 @@
   - (b) 启停经 `PUT /api/capabilities/{skills|mcp}/{id}/enabled` 保存，后续 GET 和刷新保持；MCP 仅开启时仍显示原检测结果，不能变成「连接正常」。
   - (c) 内置项不出现开关，CLI 不出现开关，列表读取不连接服务或执行命令，也不泄露 MCP 凭据。
   - (d) 无匹配结果与读取失败分开显示；读取失败有 `重试`。1440×900 与 390×844 的明暗主题均可读，220px 侧栏底部允许换行，自动放行标签不竖排。
+  - (e) 对内置与用户安装项点击 `检测 <名字> 连接`，显示检测中、最近通过或失败；展开可见时间与失败原因。`POST /api/capabilities/mcp/<id>/test` 后对照 GET，刷新与重启保留结果，停用项仍停用；断线时不可发起检测，请求失败保留上次结果并可重试。内置配置版本变化后重新显示未检测。
 
 - **默认浏览器**：按 setup-and-launch 准备环境，在空 home 从页面创建无项目 Bot，让它分别用 Chrome DevTools 与 Playwright 打开本次隔离 Web 的首页、读取标题并截图。
   - (a) 会话初始能力目录含两项内置 Toolset；Journal 留下各自的加载与真实调用结果，用户安装登记仍为空。
@@ -75,6 +76,8 @@
 - **密钥**：安装带密钥的 MCP 后，(c) 回复、journal、`GET /api/sessions/<id>` 里不出现明文密钥（`konden/mcp/secrets.py`）。
 
 ## Gotchas
+
+- 2026-11-09 MCP 检测入口增量：Windows 隔离 Web，OfficeCLI 真实连接通过，故障外部服务显示原因且可重试，检测不改变启用状态。刷新、重启后结果与时间一致；断线时禁止检测。桌面与 390×844 明暗主题通过，证据 `.tools/mcp-check-evidence/`；未配置模型，未调用实际搜索或生图接口，未实跑 Linux/macOS GUI。
 
 - 2026-11-09 OfficeCLI 增量：Windows 隔离 Web、真实 DeepSeek、无项目 Bot，默认内置项可发现并按需加载上游 MCP；中文 DOCX 的生成、摘要从 3 项改为 4 项、正文排版微调、PNG 预览和附件交付通过，刷新后仍可查看。最终 DOCX/PNG 下载接口均为 200，且与 Bot 目录原件逐字节一致。证据留在本地 `.tools/officecli-evidence/bundled-officecli/`；浏览器下载完成事件采集超时，未据此确认原生下载完成。未验证 macOS/Linux、与 Word 原生排版的一致性及 XLSX/PPTX 复杂场景。
 

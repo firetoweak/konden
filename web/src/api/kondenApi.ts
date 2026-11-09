@@ -1,7 +1,7 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 import { z } from "zod";
-import { capabilityEnabledSchema, capabilityInventorySchema, type CapabilityInventory } from "./capabilities";
+import { capabilityEnabledSchema, capabilityInventorySchema, mcpCheckSchema, type CapabilityInventory, type McpCheck } from "./capabilities";
 
 import {
   bindOwner,
@@ -134,6 +134,15 @@ export const kondenApi = createApi({
       query: () => "/capabilities",
       transformResponse: (value: unknown) => capabilityInventorySchema.parse(value),
       providesTags: ["Capabilities"],
+    }),
+    testMcpServer: build.mutation<McpCheck, { connectionId: string; id: string }>({
+      query: ({ connectionId, id }) => ({
+        url: `/capabilities/mcp/${encodeURIComponent(id)}/test`, method: "POST",
+        body: { connection_id: connectionId },
+      }),
+      transformResponse: (value: unknown) => mcpCheckSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: ["Capabilities"],
     }),
     setCapabilityEnabled: build.mutation<{ enabled: boolean }, {
       connectionId: string; kind: "skills" | "mcp"; id: string; enabled: boolean;
@@ -710,6 +719,7 @@ export const kondenApi = createApi({
 
 export const {
   useGetCapabilitiesQuery,
+  useTestMcpServerMutation,
   useSetCapabilityEnabledMutation,
   useGetExternalConnectionsQuery,
   useGetExternalSessionsQuery,

@@ -11,16 +11,19 @@ const state = vi.hoisted(() => ({
   data: undefined as CapabilityInventory | undefined,
   isError: false, isLoading: false,
   setEnabled: vi.fn(), refetch: vi.fn(), mutationError: undefined as unknown,
+  testServer: vi.fn(), testError: undefined as unknown, isTesting: false,
 }));
 vi.mock("../src/api/kondenApi", () => ({
   useGetCapabilitiesQuery: () => ({ data: state.data, isLoading: state.isLoading, isError: state.isError, isFetching: false, refetch: state.refetch }),
   useSetCapabilityEnabledMutation: () => [state.setEnabled, { isLoading: false, error: state.mutationError }],
+  useTestMcpServerMutation: () => [state.testServer, { isLoading: state.isTesting, error: state.testError }],
 }));
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   state.isError = false; state.isLoading = false; state.mutationError = undefined;
+  state.isTesting = false; state.testError = undefined; state.testServer.mockClear();
   state.setEnabled.mockClear(); state.refetch.mockClear();
   state.data = {
     skills: [
@@ -34,9 +37,9 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-function app() {
+function app(live = true) {
   const store = configureStore({ reducer: { runtime: runtimeReducer } });
-  store.dispatch(connected("web-connection"));
+  if (live) store.dispatch(connected("web-connection"));
   return <Provider store={store}><MantineProvider env="test"><CapabilitiesPage /></MantineProvider></Provider>;
 }
 
@@ -66,6 +69,37 @@ it("MCP开启仍显示未检测，CLI显示版本并且没有启停开关", () =
   expect(screen.queryByRole("switch")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "查看 git" }));
   expect(screen.getByText("/bin/git")).toBeVisible();
+});
+
+it.each(["builtin", "installed"] as const)("%s MCP 可主动检测，检测中防止重复请求，失败原因可查看", (origin) => {
+  state.data!.mcp[0] = { ...state.data!.mcp[0], origin, enabled: false };
+  const view = render(app());
+  fireEvent.click(screen.getByRole("tab", { name: /MCP/ }));
+  fireEvent.click(screen.getByRole("button", { name: "检测 Reports 连接" }));
+  expect(state.testServer).toHaveBeenCalledWith({ connectionId: "web-connection", id: "reports" });
+  expect(state.setEnabled).not.toHaveBeenCalled();
+  state.isTesting = true;
+  view.rerender(app());
+  expect(screen.getByRole("status")).toHaveTextContent("检测中");
+  expect(screen.getByRole("button", { name: "检测 Reports 连接" })).toBeDisabled();
+  state.isTesting = false;
+  state.data!.mcp[0] = { ...state.data!.mcp[0], last_status: "unavailable", last_error_summary: "服务地址不可达" };
+  view.rerender(app());
+  expect(screen.getByRole("status")).toHaveTextContent("最近检测失败");
+  expect(screen.getByRole("button", { name: "检测 Reports 连接" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "查看 Reports" }));
+  expect(screen.getByText("服务地址不可达")).toBeVisible();
+  expect(screen.getByText("已停用")).toBeVisible();
+});
+
+it("检测请求失败保留上次结果，浏览器断线时禁止新检测", () => {
+  state.testError = "浏览器连接已失效，请重新连接。";
+  const view = render(app());
+  fireEvent.click(screen.getByRole("tab", { name: /MCP/ }));
+  expect(screen.getByRole("alert")).toHaveTextContent("浏览器连接已失效");
+  expect(screen.getByRole("status")).toHaveTextContent("未检测");
+  view.rerender(app(false));
+  expect(screen.getByRole("button", { name: "检测 Reports 连接" })).toBeDisabled();
 });
 
 it("区分读取失败、空清单与无搜索结果，并保留开关失败的实际状态", () => {

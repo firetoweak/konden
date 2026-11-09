@@ -111,7 +111,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | 接口 | 条目 |
 |---|---|
 | `GET /api/events` | realtime-events、reply-delivery（流式预览与最终回复） |
-| `GET /api/capabilities`、`PUT /api/capabilities/{kind}/{id}/enabled`（kind 为 skills 或 mcp） | extensions |
+| `GET /api/capabilities`、`PUT /api/capabilities/{kind}/{id}/enabled`（kind 为 skills 或 mcp）、`POST /api/capabilities/mcp/{id}/test` | extensions |
 | `GET/PUT /api/model-settings`、`POST /api/model-settings/test` | model-settings |
 | `GET/PUT /api/shared-memory` | colleague-tools |
 | `GET/PUT /api/sessions/{id}/model` | model-settings |

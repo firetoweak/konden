@@ -67,7 +67,7 @@ class McpApplicationService:
         self.registry = registry
         self.secret_store = secret_store
         self.client_manager = client_manager
-        self.bundled_servers = bundled_servers
+        self._bundled_servers = bundled_servers
         self.content = (
             McpContentService(registry, client_manager)
             if content_service is None
@@ -77,6 +77,9 @@ class McpApplicationService:
             registry, client_manager, bundled_servers=bundled_servers,
         )
         self._management_lock = asyncio.Lock()
+
+    def bundled_servers(self) -> tuple[McpServerRecord, ...]:
+        return self.registry.bundled_with_checks(self._bundled_servers())
 
     async def list_servers(
         self,
@@ -260,6 +263,11 @@ class McpApplicationService:
             return record
 
     async def test_server(self, server_id: str) -> McpServerRuntimeState:
+        bundled = next((record for record in self._bundled_servers() if record.id == server_id), None)
+        if bundled is not None:
+            runtime = await self._test_record(bundled)
+            await self.registry.mark_bundled_tested(bundled, runtime)
+            return runtime
         record = await self.registry.get(server_id)
         if record is None:
             raise McpServerNotFoundError(f"MCP Server 不存在: {server_id}")
