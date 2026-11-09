@@ -70,6 +70,8 @@ Bot 可按需使用随环境安装的 Chrome DevTools MCP、Playwright 和应用
 
 内置 OfficeCLI 可直接读取、创建、编辑和预览 Word、Excel、PowerPoint 文件，无需安装 Microsoft Office。让 Bot 生成文档并交付文件即可，工具与使用指南按需加载。
 
+内置 PDF Reader（AnyMD）可提取文字与目录，按页查看 PDF 原始画面，并放大局部。双栏、图表和扫描页由支持视觉的聊天模型结合图片理解，无需配置 OCR；Bot 按需加载工具与阅读指南。
+
 ## Codex 接入（MCP）
 
 1. 打开「设置」→「Codex 接入」，生成 MCP 连接配置，配置到 Codex 中。

@@ -1,4 +1,5 @@
 """CI downloads keep the product's version and verification contract."""
+import hashlib
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -9,12 +10,15 @@ from tests.scripts.test_runtime_tools import archive, package
 
 
 @pytest.mark.parametrize("valid", [True, False])
-def test_ci_release_download_is_installed_only_after_pinned_hash_verification(tmp_path, monkeypatch, valid):
+@pytest.mark.parametrize("packaged", [False, True])
+def test_ci_release_download_is_installed_only_after_pinned_hash_verification(tmp_path, monkeypatch, valid, packaged):
     """Authenticated CI transport cannot bypass checksums or change the pinned release identity."""
     data = archive()
     record = {**package(data), "url": "https://github.com/owner/repository/releases/download/v1/tool.zip"}
+    if packaged:
+        record.update(format="binary-archive", executable_sha256=hashlib.sha256(b"binary").hexdigest())
     monkeypatch.setattr(ci.runtime_tools, "packages", lambda _: {"tool": record})
-    monkeypatch.setattr(ci.shutil, "which", lambda _: None)
+    monkeypatch.setattr(ci.shutil, "which", lambda _: "system/tool" if packaged else None)
     run = ci.subprocess.run
     urlopen = ci.runtime_tools.urlopen
 

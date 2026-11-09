@@ -51,6 +51,11 @@
   - (b) 模型调用的是 `list_mcp_servers` / `list_installed_skills` / `list_installed_clis`；终端 `/mcp list` 在空 home 打印 `尚未注册任何 MCP Server。`。
   - (c) 列出不写文件。
   - (d) `/mcp list --foo` → `/mcp list 只接受可选参数 --runtime`。
+- **PDF 阅读**：准备环境后，从侧栏 `能力 → MCP` 搜索 `PDF`，展开 `查看 PDF Reader · AnyMD`，点击 `检测 PDF Reader · AnyMD 连接`。准备一份双栏 PDF 和一份带可独立核对内容、没有文字层的扫描 PDF；用支持视觉的聊天模型创建无项目 Bot，通过文件附件或明确的本机文件路径，请它实际查看指定页，并把扫描页中的小字或图形区域放大核对。
+  - (a) `GET /api/capabilities` 显示启用的内置服务，连接测试成功；工具按需加载，用户安装登记不新增项。调用与原件字节、整页和区域图像对照，不以 Markdown 图片引用或工具调用结束代替看图证据。
+  - (b) 会话记录实际的 `load_skill`、`load_toolset`、`render_page` 和 `extract_regions`；回答与双栏原页、扫描图内的独立对照一致，页码清楚。刷新后回答与执行过程仍可查看。
+  - (c) 不要求安装 OCR 或下载模型；未启用 OCR 的扫描页仍能查看。裁剪坐标以 PDF 点计，必须检查返回图里确实包含目标；一次看图成功不代表不同模型或所有 PDF 都可靠。
+  - (d) 无文字层页面的图像回传、局部坐标与像素尺寸、重连后裁剪、中文含空格路径及原件不变由 `tests/mcp/test_documents_process.py` 保护。没有可用视觉模型时按 Doctor 结果记为未验证，不用纯文本模型的回答当成看图通过。
 - **Office 文档**：准备环境后，从侧栏 `能力 → MCP` 搜索并展开 `查看 OfficeCLI`；创建无项目 Bot，请它生成一份含中文标题、正文和表格的 Word 报告，修改其中一段，检查并交付文档和预览图。
   - (a) 对照 `GET /api/capabilities`、`GET /api/sessions/<id>` 和 Bot 目录，OfficeCLI 为启用的内置 MCP，实际 DOCX 包含修改后的内容，预览为可解码 PNG；用户安装登记仍为空。
   - (b) 页面出现真实加载和 OfficeCLI 操作，文件可下载，预览可查看；刷新后成果与调用记录保留。
@@ -76,6 +81,8 @@
 - **密钥**：安装带密钥的 MCP 后，(c) 回复、journal、`GET /api/sessions/<id>` 里不出现明文密钥（`konden/mcp/secrets.py`）。
 
 ## Gotchas
+
+- 2026-11-09 PDF 阅读增量：Windows 隔离 Web、AnyMD 8.5.11、本机路径输入，能力目录与真实连接检测通过。GPT-6.1 Sol（低强度）实际渲染 BERT 双栏论文与纯图片扫描页，正确辨认阅读顺序、图内六位编号、橙色三角形，并用 PDF 点坐标返回完整的 1350×570 局部图；三个原生 MCP 图片块与附件原件逐一核对，未运行 OCR 或下载模型。证据留在本地 `.tools/pdf-evidence/`。GPT-4.1 初轮识图正确，但曾混用像素和 PDF 点，未正确核对裁剪区域；指南已补充单位换算与实际返回图检查，未据此声称所有型号均可稳定看图。隐藏实例的本机文件选择窗口未显示，本轮未计入附件选择/上传通过；未实跑 Linux/macOS GUI、旋转页面及超长文档。
 
 - 2026-11-09 MCP 检测入口增量：Windows 隔离 Web，OfficeCLI 真实连接通过，故障外部服务显示原因且可重试，检测不改变启用状态。刷新、重启后结果与时间一致；断线时禁止检测。桌面与 390×844 明暗主题通过，证据 `.tools/mcp-check-evidence/`；未配置模型，未调用实际搜索或生图接口，未实跑 Linux/macOS GUI。
 

@@ -25,18 +25,20 @@ def archive():
 
 
 @pytest.mark.parametrize("valid", [True, False])
-@pytest.mark.parametrize("binary", [False, True])
-def test_download_is_verified_before_installation(tmp_path, monkeypatch, valid, binary):
-    data = b"binary" if binary else archive()
+@pytest.mark.parametrize("kind", ["archive", "binary", "binary-archive"])
+def test_download_is_verified_before_installation(tmp_path, monkeypatch, valid, kind):
+    data = b"binary" if kind == "binary" else archive()
     monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
     record = package(data, None if valid else "0" * 64)
-    if binary:
+    if kind == "binary":
         record.update(format="binary", url="https://example.test/tool.exe")
+    elif kind == "binary-archive":
+        record.update(format="binary-archive", executable_sha256=hashlib.sha256(b"binary").hexdigest())
     destination = tools.tool_directory(tmp_path, "tool")
     if valid:
         tools.install_package(tmp_path, "tool", record)
         assert (destination / "tool.exe").read_bytes() == b"binary"
-        if not binary:
+        if kind == "archive":
             assert (destination / "LICENSE").read_bytes() == b"license"
     else:
         with pytest.raises(ValueError, match="校验失败"):
@@ -44,16 +46,33 @@ def test_download_is_verified_before_installation(tmp_path, monkeypatch, valid, 
         assert not destination.exists()
 
 
-def test_binary_is_product_owned_and_replaced_only_after_verification(tmp_path, monkeypatch):
+def test_packed_executable_hash_mismatch_preserves_the_installed_program(tmp_path, monkeypatch):
+    """An authenticated archive must also contain the exact executable the product runs."""
+    data = archive()
+    record = {**package(data), "format": "binary-archive", "executable_sha256": "0" * 64}
+    executable = tools.tool_directory(tmp_path, "tool") / "tool.exe"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"previous version")
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
+    with pytest.raises(ValueError, match="程序校验失败"):
+        tools.install_package(tmp_path, "tool", record)
+    assert executable.read_bytes() == b"previous version"
+
+
+@pytest.mark.parametrize("packaged", [False, True])
+def test_binary_is_product_owned_and_replaced_only_after_verification(tmp_path, monkeypatch, packaged):
     """A system CLI or stale/modified binary must not silently replace the pinned product tool."""
-    data = b"pinned binary"
+    data = archive() if packaged else b"binary"
     record = {**package(data), "format": "binary", "url": "https://example.test/tool.exe"}
+    if packaged:
+        record.update(format="binary-archive", url="https://example.test/tool.zip",
+                      executable_sha256=hashlib.sha256(b"binary").hexdigest())
     monkeypatch.setattr(tools, "packages", lambda root: {"tool": record})
     monkeypatch.setattr(shutil, "which", lambda name: f"system/{name}")
     monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
     tools.prepare(tmp_path)
     executable = tools.tool_directory(tmp_path, "tool") / "tool.exe"
-    assert executable.read_bytes() == data
+    assert executable.read_bytes() == b"binary"
     executable.write_bytes(b"previous version")
     monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(b"corrupt download"))
     with pytest.raises(ValueError, match="校验失败"):
@@ -61,7 +80,7 @@ def test_binary_is_product_owned_and_replaced_only_after_verification(tmp_path, 
     assert executable.read_bytes() == b"previous version"
     monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
     tools.prepare(tmp_path)
-    assert executable.read_bytes() == data
+    assert executable.read_bytes() == b"binary"
     monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: pytest.fail("must reuse verified binary"))
     tools.prepare(tmp_path)
 
