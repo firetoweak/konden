@@ -100,6 +100,15 @@ jobs:
           }
           EOF
           sudo apparmor_parser -r "$RUNNER_TEMP/konden-chrome.apparmor"
+      - name: Restore pinned application tools
+        uses: actions/cache@v6
+        with:
+          path: .tools/runtime
+          key: app-tools-${{ runner.os }}-${{ runner.arch }}-${{ matrix.group == 'integration' && 'browser' || 'cli' }}-${{ hashFiles('scripts/runtime_tools.json') }}
+      - name: Prepare pinned application tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.prepare_ci_tools
       - name: Verify process contracts
         run: python scripts/ci.py process --process-group ${{ matrix.group }} --workers 2
       - name: Upload process test report
