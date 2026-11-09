@@ -5,7 +5,7 @@
 ## Sub-features
 
 - `connect`：首个事件 `connected` 带 `connection_id`；紧接着服务端补发一份当前运行态快照（运行中会话的 `session_activity`=`running`、运行中工具的 `tool_progress`=`running`、进行中的 `preview.started`/`preview.delta` 与 `thinking.started`/`thinking.delta`）；空闲时约每 15 秒有 keep-alive 注释，应用输出 `: keep-alive`，框架也可能输出 `: ping`，不把注释当业务事件。
-- `stream`：`preview.started/delta/aborted`、`thinking.started/delta/finished/aborted`、`output_final`、`tool_progress`、`authorization_required`、`session_activity`、`conversation_status`、`context_usage`、`schedule_changed`、`session_failed`、`group_changed`、`auto_authorize_changed`（全局开关值）。
+- `stream`：`preview.started/delta/aborted`、`thinking.started/delta/finished/aborted`、`output_final`、`tool_progress`、`authorization_required`、`session_activity`、`conversation_status`、`context_usage`、`schedule_changed`、`session_failed`、`group_changed`、`auto_authorize_changed`（正文为空对象，页面收到后重新读取全局开关）。
 - `reconnect`：断线期间侧栏底部显示 `正在连接…`，输入框禁用且占位文字为 `正在连接…`；恢复后连接图标（`role="status"`）的可访问名称为 `已连接`，不常显文字。
 - `response-order`：同一会话的 GET 与操作响应交错时，正式投影保留较新的事实版本；旧连接或旧会话的选择确认不改变当前绑定。最终快照与同一输出的有序 SSE 交错，不产生重复回复或回退正文。
 - `multi-tab`：多个标签页同时连接，都能看到同一会话的更新。
@@ -46,7 +46,7 @@ Windows PowerShell 可使用 `npm.cmd`。这些用例也包含在默认 `npm tes
 ## Gotchas
 
 - 代理或浏览器扩展可能缓冲 SSE；用 `curl -N` 做基准。
-- 外部编辑器直接修改文件不会产生这些 SSE 通知，首版用 `刷新文件变更` 更新；不把未监听外部编辑当成事件丢失。
+- 外部编辑器直接修改文件不会产生这些 SSE 通知；当前 Web 没有文件改动页，用真实目录与 Git 核对文件，不把未监听外部编辑当成事件丢失。
 - 历史 live 状态：部分（2026-10-12，修复后）：流式通过；失效 connection_id 返回 409（隔离 API 通过）；断线重连未测。2026-10-18 按源码补充快照、keep-alive 间隔、断开释放与 409 文案，未重新 live 验证。
 - 2026-10-18 Windows live：SSE 首事件 `connected`（0.0 s），空闲 15.0 s 后注释 `: ping`；陈旧 `connection_id` 调写接口 409 `Web 连接已失效，请重新连接页面。`。
 

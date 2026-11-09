@@ -7,13 +7,13 @@
 - `plan-panel`：见 [work-plan.md](./work-plan.md)。
 - `message-time`：用户消息外侧与 Bot 回复后的过程栏显示消息时间；悬停可看完整日期时间。不再显示每轮耗时或运行秒数。
 - `context-meter`：输入区右侧用量环，`role="img"`，`aria-label` 为 `<标题> · <已用> / <上限> tokens`。标题：有本窗口用量且有阈值时 `N% 已用`；本窗口还没有用量时 `暂无本窗口用量`；有用量但没有阈值时 `上下文用量`。token 数 ≥ 1000 写成 `64K` / `12.3K`，缺失写 `—`。
-- `compact`：输入 tokens 达到模型的 `compact 触发值（输入 tokens）` 时整理上下文，之后模型可用 `find_history` 找回旧内容。
+- `compact`：输入 tokens 达到模型的 `上下文整理阈值` 时整理上下文，之后模型可用 `find_history` 找回旧内容。
 - `history-search`：`find_history` 将带时区的记录时间范围、消息序号范围与字面关键词组合筛选，命中项带 `occurred_at` 和原文引用；工具结果随发起它的助手消息组返回。
 
 ## How to get to it (user POV)
 
 - 发 `请先用 update_plan 列三步计划，然后逐步完成，每步只回复一句话。`
-- compact：在 `模型配置` 里 `编辑` 当前模型，改 `compact 触发值（输入 tokens）`（最小 1，新模型默认 200000）。
+- compact：在 `模型配置 → 已选模型` 打开 `<供应商> <模型> 更多设置`，改 `上下文整理阈值`（最小 1，新勾选模型默认 50000）。
 
 ## Driving it with the browser
 
@@ -24,7 +24,7 @@
   - (b) 用量环 `aria-label` 为 `N% 已用 · <context_input_tokens 格式化> / <阈值格式化> tokens`，N = round(已用/阈值×100)。
   - (c) 换会话模型后上限随 `GET /api/sessions/<id>/model` 的 `effective`（缺失时 `selected`）的 `compact_threshold_tokens` 变化。
   - (d) 新会话还没有模型回复时 → `暂无本窗口用量 · — / <阈值> tokens`。
-- **compact**：把当前模型的 `compact 触发值（输入 tokens）` 调到很小（如 2000），先点 `加入待保存配置` 再 `保存配置`，连续发几轮长消息。
+- **compact**：把当前模型的 `上下文整理阈值` 调到很小（如 2000），直接点 `保存配置`，连续发几轮长消息。
   - (a) `GET /api/sessions/<id>` 的 `compact_count` 递增，journal 中有 fact `compact.window_rolled_over`；`compact_phase` 可短暂经过 `running`、`ready`，完成后回到 `null`，不要求最终保持 `ready`。
   - (b) compact 成功没有任何提示；刚滚到新窗口时 `context_input_tokens` 为 `null`，用量环先显示 `暂无本窗口用量 · — / 2K tokens`，下一次回复后才有新窗口的数值；不保证新窗口的输入用量一定低于整理前。
   - (c) 之前的用户消息在界面上仍可见。
@@ -38,7 +38,7 @@
 
 ## Gotchas
 
-- 改 `compact 触发值（输入 tokens）` 会写 `config.json`，验证结束要改回或丢弃临时 home。
+- 改 `上下文整理阈值` 会写 `config.json`，验证结束要改回或丢弃临时 home。
 - 阈值字段不接受 0、负数和小数；表单校验见 model-settings。
 - 没有「compact 成功」提示，判据只能看 `compact_count`、`compact_phase` 和 journal fact。
 - 历史验证：2026-10-12（main@1a4790a）只经 API 核对通过，UI 未验。2026-10-18 按源码改写耗时、用量环与 compact 判据，未 live 复跑。

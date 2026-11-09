@@ -33,7 +33,7 @@ git -C "$SCRATCH_WORKSPACE" -c user.name=verify -c user.email=verify@example.inv
 
 `KONDEN_HOME` and `SCRATCH_WORKSPACE` are siblings. The personal directory must not sit inside the workspace directory.
 
-Install once if `./konden-env/bin/python` or `web/dist/index.html` is missing. Re-run setup after updates that change browser dependencies. `sh scripts/setup.sh` (Linux x64 only; network required) downloads the project Python into `konden-env`, then runs `scripts/setup.py` in four steps: it prepares pinned application tools and a private Chrome for Testing under `.tools/runtime/`, installs Python deps, runs `npm ci` in `scripts/browser/` and `web/` and builds the web bundle, and initializes whichever personal directory `KONDEN_HOME` points at. Existing `config.json` and `connections.json` there are left alone. `setup.py --check` checks system command prerequisites and rejects Node outside 22.x (≥22.13) or 24.x; it does not prove the browser MCP dependencies are installed. If only the web bundle is stale, rebuilding it alone is enough:
+Install once if `./konden-env/bin/python` or `web/dist/index.html` is missing. Re-run setup after updates that change browser dependencies. `sh scripts/setup.sh` (Linux x64 and macOS x64/Apple Silicon; network required) downloads the project Python into `konden-env`, then runs `scripts/setup.py` in four steps: it prepares pinned application tools, including OfficeCLI, and a private Chrome for Testing under `.tools/runtime/`, installs Python deps, runs `npm ci` in `scripts/browser/` and `web/` and builds the web bundle, and initializes whichever personal directory `KONDEN_HOME` points at. Existing `config.json` and `connections.json` there are left alone. `setup.py --check` checks system command prerequisites and rejects Node outside 22.x (≥22.13) or 24.x; it does not prove the browser MCP dependencies are installed. If only the web bundle is stale, rebuilding it alone is enough:
 
 ```sh
 sh scripts/setup.sh
@@ -105,6 +105,8 @@ A non-zero exit means do not click. Wrong home, a dead pid, or a page that is no
 
 Use the browser automation in the session (Playwright or Chrome DevTools). The verbs below are the harness. There is no `browser` binary in this repository. Resolve each target by role and accessible name. Do not click by coordinates or DOM order.
 
+After switching Bots or changing the viewport, take a fresh snapshot and confirm the intended conversation and model selector before filling the composer. Wait for attachment uploads and model selection to finish before sending. For a switch saved by the server, click once according to its current value, then wait for the confirmed value; an immediate `setChecked` assertion can run while the save is still pending. Scope repeated names such as `保存记忆` to the named drawer or panel.
+
 - `browser open <url>`
 - `browser click --role <role> --name "<accessible name>"`
 - `browser fill --role textbox --name "<accessible name>" --value "<text>"`
@@ -129,7 +131,7 @@ Write proof under `$EVIDENCE_DIR/<feature-id>/`. Cleanup must not delete that di
 For each driven entry point save:
 
 - `snapshot.txt` — accessibility snapshot taken after the action, while the resulting state is on screen
-- `page.png` — screenshot of that same state, with the sidebar `新建 Bot` entry visible on desktop (on mobile, include the `打开 Agent 名册` control)
+- `page.png` (or `page.jpg` when the browser returns JPEG) — screenshot of that same state, with the sidebar `新建 Bot` entry visible on desktop (on mobile, include the `打开 Agent 名册` control)
 - `state.json` — the read-only HTTP body named in the feature file
 - `note.txt` — feature id, entry point, and either `passed` or `skipped` plus the Doctor field that blocked it (`live_model_ready`)
 
@@ -163,7 +165,7 @@ Remove-Item -Recurse -Force $env:RUN_DIR
 Test-Path $env:EVIDENCE_DIR
 ```
 
-After cleanup, the screenshot and `state.json` must still be in `$EVIDENCE_DIR`.
+After cleanup, check the saved screenshot and `state.json` at their named locations in `$EVIDENCE_DIR`; keep terminal evidence there too.
 
 ## Helpers
 

@@ -4,7 +4,7 @@
 
 ## Sub-features
 
-- `home-empty`：`/` 由 `AgentHome` 处理，不自动新建会话。没有 Bot 时显示 `创建第一位 Bot` 和 `创建 Bot`；已有 Bot 时展示全部 Bot 列表、方向、状态与群聊。代码项目为可选关联。
+- `home-empty`：`/` 由 `AgentHome` 处理，不自动新建会话。没有 Bot 时显示 `认识你的第一位伙伴`；默认模型可用后填写 `给它起个名字`，点 `开始`。已有 Bot 时展示头像、名字、状态与群聊。代码项目为可选关联。
 - `open-agent`：按 session-sidebar 创建一个 Agent 后进入 `/sessions/<id>`。不再有草稿行或 `new agent` 标题。
 - `send-message`：在 `消息` 输入框（占位 `输入消息，@ 选择 Bot…`）回车或点 `发送`，走 `POST /api/sessions/{id}/inputs`；Shift + Enter 换行。私聊输入区默认分为上下两排：上排独占整行输入，下排左侧为附件、右侧为用量、折叠模型菜单和发送／停止。输入增高时向上扩到七行后内部滚动，窄屏文字不与操作按钮争用宽度。
 - `mention`：私聊正文输入 `@` 显示全局 Bot 名册，输入名字前缀过滤，支持中文与带空格、符号的完整名字。方向键选择、Enter / Tab 补全或鼠标点选，Escape 关闭；候选打开时 Enter 只填名，不发送。私聊没有 `@all` 候选，填入名字不直接通知另一位 Bot，消息仍交给当前聊天的 Bot 处理。
@@ -14,7 +14,7 @@
 
 ## How to get to it (user POV)
 
-- 打开 `$KONDEN_VERIFY_URL/`，点 `创建 Bot`，无需登记项目或准备 Git 仓库。关联代码项目是单独的可选路径，见 workspace-management。
+- 打开 `$KONDEN_VERIFY_URL/`，按首次引导点 `开始`，或从 `新建 Bot` 表单点 `创建`；需可用默认模型，无需登记项目或准备 Git 仓库。关联代码项目是单独的可选路径，见 workspace-management。
 - 按 session-sidebar 新建 Agent，进入 `/sessions/<id>` 后在底部输入框打字发送。
 
 ## Driving it with the browser

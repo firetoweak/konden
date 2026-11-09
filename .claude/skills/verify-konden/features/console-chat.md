@@ -40,7 +40,7 @@
 
 - 需要真 TTY（prompt_toolkit）；不能用管道喂输入。Linux 用 tmux；Windows 必须在真实控制台（Windows Terminal / ConPTY）里跑。
 - 与 Web 不同，终端缺省会用启动目录登记工作区，且每次启动都是全新会话，没有办法接回旧会话。
-- 终端会话的文件工具与命令直接作用于工作区真实目录，没有回退；写文件与每条命令都要 yes/no 授权。委派的子 Agent 只读调查，没有写工具，也没有 `compare_subagent`/`merge_subagent`。
+- 终端会话的文件工具与命令直接作用于工作区真实目录，没有回退。启动会清空旧授权选择，工具自动放行默认开启；关闭自动放行时，写文件与命令才需 yes/no 授权，控制确认始终单独回答。子 Agent 共享父目录，可写文件和执行命令，授权归父；没有 `compare_subagent`/`merge_subagent`。
 - 历史验证：2026-10-12（main@1a4790a）跳过，需真 TTY。2026-10-18 按源码改写启动文案与 Windows 入口，未 live 复跑。
 
 - 2026-10-20 维护实测（`origin/main@32860f6`，Windows Chrome/ConPTY，隔离 home）：真实 Windows ConPTY 启动、/mcp list、/new、新会话 TUI_PING_OK 与 Ctrl+D 正常退出通过；证据为终端文本，无 Web 截图。底栏、粘贴、并发占用与重启清理未覆盖。
