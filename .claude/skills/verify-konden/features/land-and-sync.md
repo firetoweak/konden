@@ -23,7 +23,7 @@ Bot 的项目工作树位于其个人目录的 `projects/<挂载项目名>`；�
 需要 `live_model_ready` 才能请模型调用工具。`code` 在该会话 journal 的命令结果里。成功调用的那一步 `tools` 里只有这一个工具。
 
 - **落地已提交的工作**：在 `Ada` 的工作树提交 `landed.txt`，内容 `landed`。请它调用 `land_branch`。
-  - (a) 结果 `LAND_COMPLETED`，`data.fast_forward` 为 true 时集成分支 HEAD 等于 `Ada` 分支 HEAD；否则集成工作树多一个作者为 `Ada`、说明为 `合入 Ada 的工作` 的合并提交。`integration` 工作树里有 `landed.txt`。`GET /api/sessions/<Ada>/changes?project=<挂载项目名>` 不再包含这个已落地的文件。
+  - (a) 结果 `LAND_COMPLETED`，`data.fast_forward` 为 true 时集成分支 HEAD 等于 `Ada` 分支 HEAD；否则集成工作树多一个作者为 `Ada`、说明为 `合入 Ada 的工作` 的合并提交。`integration` 工作树里有 `landed.txt`。用 `GET /api/sessions/<Ada>` 核对调用，再用 `git log`、`git diff` 和真实文件核对落地；Web 没有 changes 接口或文件改动页。
   - (b) 工具卡 `land_branch` 徽标 `完成`。输入框上方不出现这条调用的待处理条。
   - (c) `$SCRATCH_WORKSPACE` 的 HEAD、暂存区和 `note.txt` 不变。集成分支出现在该仓库的分支列表里是正常的，不要把人的检出切到那条分支。
   - (d) 没有新提交时再落地 → `LAND_UNCHANGED`，提示集成分支已经包含全部分支上已提交的工作，集成 HEAD 不变。

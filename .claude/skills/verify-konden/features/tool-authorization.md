@@ -1,6 +1,6 @@
 # 工具授权
 
-待授权调用和控制请求在所属 Bot 头像旁提示，进入它的对话后在待处理条操作（见 [inbox.md](./inbox.md)）；没有独立的待处理汇总页。写文件工具 `write_file`、`apply_patch`、`replace_all`，以及 `execute_command` 每次启动命令都要用户批准（包含立即转后台）；命令不按文本放行，`git status` 这类只读命令也要批准。Agent 委派的子 Agent 在自己的 worktree 里写文件不需要授权（`konden/assistant/builtin_tools.py`），`merge_subagent` 把子合进 Agent 自己的分支，也不需要授权。可全局打开自动放行；模型发起的控制请求另需确认。待授权调用与控制请求都列在输入框上方的待处理条里，没有弹窗。来源：`ExecutionProcess.tsx`、`PendingActions.tsx`、`AutoAuthorize.tsx`、`Conversation.tsx`、`app.py` 的 `/authorize`、`/auto-authorize`、`/control`、`konden/assistant/sessions.py`、`konden/assistant/host/supervisor.py`、`konden/tools/builtin/command_execution.py`。
+待授权调用和控制请求在所属 Bot 头像旁提示，进入它的对话后在待处理条操作（见 [inbox.md](./inbox.md)）；没有独立的待处理汇总页。写文件工具 `write_file`、`apply_patch`、`replace_all`，以及 `execute_command` 每次启动命令都要用户批准（包含立即转后台）；命令不按文本放行，`git status` 这类只读命令也要批准。子 Agent 共享父工作区，可选择已有可访问目录；写文件与命令沿用父的授权选择，待授权调用在父对话处理。没有 `merge_subagent` 或子任务成果合并入口。可全局打开自动放行；模型发起的控制请求另需确认。待授权调用与控制请求都列在输入框上方的待处理条里，没有弹窗。来源：`ExecutionProcess.tsx`、`PendingActions.tsx`、`AutoAuthorize.tsx`、`Conversation.tsx`、`app.py` 的 `/authorize`、`/auto-authorize`、`/control`、`konden/assistant/sessions.py`、`konden/assistant/host/supervisor.py`、`konden/tools/builtin/command_execution.py`。
 
 ## Sub-features
 

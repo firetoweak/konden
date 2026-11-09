@@ -1,6 +1,6 @@
 # 工作计划生命周期
 
-模型用 `update_plan` 维护一份工作计划；界面在输入框上方显示 `当前计划`，全部完成后在该轮下方显示 `已完成计划`。本条覆盖创建、状态标记、更新、回收、完成五个阶段。来源：`konden/assistant/work_plan.py`、`konden/assistant/assembly.py`（注册 `update_plan`）、`konden/assistant/conversations.py`（`work_plan`、`work_plan_updates`）、`konden/assistant/context/projection.py`（`render_work_plan` 快照去重后追加到模型上下文末尾）、`konden/assistant/decision.py`（快照写入步骤 `decision_metadata` 的 `work_plan_context`）、`konden/assistant/context/prompt.py`（`WORK_PLAN_PROMPT`）、`web/src/features/conversation/WorkPlanPanel.tsx`、`workPlanPlacement.ts`、`Conversation.tsx`、`ExecutionProcess.tsx`、`stepHeading.ts`、`web/src/api/contracts.ts`（`workPlanSchema`）。
+模型用 `update_plan` 维护一份工作计划；界面在输入框上方显示 `当前计划`，全部完成后在该轮下方显示 `已完成计划`。本条覆盖创建、状态标记、更新、回收、完成五个阶段。来源：`konden/assistant/work_plan.py`、`konden/assistant/assembly.py`（注册 `update_plan`）、`konden/assistant/conversations.py`（`work_plan`、`work_plan_updates`）、`konden/assistant/context/projection.py`（`render_work_plan` 快照去重后追加到模型上下文末尾）、`konden/assistant/decision.py`（快照写入步骤 `decision_metadata` 的 `work_plan_context`）、`web/src/features/conversation/WorkPlanPanel.tsx`、`workPlanPlacement.ts`、`Conversation.tsx`、`ExecutionProcess.tsx`、`stepHeading.ts`、`web/src/api/contracts.ts`（`workPlanSchema`）。
 
 源码事实（判据以此为准）：
 - **数据模型**（`work_plan.py`，pydantic `strict`、`extra="forbid"`）：`plan` 为 `{objective: 非空字符串, steps: [{text: 非空, status: "pending"|"in_progress"|"completed"}]（至少 1 项）, note: 非空字符串|null}` 或 `null`。事项**没有 id**，只按数组位置排列。前端 `workPlanSchema` 与之一致。
@@ -11,7 +11,7 @@
 - **用户没有计划操作入口**：`更新计划` / `结束当前计划` 只是步骤标题（`stepHeading.ts`、`ExecutionProcess.tsx`：`tool.arguments.plan === null ? "结束当前计划" : "更新计划"`），不是按钮。面板唯一的交互是展开/收起（`aria-label` 为 `当前计划` 或 `已完成计划`）。
 - **界面放置**：`Conversation.tsx` 中 `activePlan` 只在当前计划存在且**未全部完成**时显示在输入框上方；全部完成的计划由 `completedPlanForTurn` 挂在产生它的那一轮下方，按钮可访问名称为 `已完成计划`。
 - **面板呈现**（`WorkPlanPanel.tsx`）：标题显示计划图标与 `<objective>`，右侧为 `n/m`（可访问名称 `已完成 n/m 项`）；其下为 `模型标记` 和按事项顺序连接的静态节点，可访问分组名为 `模型记录的计划进度`。空心圆、圆点和勾选分别代表 `待做`/`进行中`/`已完成`，悬停说明与可访问名称包含状态和事项。只有输入框上方的当前计划会传 `stopped`（未运行且有执行错误），此时单独显示暂停图标与 `执行已停止`，不改计划节点。有 `note` 时 note 显示在标题按钮下方，不用展开；展开后按原顺序显示完整事项和状态图标。
-- **模型上下文**：`render_work_plan(events)` 从 journal 事件算出快照，有计划时为 `<work_plan>\n{JSON}\n</work_plan>`，`plan=null` 后为 `<work_plan>\n当前计划已清除。\n</work_plan>`；块里没有说明文字，含义由系统提示 `WORK_PLAN_PROMPT` 解释（「最近一块是当前计划，更早的只是历史；最近一块说明已清除时，不再沿用旧计划。」）。快照**只在与当前窗口内最近一块 `<work_plan>` 不同时**才追加到消息末尾，并存进该步骤 `decision_metadata` 的 `work_plan_context`，之后作为窗口里的历史消息重放（`projection.py` `_project_step`）。计划没变时后续决策不再追加；compact 后旧块滚出窗口，下一次决策会重新追加一次。
+- **模型上下文**：`render_work_plan(events)` 从 journal 事件算出快照，有计划时为 `<work_plan>\n你当前的工作计划：\n{JSON}\n</work_plan>`，`plan=null` 后为 `<work_plan>\n你的工作计划已清空。\n</work_plan>`。快照**只在与当前窗口内最近一块 `<work_plan>` 不同时**才追加到消息末尾，并存进该步骤 `decision_metadata` 的 `work_plan_context`，之后作为窗口里的历史消息重放（`projection.py` `_project_step`）。计划没变时后续决策不再追加；compact 后旧块滚出窗口，下一次决策会重新追加一次。
 
 ## Sub-features
 
@@ -32,7 +32,7 @@
 
 - **创建**：
   - (a) `work_plan.objective` 为 `验证计划`，`steps` 3 项，第 1 项 `in_progress`；`work_plan_updates` 长度 1，`step_id` 指向含该调用的步骤。
-  - (b) 步骤标题 `更新计划`；输入框上方出现可访问名称为 `当前计划` 的按钮，显示目标 `验证计划`、`模型标记`、三个步骤节点与 `0/3`，第一项节点为进行中的圆点。之后的决策步骤里，当前窗口内最近一块 `<work_plan>` 是 `<work_plan>\n{该版本 JSON}\n</work_plan>`。
+  - (b) 步骤标题 `更新计划`；输入框上方出现可访问名称为 `当前计划` 的按钮，显示目标 `验证计划`、`模型标记`、三个步骤节点与 `0/3`，第一项节点为进行中的圆点。之后的决策步骤里，当前窗口内最近一块 `<work_plan>` 是 `<work_plan>\n你当前的工作计划：\n{该版本 JSON}\n</work_plan>`。
   - (c) 不写工作区文件；不需要授权（不出现 `待授权`）。
   - (d) 空计划：让模型传 `steps: []` → 工具返回校验错误，`work_plan` 不变（仍为上一版或 `null`）。`objective: ""`、`status: "done"`、多余字段（如 `id`）、`note` 省略（未显式传 `null`）→ 同样校验失败、计划不变。
 - **状态标记**：
@@ -45,7 +45,7 @@
   - (b) 面板 `m` 变化；objective 变化时标题随之变化；`note` 在标题按钮下方出现/消失（不用展开）。
   - (c) 事项无 id，界面以数组下标作 key（`WorkPlanPanel.tsx` 的 `key={index}`）；重排后展开列表顺序必须与 JSON 一致。
   - (d) 计划已全部完成后再 `update_plan` 一份新计划 → 接受，新计划成为当前计划显示在输入框上方，旧的 `已完成计划` 仍挂在原轮下方。
-- **回收：模型结束计划**：让模型 `update_plan(plan=null)`。(a) `work_plan` 为 `null`；`work_plan_updates` 末项 `plan: null`，早先版本仍在。(b) 步骤标题 `结束当前计划`；输入框上方面板消失；之后的决策步骤里，当前窗口内最近一块 `<work_plan>` 是 `<work_plan>\n当前计划已清除。\n</work_plan>`。(d) 未完成的计划被 `null` 结束后**界面不留任何「已放弃」记录**（`completedPlanForTurn` 只挂全部完成的计划）——记为观察项。
+- **回收：模型结束计划**：让模型 `update_plan(plan=null)`。(a) `work_plan` 为 `null`；`work_plan_updates` 末项 `plan: null`，早先版本仍在。(b) 步骤标题 `结束当前计划`；输入框上方面板消失；之后的决策步骤里，当前窗口内最近一块 `<work_plan>` 是 `<work_plan>\n你的工作计划已清空。\n</work_plan>`。(d) 未完成的计划被 `null` 结束后**界面不留任何「已放弃」记录**（`completedPlanForTurn` 只挂全部完成的计划）——记为观察项。
 - **回收：用户想结束计划**：界面没有按钮。用户只能发消息要求模型结束。(d) 记为疑似问题：用户无法直接放弃或清除计划。
 - **回收：停止/取消**：计划有 `in_progress` 项时点输入框的 `停止`。(a) `work_plan` 保持最后一次成功版本，没有自动清理。(b) 面板仍保留进行中节点，打断不修改模型的计划进度；只有执行错误才单独显示暂停图标与 `执行已停止`；实际运行状态单独显示，不靠计划推断。(d) 停止发生在 `update_plan` 已开始但无结果时 → 该调用不计入（只认 `SUCCEEDED`），`work_plan` 为上一版。
 - **回收：失败或被拒绝的更新**：(a) 工具失败/校验错误的调用不改变 `work_plan`。

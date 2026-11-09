@@ -6,11 +6,11 @@
 
 - `capability-inventory`：侧栏底部 `能力` 图标直接打开 `/capabilities`，不经过设置。Skill、MCP、CLI 页签展示数量、搜索与可展开的清单；产品内置项与用户安装项一起呈现，停用项仍可查。用户安装的 Skill、MCP 可启停，CLI 没有启停开关。MCP 可逐项 `检测连接`，结果与启用状态分开；CLI 体检、版本均为已有记录。读取清单不连接 MCP、不运行 CLI；主动检测只连接 MCP 并读取工具清单，不执行工具，不展示 MCP 凭据与连接配置。
 
-- `bundled-browsers`：空安装登记的 Bot 默认可见 `mcp:builtin-chrome-devtools` 与 `mcp:builtin-playwright`；通过 `load_toolset` 按需加载，具体工具下一步才可调用，不产生安装提案或安装记录。每个连接使用独立的无头 Chrome，会话关闭后不保留登录状态；只读子 Agent 的能力目录排除两者。内置能力随产品更新，安装管理清单仍只列用户安装的 Server。
+- `bundled-browsers`：空安装登记的 Bot 默认可见 `mcp:builtin-chrome-devtools` 与 `mcp:builtin-playwright`；通过 `load_toolset` 按需加载，具体工具下一步才可调用，不产生安装提案或安装记录。每个连接使用独立的无头 Chrome，会话关闭后不保留登录状态。内置能力随产品更新，安装管理清单仍只列用户安装的 Server。
 
-- `bundled-officecli`：空安装登记默认可见 `mcp:builtin-officecli`，通过上游 MCP 读取、创建和编辑 DOCX、XLSX、PPTX。服务自己的 `load_skill` 命令提供场景指南，不复制为 konden 的独立文档工具。普通文件与预览图沿用现有交付；只读目录排除该混合读写服务。
+- `bundled-officecli`：空安装登记默认可见 `mcp:builtin-officecli`，通过上游 MCP 读取、创建和编辑 DOCX、XLSX、PPTX。服务自己的 `load_skill` 命令提供场景指南，不复制为 konden 的独立文档工具。普通文件与预览图沿用现有交付。
 
-- `deepseek-web-search`：只需在当前 home 的 `connections.json` 填写 `deepseek.api_key`，只读 `mcp:builtin-deepseek` 自动可用，无安装登记或密钥副本。能力清单列为产品内置，启用状态跟随密钥是否填写，没有独立开关；Bot 按需加载 `web_search`、`web_fetch`，来源与错误如实返回。修改密钥后下一次请求生效，清空后从模型目录移除。搜索优先用户配置的搜索 MCP，其次可用的 DeepSeek；浏览器按需补充动态内容、交互与视觉证据，也能在检索服务不可用时搜索。准备环境不探测外部检索服务。
+- `deepseek-web-search`：在当前 home 的 `connections.json` 填写 `deepseek.api_key`，并从 `模型配置 → 网络搜索` 启用、选择 DeepSeek 后，只读 `mcp:builtin-deepseek` 可用，无安装登记或密钥副本。能力清单列为产品内置，启用状态由搜索配置与密钥共同决定，在能力清单没有独立开关；Bot 按需加载 `web_search`、`web_fetch`，来源与错误如实返回。修改密钥后下一次请求生效，清空后从模型目录移除。搜索优先用户配置的搜索 MCP，其次可用的 DeepSeek；浏览器按需补充动态内容、交互与视觉证据，也能在检索服务不可用时搜索。准备环境不探测外部检索服务。
 
 - `bundled-skills`：空数据根无需安装即可在能力目录发现 `builtin:coding` 与 `builtin:git-collaboration`，正文经 `load_skill` 读取，不注入系统提示，也不作为用户安装记录。工作目录的 `.claude/skills/` 在无 Git、无登记项目的 Bot 中同样可发现为 `project:` Skill。验证时让普通 Bot 按目录自定义 Skill 交付文件，并核对调用与真实文件。
 
@@ -43,7 +43,7 @@
 - **默认浏览器**：按 setup-and-launch 准备环境，在空 home 从页面创建无项目 Bot，让它分别用 Chrome DevTools 与 Playwright 打开本次隔离 Web 的首页、读取标题并截图。
   - (a) 会话初始能力目录含两项内置 Toolset；Journal 留下各自的加载与真实调用结果，用户安装登记仍为空。
   - (b) 页面显示两项调用完成与读取的网页标题，无安装待确认条；截图结果可查看。
-  - (c) 另一个 Bot 同时使用浏览器时不争用配置、不共享登录状态；只读子 Agent 的目录不含这两项能力。
+  - (c) 另一个 Bot 同时使用浏览器时不争用配置、不共享登录状态；父子会话均可按需加载这两项能力。
   - (d) 缺浏览器依赖时加载或调用给出原始连接失败与重新准备产品环境的提示，不建议重新安装一个同名外部 MCP。
 
 - **列出**：
@@ -56,7 +56,7 @@
   - (b) 页面出现真实加载和 OfficeCLI 操作，文件可下载，预览可查看；刷新后成果与调用记录保留。
   - (c) 不要求安装 Microsoft Office，不出现 OfficeCLI 安装提案，不修改用户的其他 Agent 配置；模型先从服务读取用法，预览不代替原文件。
   - (d) 读取不存在的文档返回明确失败，随后可继续读取已有文档；此边界与中文含空格路径、MCP 重连后的读取由 `tests/mcp/test_officecli_process.py` 保护。
-- **DeepSeek 网页检索**：在隔离 home 只填写官方 Key，从 `能力 → MCP` 展开 `查看 DeepSeek Web Search`，核对产品内置、只读与启用状态，页面与 `GET /api/capabilities` 均不含密钥。创建无项目 Bot，发送 `请联网查找 DeepSeek 网页搜索与抓取 API 的官方文档，读取其中一个官方页面的原文，并给出来源链接。`，核对会话中的真实 Search、Fetch 调用与带来源的回答，确认安装登记与 SecretStore 没有新增项；运行时清空再填回密钥，能力清单随之更新，后续请求仍可用。重启隔离 Web 后回答与调用仍可恢复。认证失败、余额不足、限流与抓取失败由接口边界测试保护；本项没有逐一触发真实服务错误。
+- **DeepSeek 网页检索**：在隔离 home 填写官方 Key，并从 `模型配置 → 网络搜索` 启用、选择 DeepSeek 后，从 `能力 → MCP` 展开 `查看 DeepSeek Web Search`，核对产品内置、只读与启用状态，页面与 `GET /api/capabilities` 均不含密钥。创建无项目 Bot，发送 `请联网查找 DeepSeek 网页搜索与抓取 API 的官方文档，读取其中一个官方页面的原文，并给出来源链接。`，核对会话中的真实 Search、Fetch 调用与带来源的回答，确认安装登记与 SecretStore 没有新增项；运行时清空再填回密钥，能力清单随之更新，后续请求仍可用。重启隔离 Web 后回答与调用仍可恢复。认证失败、余额不足、限流与抓取失败由接口边界测试保护；本项没有逐一触发真实服务错误。
 - **检索与浏览器组合**：先发送普通文字查证任务，核对真实搜索、正文与来源；再要求补充原始页面中有助于理解的视觉信息，核对即使检索成功仍能使用浏览器，并把真实图片交付到对话。已有证据足够时要求整理成图示，核对无需再次浏览即可使用已有数据。对照执行过程、`GET /api/sessions/<id>` 与图片附件，文字快照不算实际看图，模型没有查看过的视觉细节不得当作已核实事实。分别记录模型自主选择与用户明确要求的路径，不把单次实测写成必然行为。
 - **安装 Skill（取消后确认）**：准备一个最小 `SKILL.md` 目录，让助手按绝对路径安装 → 待处理条出现 `准备安装 Skill …` 一项 → 点 `取消`。
   - (a) `skills/` 不变。

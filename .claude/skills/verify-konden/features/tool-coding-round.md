@@ -16,7 +16,7 @@
 - `write-tools`：`write_file`（新建/覆盖）、`replace_all`（替换文件中所有精确匹配文本）。
 - `referenced-content`：`read_content` 读取工具结果或历史检索返回的真实 `reference`；可按 `offset`/`limit` 连续读取，或用 `query` 查找字面关键词，按 `next_offset` 续读。来源 `konden/assistant/content.py`。
 - `argument-validation`：任一工具参数不符合 schema（如 `wait_seconds` 超出 0–30）→ `ok:false`、`code:VALIDATION_ERROR`、`hint`「按工具 schema 修正参数后重试。」（`executor.py`）。
-- `background-commands`：`execute_command(wait_seconds=0)` 立即转后台，等待到点未结束同样返回 `COMMAND_BACKGROUND`；完成事实 `background_command_finished` 只接纳一次并唤醒 Agent。`read_command` / `list_commands` / `stop_command` 查看与停止；成功码 `COMMAND_READ`、`COMMANDS_LISTED`、`COMMAND_STOPPED`，未知身份 `COMMAND_NOT_FOUND`。Windows/Linux 顶层会话注册，子 Agent 不提供；macOS 只有等待结束的前台命令。Bot 资料中的 `后台任务` 仅显示运行中的命令与时长，完成、停止或结果未知的记录不展示，计数与可见列表一致；无运行中的任务时显示 `无运行中的后台任务`。窄屏从页头打开资料抽屉查看。`停止命令` 只终止这一条，不停止执行整个 Agent。
+- `background-commands`：`execute_command(wait_seconds=0)` 立即转后台，等待到点未结束同样返回 `COMMAND_BACKGROUND`；完成事实 `background_command_finished` 只接纳一次并唤醒 Agent。`read_command` / `list_commands` / `stop_command` 查看与停止；成功码 `COMMAND_READ`、`COMMANDS_LISTED`、`COMMAND_STOPPED`，未知身份 `COMMAND_NOT_FOUND`。Web 的 Windows/Linux/macOS 父子会话均支持后台命令；执行与授权仍属于对应会话。Bot 资料中的 `后台任务` 仅显示运行中的命令与时长，完成、停止或结果未知的记录不展示，计数与可见列表一致；无运行中的任务时显示 `无运行中的后台任务`。窄屏从页头打开资料抽屉查看。`停止命令` 只终止这一条，不停止执行整个 Agent。
 - `file-side-effect`：改动真实落盘到 Agent 工作树（见 Gotchas），人自己的 `$SCRATCH_WORKSPACE` 不变。
 - `coding-skill`：通用系统提示不含编码与 Git 工作流正文；能力目录提供 `builtin:coding` 与 `builtin:git-collaboration`，模型按任务用 `load_skill` 读取。无 Git 的 Bot 目录也能编码、验证并交付文件；用户指定的 Skill 与流程优先。
 - `project-instructions`：项目与普通目录统一由模型在文件工作前用 `read_file` 读取根目录 `AGENTS.md`，没有时读 `CLAUDE.md`，并按需读取相关目录约定和任务文档。全文不再逐轮注入系统提示；约定更新或上下文缺失时重新读取。判据是在约定中指向独立需求文档与验证命令，模型实际读取并执行，而非只看回复是否带固定词。
@@ -67,14 +67,13 @@ Windows 将第三条命令换成 `Write-Output edited`；不要在 PowerShell �
 
 - 2026-10-25 后台任务位置增量：隔离 Web 与本地固定回复模型驱动真实 `execute_command(wait_seconds=0)`，命令与时长显示在 Bot 资料，切换 Bot 不串页。390px 抽屉点击 `停止命令`，300 秒命令在 93 秒时变为 `stopped`，停止入口消失；未停止另一位 Bot。178 项前端测试及构建通过；未重验真实供应商及其他执行平台。证据 `.tools/bot-details-verification/evidence/`。
 
-- Web 会话即名册里的 Agent，任务根是它自己的 worktree（`$KONDEN_HOME/state/coding_bot/<sha256(workspace_id) 前 20 位>/<sha256(session_id) 前 20 位>/`），不是 `$SCRATCH_WORKSPACE` 本身；判据里的「磁盘文件」读 Agent 工作树。Agent 通过命令主动暂存/提交。落地与同步（`land_branch`、`sync_branch`）见 [land-and-sync.md](./land-and-sync.md)。Step 收口不自动暂存或提交。
+- Web 会话即名册里的 Agent，任务根是它自己的 worktree（`$KONDEN_HOME/state/bots/<sha256(session_id) 前 20 位>/projects/<项目名>/`，以名册 `projects[].directory` 为准），不是 `$SCRATCH_WORKSPACE` 本身；判据里的「磁盘文件」读 Agent 工作树。Agent 通过命令主动暂存/提交。落地与同步（`land_branch`、`sync_branch`）见 [land-and-sync.md](./land-and-sync.md)。Step 收口不自动暂存或提交。
 
 - 非零退出不是工具失败：`ok` 仍为 true，`code` 为 `COMMAND_EXIT_NONZERO`（不是 `COMMAND_COMPLETED`）；模型应读 hint/stderr，不要把非零当作成功。
 - `ok:null` 的结果 `COMMAND_INTERRUPTED` 在时间线是「中断」，不是「失败」；不要按失败判。
 - 所有写入都不可回退；撤销靠 Git。
-- 开关按会话保存，新会话默认开启；授权流程验证须先显式关闭。
+- 开关全局共用，空数据根默认开启，现有与新会话使用同一持久选择；授权流程验证须先显式关闭。
 - 未配置供应商时 `发送` 是禁用的，不要直接 POST 输入。
-- 后台命令工具在 macOS 不注册，前台调用等待到结束。
 - `pytest -m process` 走的是同一批工具但不经 Web，只能记为进程测试。
 - 模型可能拒绝或换工具；通过条件是三个工具名按顺序出现且 `note.txt` 为 `edited`。
 - 约定文件通过普通文件工具读取；不能再用“下一轮系统提示自动包含新内容”作为判据。检查实际读取结果与后续任务行为。
