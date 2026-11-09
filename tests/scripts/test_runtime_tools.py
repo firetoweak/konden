@@ -25,19 +25,45 @@ def archive():
 
 
 @pytest.mark.parametrize("valid", [True, False])
-def test_download_is_verified_before_installation(tmp_path, monkeypatch, valid):
-    data = archive()
+@pytest.mark.parametrize("binary", [False, True])
+def test_download_is_verified_before_installation(tmp_path, monkeypatch, valid, binary):
+    data = b"binary" if binary else archive()
     monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
     record = package(data, None if valid else "0" * 64)
+    if binary:
+        record.update(format="binary", url="https://example.test/tool.exe")
     destination = tools.tool_directory(tmp_path, "tool")
     if valid:
         tools.install_package(tmp_path, "tool", record)
         assert (destination / "tool.exe").read_bytes() == b"binary"
-        assert (destination / "LICENSE").read_bytes() == b"license"
+        if not binary:
+            assert (destination / "LICENSE").read_bytes() == b"license"
     else:
         with pytest.raises(ValueError, match="校验失败"):
             tools.install_package(tmp_path, "tool", record)
         assert not destination.exists()
+
+
+def test_binary_is_product_owned_and_replaced_only_after_verification(tmp_path, monkeypatch):
+    """A system CLI or stale/modified binary must not silently replace the pinned product tool."""
+    data = b"pinned binary"
+    record = {**package(data), "format": "binary", "url": "https://example.test/tool.exe"}
+    monkeypatch.setattr(tools, "packages", lambda root: {"tool": record})
+    monkeypatch.setattr(shutil, "which", lambda name: f"system/{name}")
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
+    tools.prepare(tmp_path)
+    executable = tools.tool_directory(tmp_path, "tool") / "tool.exe"
+    assert executable.read_bytes() == data
+    executable.write_bytes(b"previous version")
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(b"corrupt download"))
+    with pytest.raises(ValueError, match="校验失败"):
+        tools.prepare(tmp_path)
+    assert executable.read_bytes() == b"previous version"
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
+    tools.prepare(tmp_path)
+    assert executable.read_bytes() == data
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: pytest.fail("must reuse verified binary"))
+    tools.prepare(tmp_path)
 
 
 def test_local_tools_are_visible_only_in_the_process_environment(tmp_path, monkeypatch):
@@ -99,16 +125,22 @@ def test_browser_uses_application_install_even_when_system_chrome_exists(tmp_pat
     monkeypatch.setattr(tools, "packages", lambda root: {"chrome": record})
     monkeypatch.setattr(shutil, "which", lambda name: f"system/{name}")
     install = []
-    monkeypatch.setattr(tools, "install_package", lambda root, name, package: install.append(name))
+    browser = tools.tool_directory(tmp_path, "chrome") / record["executable"]
+
+    def install_browser(root, name, package):
+        install.append(name)
+        browser.parent.mkdir(parents=True)
+        browser.touch()
+
+    monkeypatch.setattr(tools, "install_package", install_browser)
     tools.prepare(tmp_path, include_browser=False)
     assert install == []
     tools.prepare(tmp_path)
     assert install == ["chrome"]
-    browser = tools.tool_directory(tmp_path, "chrome") / record["executable"]
-    browser.parent.mkdir(parents=True)
-    browser.touch()
     tools.prepare(tmp_path)
     assert install == ["chrome"]
+    if platform.system() == "Darwin":
+        assert (browser.parent / "chrome").samefile(browser)
 
 
 def test_missing_tools_are_prepared_before_setup_preflight(monkeypatch):

@@ -25,7 +25,7 @@ from konden.mcp.adapter import (
 from konden.mcp.client_manager import McpClientError, McpClientManager, McpToolNotStartedError
 from konden.mcp.registry import McpRegistry
 from konden.mcp.models import McpServerRecord
-from konden.mcp.bundled import BROWSER_SERVER_IDS, SEARCH_SERVER_IDS, BUILTIN_SERVER_IDS, IMAGE_SERVER_ID
+from konden.mcp.bundled import SEARCH_SERVER_IDS, BUILTIN_SERVER_IDS, IMAGE_SERVER_ID
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +76,8 @@ class McpToolsetProvider:
             return "图片生成暂不可用；请报告错误详情，并在模型配置的“图片生成”页检查启用状态、所选模型与 OpenAI 连接。"
         if server_id in SEARCH_SERVER_IDS:
             return "网络搜索暂不可用；请报告错误详情，可按 web-research Skill 使用浏览器。"
-        if server_id in BROWSER_SERVER_IDS:
-            return "内置浏览器连接失败；请报告错误详情。环境未准备好时，请用户在本应用的源码目录重新运行 scripts/setup.ps1（Windows）或 scripts/setup.sh（Linux/macOS）。"
+        if server_id in BUILTIN_SERVER_IDS:
+            return "内置能力连接失败；请报告错误详情。环境未准备好时，请用户在本应用的源码目录重新运行 scripts/setup.ps1（Windows）或 scripts/setup.sh（Linux/macOS）。"
         return "不要原样重试；可 load_management_tools 加载 mcp 后用 test_mcp_server 诊断。"
 
     async def tool_specs(self, toolset_id: str) -> tuple[ToolSpec, ...]:

@@ -8,6 +8,8 @@
 
 - `bundled-browsers`：空安装登记的 Bot 默认可见 `mcp:builtin-chrome-devtools` 与 `mcp:builtin-playwright`；通过 `load_toolset` 按需加载，具体工具下一步才可调用，不产生安装提案或安装记录。每个连接使用独立的无头 Chrome，会话关闭后不保留登录状态；只读子 Agent 的能力目录排除两者。内置能力随产品更新，安装管理清单仍只列用户安装的 Server。
 
+- `bundled-officecli`：空安装登记默认可见 `mcp:builtin-officecli`，通过上游 MCP 读取、创建和编辑 DOCX、XLSX、PPTX。服务自己的 `load_skill` 命令提供场景指南，不复制为 konden 的独立文档工具。普通文件与预览图沿用现有交付；只读目录排除该混合读写服务。
+
 - `deepseek-web-search`：只需在当前 home 的 `connections.json` 填写 `deepseek.api_key`，只读 `mcp:builtin-deepseek` 自动可用，无安装登记或密钥副本。能力清单列为产品内置，启用状态跟随密钥是否填写，没有独立开关；Bot 按需加载 `web_search`、`web_fetch`，来源与错误如实返回。修改密钥后下一次请求生效，清空后从模型目录移除。搜索优先用户配置的搜索 MCP，其次可用的 DeepSeek；浏览器按需补充动态内容、交互与视觉证据，也能在检索服务不可用时搜索。准备环境不探测外部检索服务。
 
 - `bundled-skills`：空数据根无需安装即可在能力目录发现 `builtin:coding` 与 `builtin:git-collaboration`，正文经 `load_skill` 读取，不注入系统提示，也不作为用户安装记录。工作目录的 `.claude/skills/` 在无 Git、无登记项目的 Bot 中同样可发现为 `project:` Skill。验证时让普通 Bot 按目录自定义 Skill 交付文件，并核对调用与真实文件。
@@ -48,6 +50,11 @@
   - (b) 模型调用的是 `list_mcp_servers` / `list_installed_skills` / `list_installed_clis`；终端 `/mcp list` 在空 home 打印 `尚未注册任何 MCP Server。`。
   - (c) 列出不写文件。
   - (d) `/mcp list --foo` → `/mcp list 只接受可选参数 --runtime`。
+- **Office 文档**：准备环境后，从侧栏 `能力 → MCP` 搜索并展开 `查看 OfficeCLI`；创建无项目 Bot，请它生成一份含中文标题、正文和表格的 Word 报告，修改其中一段，检查并交付文档和预览图。
+  - (a) 对照 `GET /api/capabilities`、`GET /api/sessions/<id>` 和 Bot 目录，OfficeCLI 为启用的内置 MCP，实际 DOCX 包含修改后的内容，预览为可解码 PNG；用户安装登记仍为空。
+  - (b) 页面出现真实加载和 OfficeCLI 操作，文件可下载，预览可查看；刷新后成果与调用记录保留。
+  - (c) 不要求安装 Microsoft Office，不出现 OfficeCLI 安装提案，不修改用户的其他 Agent 配置；模型先从服务读取用法，预览不代替原文件。
+  - (d) 读取不存在的文档返回明确失败，随后可继续读取已有文档；此边界与中文含空格路径、MCP 重连后的读取由 `tests/mcp/test_officecli_process.py` 保护。
 - **DeepSeek 网页检索**：在隔离 home 只填写官方 Key，从 `能力 → MCP` 展开 `查看 DeepSeek Web Search`，核对产品内置、只读与启用状态，页面与 `GET /api/capabilities` 均不含密钥。创建无项目 Bot，发送 `请联网查找 DeepSeek 网页搜索与抓取 API 的官方文档，读取其中一个官方页面的原文，并给出来源链接。`，核对会话中的真实 Search、Fetch 调用与带来源的回答，确认安装登记与 SecretStore 没有新增项；运行时清空再填回密钥，能力清单随之更新，后续请求仍可用。重启隔离 Web 后回答与调用仍可恢复。认证失败、余额不足、限流与抓取失败由接口边界测试保护；本项没有逐一触发真实服务错误。
 - **检索与浏览器组合**：先发送普通文字查证任务，核对真实搜索、正文与来源；再要求补充原始页面中有助于理解的视觉信息，核对即使检索成功仍能使用浏览器，并把真实图片交付到对话。已有证据足够时要求整理成图示，核对无需再次浏览即可使用已有数据。对照执行过程、`GET /api/sessions/<id>` 与图片附件，文字快照不算实际看图，模型没有查看过的视觉细节不得当作已核实事实。分别记录模型自主选择与用户明确要求的路径，不把单次实测写成必然行为。
 - **安装 Skill（取消后确认）**：准备一个最小 `SKILL.md` 目录，让助手按绝对路径安装 → 待处理条出现 `准备安装 Skill …` 一项 → 点 `取消`。
@@ -68,6 +75,8 @@
 - **密钥**：安装带密钥的 MCP 后，(c) 回复、journal、`GET /api/sessions/<id>` 里不出现明文密钥（`konden/mcp/secrets.py`）。
 
 ## Gotchas
+
+- 2026-11-09 OfficeCLI 增量：Windows 隔离 Web、真实 DeepSeek、无项目 Bot，默认内置项可发现并按需加载上游 MCP；中文 DOCX 的生成、摘要从 3 项改为 4 项、正文排版微调、PNG 预览和附件交付通过，刷新后仍可查看。最终 DOCX/PNG 下载接口均为 200，且与 Bot 目录原件逐字节一致。证据留在本地 `.tools/officecli-evidence/bundled-officecli/`；浏览器下载完成事件采集超时，未据此确认原生下载完成。未验证 macOS/Linux、与 Word 原生排版的一致性及 XLSX/PPTX 复杂场景。
 
 2026-10-28 CLI Release 修复增量：Windows 隔离数据根，经生产控制提案与执行 handler 实测 ripgrep 15.2.0 下载、CertUtil sha256 校验、体检、删除程序后的同 tag 修复及卸载。真实页面从侧栏打开能力、CLI，展开版本和通过的体检，再刷新确认卸载后 CLI0，与 GET 和磁盘一致。证据留在本地 `.tools/review200/live/evidence/`。Doctor `live_model_ready=false`，未驱动模型对话中的审批按钮；macOS/Linux 未做真实下载，失败保留旧程序与并发同名安装由进程内及独立进程回归保护。
 

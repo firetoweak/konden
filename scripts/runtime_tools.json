@@ -32,6 +32,14 @@
       "bin": "cmd",
       "executable": "git.exe"
     },
+    "officecli": {
+      "version": "1.0.160",
+      "url": "https://github.com/iOfficeAI/OfficeCLI/releases/download/v1.0.160/officecli-win-x64.exe",
+      "sha256": "c590ca9d464f2b03362825b0f2615efcae33ce3fc0edaeeef29f7ddacb4c5424",
+      "format": "binary",
+      "bin": ".",
+      "executable": "officecli.exe"
+    },
     "chrome": {
       "version": "156.0.8078.47",
       "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/win64/chrome-win64.zip",
@@ -65,6 +73,14 @@
       "root": "fd-v10.2.0-x86_64-unknown-linux-gnu",
       "bin": ".",
       "executable": "fd"
+    },
+    "officecli": {
+      "version": "1.0.160",
+      "url": "https://github.com/iOfficeAI/OfficeCLI/releases/download/v1.0.160/officecli-linux-x64",
+      "sha256": "baa084b64ec634bd9d41a0592db3ed85f11658b358bab898679537ea7f3e73a9",
+      "format": "binary",
+      "bin": ".",
+      "executable": "officecli"
     },
     "chrome": {
       "version": "156.0.8078.47",
@@ -100,6 +116,14 @@
       "executable": "fd",
       "sha256": "ae6327ba8c9a487cd63edd8bddd97da0207887a66d61e067dfe80c1430c5ae36"
     },
+    "officecli": {
+      "version": "1.0.160",
+      "url": "https://github.com/iOfficeAI/OfficeCLI/releases/download/v1.0.160/officecli-mac-arm64",
+      "sha256": "fe2b31c6c27534dfbbf155386b6b9105420f9315bbb606335ec61490d171386d",
+      "format": "binary",
+      "bin": ".",
+      "executable": "officecli"
+    },
     "chrome": {
       "version": "156.0.8078.47",
       "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/mac-arm64/chrome-mac-arm64.zip",
@@ -133,6 +157,14 @@
       "bin": ".",
       "executable": "fd",
       "sha256": "991a648a58870230af9547c1ae33e72cb5c5199a622fe5e540e162d6dba82d48"
+    },
+    "officecli": {
+      "version": "1.0.160",
+      "url": "https://github.com/iOfficeAI/OfficeCLI/releases/download/v1.0.160/officecli-mac-x64",
+      "sha256": "55b27f6d422f9e0bcd2aa40abb262606110ff957a4a5253db7a8ba0460cd81c7",
+      "format": "binary",
+      "bin": ".",
+      "executable": "officecli"
     },
     "chrome": {
       "version": "156.0.8078.47",
