@@ -1,4 +1,4 @@
-"""Product web capabilities, independent of user-installed MCP servers."""
+"""Product capabilities, independent of user-installed MCP servers."""
 
 from __future__ import annotations
 
@@ -21,7 +21,8 @@ DEEPSEEK_SERVER_ID = "builtin-deepseek"
 OPENAI_SERVER_ID = "builtin-openai-search"
 SEARCH_SERVER_IDS = frozenset({DEEPSEEK_SERVER_ID, OPENAI_SERVER_ID})
 IMAGE_SERVER_ID = "builtin-image-generation"
-BUILTIN_SERVER_IDS = BROWSER_SERVER_IDS | SEARCH_SERVER_IDS | {IMAGE_SERVER_ID}
+OFFICECLI_SERVER_ID = "builtin-officecli"
+BUILTIN_SERVER_IDS = BROWSER_SERVER_IDS | SEARCH_SERVER_IDS | {IMAGE_SERVER_ID, OFFICECLI_SERVER_ID}
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -73,7 +74,22 @@ def browser_servers(task_root: Path | None = None) -> tuple[McpServerRecord, ...
 
 
 def create_bundled_servers(home: KondenHome, task_root: Path | None = None) -> Callable[[], tuple[McpServerRecord, ...]]:
-    fixed = browser_servers(task_root)
+    office_content = b"".join((ROOT / path).read_bytes() for path in (
+        "konden/mcp/bundled.py", "konden/mcp/officecli.py", "scripts/runtime_tools.json"))
+    office = McpServerRecord(
+        id=OFFICECLI_SERVER_ID,
+        display_name="OfficeCLI",
+        description="Office 文档：读取、创建和编辑 DOCX、XLSX、PPTX，生成预览并检查结果。加载后先运行该服务的 load_skill 命令读取适用指南；不需要安装 Microsoft Office。",
+        transport=TransportKind.STDIO,
+        transport_config=StdioTransportConfig(
+            command=sys.executable,
+            args=(str(ROOT / "konden/mcp/officecli.py"),),
+            cwd=None if task_root is None else str(task_root),
+        ),
+        enabled=True,
+        revision=int.from_bytes(hashlib.sha256(office_content).digest()[:6]) + 1,
+    )
+    fixed = (*browser_servers(task_root), office)
     revision = int.from_bytes(hashlib.sha256((ROOT / "konden/mcp/deepseek_web.py").read_bytes()).digest()[:6]) + 1
     deepseek = McpServerRecord(
         id=DEEPSEEK_SERVER_ID,

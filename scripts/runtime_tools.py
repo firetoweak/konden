@@ -65,6 +65,12 @@ def install_package(root: Path, name: str, package: dict) -> None:
             actual = hashlib.file_digest(stream, "sha256").hexdigest()
         if actual != package["sha256"]:
             raise ValueError(f"{name} 下载校验失败，未安装。请重新运行准备命令。")
+        if package.get("format") == "binary":
+            executable = destination / package["bin"] / package["executable"]
+            executable.parent.mkdir(parents=True, exist_ok=True)
+            archive.chmod(0o755)
+            archive.replace(executable)
+            return
         unpacked = staging / "unpacked"
         unpacked.mkdir()
         if archive.suffix == ".zip" and platform.system() == "Darwin":
@@ -110,8 +116,12 @@ def prepare(root: Path, *, include_browser: bool = True) -> None:
     for name, package in packages(root).items():
         if name == "chrome" and not include_browser:
             continue
-        if name == "chrome":
-            ready = (tool_directory(root, name) / package["bin"] / package["executable"]).is_file()
+        if name == "chrome" or package.get("format") == "binary":
+            executable = tool_directory(root, name) / package["bin"] / package["executable"]
+            ready = executable.is_file()
+            if ready and package.get("format") == "binary":
+                with executable.open("rb") as stream:
+                    ready = hashlib.file_digest(stream, "sha256").hexdigest() == package["sha256"]
         elif name == "node":
             ready = supported_node() and shutil.which("npm.cmd" if os.name == "nt" else "npm")
         else:
@@ -119,6 +129,11 @@ def prepare(root: Path, *, include_browser: bool = True) -> None:
         if not ready:
             install_package(root, name, package)
             activate(root)
+        if name == "chrome" and platform.system() == "Darwin":
+            # OfficeCLI discovers Chrome by command name, not its app-bundle name.
+            alias = tool_directory(root, name) / "chrome"
+            if not alias.exists():
+                alias.symlink_to(Path(package["bin"]) / package["executable"])
     if os.name != "nt" and shutil.which("git") is None:
         if platform.system() == "Darwin":
             raise ValueError("请先安装 Git；使用系统 Git 时，在终端运行 xcode-select --install 并完成安装。")

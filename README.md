@@ -68,6 +68,8 @@ sh scripts/start.sh
 
 Bot 可按需使用随环境安装的 Chrome DevTools MCP、Playwright 和应用专用 Chrome，进行浏览器操作与真实流程验证。搜索优先使用你已启用的搜索 MCP，其次使用已配置密钥的内置 DeepSeek；配置、数据位置与其他入口见[运行指南](docs/运行指南.md)。
 
+内置 OfficeCLI 可直接读取、创建、编辑和预览 Word、Excel、PowerPoint 文件，无需安装 Microsoft Office。让 Bot 生成文档并交付文件即可，工具与使用指南按需加载。
+
 ## Codex 接入（MCP）
 
 1. 打开「设置」→「Codex 接入」，生成 MCP 连接配置，配置到 Codex 中。
