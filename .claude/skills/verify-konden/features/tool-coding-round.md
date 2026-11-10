@@ -2,6 +2,8 @@
 
 在侧栏底部打开全局 `自动放行写文件等工具`，让模型改文件、跑命令，时间线依次出现 `read_file`、`apply_patch`、`execute_command`，任务根真实目录里的文件真的变了。工具来源 `konden/tools/builtin/`（`file_read.py`、`file_write.py`、`file_manage.py`、`command_execution.py`、`background_commands.py`），参数校验与 handler 异常转换在 `konden/tools/executor.py`；路径解析与文本读写在 `konden/filesystem/`。所有文件工具与命令直接作用于任务根，没有回退。
 
+需求依据：[执行环境：文件范围与任务根、命令环境](../../../../docs/架构/能力/执行环境.md)、[工具结果边界](../../../../docs/架构/能力/工具与能力.md#归属与呈现)。真实文件与退出结果是判据；产品环境不覆盖项目工具链，未登记的内部异常原样暴露，通用工具 handler 适用显式登记的边界例外。
+
 ## Sub-features
 
 - `host-directory-access`：Bot 及其子任务默认可以使用当前系统账户可访问的目录。创建页与资料页没有目录权限选择；文件工具可通过绝对路径读写个人目录外的文件，`execute_command.cwd` 和 `delegate.cwd` 也可指定外部目录。同事目录与材料仍按文件工具的只读规则处理，不代表命令进程沙箱。
@@ -36,8 +38,8 @@
 
 ```text
 请只做这三件事，不要委派，不要安装依赖。
-1. 用 read_file 读取 note.txt。
-2. 用 apply_patch 把文件内容改成 edited。
+1. 先从名册确认挂载项目的 directory，用 read_file 读取该目录下的 note.txt。
+2. 用 apply_patch 把同一文件内容改成 edited。
 3. 用 execute_command 执行 printf '%s\n' edited。
 最后回复 CODING_ROUND_DONE。
 ```
@@ -53,7 +55,7 @@ Windows 将第三条命令换成 `Write-Output edited`；不要在 PowerShell �
     Windows 上用 `cmd /c exit 2` 核对原生退出码为 2，再用 `Write-Output ok` 核对成功；`Write-Error "failed"` 可作纯 PowerShell 失败对照。
   - (c) 工作区里除 `note.txt` 外没有新增/修改文件（在 Agent 工作树里对比运行前后的 `git status --porcelain`）；`$SCRATCH_WORKSPACE` 本身不变；`$KONDEN_HOME` 不出现在工作区内。
   - (d) 外部目录：在个人目录之外准备测试目录；让模型通过绝对路径写文件，并以该目录作为命令 `cwd`，两者均应成功。Windows 可用另一磁盘的测试目录验证跨盘。错误路径①：修改同事目录中的哨兵文件 → 文件工具拒绝，原文不变。错误路径②：`apply_patch` 打一个上下文不匹配的补丁 → 工具报错，`note.txt` 不变。错误路径③：让模型 `execute_command` 用 `cwd` 指向不存在的子目录 → `CWD_NOT_FOUND`；`wait_seconds=1` 跑 `sleep 5`（Windows 用 `Start-Sleep -Seconds 5`）→ `COMMAND_BACKGROUND`，进程继续运行，稍后收到完成事实。
-- **错误路径（工具结果，不打崩会话）**：`glob` 的 pattern 为 `""` / `"."` / 仅空白时返回工具结果 `ok:false`、`code:EMPTY_PATTERN`，会话与 Worker 继续存活。参数不合 schema → `VALIDATION_ERROR`。handler 抛出的普通 `Exception`（如未预期 `ValueError`）由 `ToolsExecutor._execute_spec` 转为工具结果 `ok:false`、`code:TOOL_HANDLER_ERROR`（`data.exception_type` 为异常类名），**不**升级为调度器/Worker failure；`asyncio.CancelledError` / `KeyboardInterrupt` / `SystemExit` 等 `BaseException` 仍上抛。
+- **已知错误与未知异常**：`glob` 的 pattern 为 `""` / `"."` / 仅空白时返回工具结果 `ok:false`、`code:EMPTY_PATTERN`，会话与 Worker 继续存活。参数不合 schema → `VALIDATION_ERROR`。通用工具 handler 是显式登记的边界：普通 `Exception` 返回可见的 `ok:false`、`code:TOOL_HANDLER_ERROR`，包含异常类型与原始错误，不伪装为成功、不自动重试；`asyncio.CancelledError` / `KeyboardInterrupt` / `SystemExit` 等 `BaseException` 仍上抛。其他未登记的内部异常与持久化损坏不能借此降级，登记依据见 Gotchas。
 - **搜索/写入**：让模型 `glob` 找 `*.txt`、`grep` 找 `edited`、`write_file` 新建 `new.txt` 写 `hi`、`replace_all` 把 `hi` 换成 `yo`。(a) `new.txt` 为 `yo`。(d) 实例 PATH 里没有 `fd`/`fdfind` 时 `glob` → `GLOB_NOT_FOUND`，记录为环境问题而非功能通过。
 - **结果引用**：某个工具或历史检索实际返回 `data.reference` 后，请模型用 `read_content` 先连续读取，再用 `query` 找一个已知标识。(a) `CONTENT_READ` 的片段与原文一致，续读使用真实 `next_offset`。(b) 时间线出现 `read_content` 调用。(c) 读取不修改源文件。(d) 合法格式但不存在的引用 → `CONTENT_NOT_FOUND`；偏移超出原文 → `OFFSET_OUT_OF_RANGE`。没有取得真实引用时记录未覆盖，不编造成功路径。
 - **命令授权**：在侧栏**全局关闭**自动放行后，在会话里让模型 `execute_command` 跑一个只读命令（如 `git status`）→ (b) 待处理条出现该调用（自动放行开启时所有待授权调用都会被自动批准，看不到这一步）；(a) 批准后才执行。(c) 不存在按命令文本放行的情况。(d) 拒绝后命令不执行，模型收到「用户拒绝」。
@@ -61,13 +63,19 @@ Windows 将第三条命令换成 `Write-Output edited`；不要在 PowerShell �
 - **证据**：三个工具名可见时快照+截图；会话 JSON 与 `note.txt` 副本存到 `$EVIDENCE_DIR/tool-coding-round/`。
 - **关开关的反向路径**：新开会话，先关闭自动放行，发 `请用 apply_patch 把 note.txt 改成 edited，然后停止。`，在待处理条点 `允许 apply_patch`（详见 tool-authorization）；`read_file` 是只读工具，不会进入待处理。
 
+- **命令环境**：项目准备带标识的独立解释器／命令，明确指定后核对实际路径与输出；产品工具路径不覆盖项目环境。两次调用分别核对临时变量不延续，环境初始化失败时不擅自换环境继续。检查退出码及未执行的哨兵文件，不能只用工具“完成”判业务成功。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：真实 read_file、apply_patch、execute_command 与磁盘结果一致；已登记异常边界另以探针核对。命令环境隔离、后台组合与非零退出未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
+
+- 显式例外：根 `AGENTS.md` 允许已登记边界宽泛捕获；`tests/architecture/test_exception_boundaries.py` 的 `BOUNDARIES` 明确登记 `konden/tools/executor.py::_execute_spec`，理由为 handler 异常作为工具错误交给模型。此边界不按一般未知异常传播规则误报；2026-11-10 独立执行探针确认 `ValueError` 返回带原错误的 `TOOL_HANDLER_ERROR`，不是 Web 故障实测。
 
 - 2026-10-26 后台列表筛选增量：Windows 隔离 Web、本地固定回复模型经页面驱动两条真实后台命令；短命令自然完成后 GET 保留 completed，资料列表仅剩仍在运行的长命令。390px 抽屉停止长命令后 GET 为 stopped，列表显示 `无运行中的后台任务`。191 项前端测试与生产构建通过；结果未知记录的过滤由组件回归覆盖。未重验真实供应商及其他执行平台；证据 `.tools/bot-details-verification/evidence/`。
 
 - 2026-10-25 后台任务位置增量：隔离 Web 与本地固定回复模型驱动真实 `execute_command(wait_seconds=0)`，命令与时长显示在 Bot 资料，切换 Bot 不串页。390px 抽屉点击 `停止命令`，300 秒命令在 93 秒时变为 `stopped`，停止入口消失；未停止另一位 Bot。178 项前端测试及构建通过；未重验真实供应商及其他执行平台。证据 `.tools/bot-details-verification/evidence/`。
 
-- Web 会话即名册里的 Agent，任务根是它自己的 worktree（`$KONDEN_HOME/state/bots/<sha256(session_id) 前 20 位>/projects/<项目名>/`，以名册 `projects[].directory` 为准），不是 `$SCRATCH_WORKSPACE` 本身；判据里的「磁盘文件」读 Agent 工作树。Agent 通过命令主动暂存/提交。落地与同步（`land_branch`、`sync_branch`）见 [land-and-sync.md](./land-and-sync.md)。Step 收口不自动暂存或提交。
+- Web 会话即名册里的 Agent，任务根始终是个人目录（`$KONDEN_HOME/state/bots/<sha256(session_id) 前 20 位>/`）；项目 worktree 位于其下的 `projects/<项目名>/`，以名册 `projects[].directory` 为准。上述编码场景里的「磁盘文件」明确读取项目工作树，不把项目挂载当作切换任务根，也不修改人的 `$SCRATCH_WORKSPACE`。Agent 通过命令主动暂存/提交。落地与同步（`land_branch`、`sync_branch`）见 [land-and-sync.md](./land-and-sync.md)。Step 收口不自动暂存或提交。
 
 - 非零退出不是工具失败：`ok` 仍为 true，`code` 为 `COMMAND_EXIT_NONZERO`（不是 `COMMAND_COMPLETED`）；模型应读 hint/stderr，不要把非零当作成功。
 - `ok:null` 的结果 `COMMAND_INTERRUPTED` 在时间线是「中断」，不是「失败」；不要按失败判。

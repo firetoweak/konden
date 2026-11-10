@@ -2,10 +2,12 @@
 
 从源码准备环境、初始化个人目录与模型、日常启动与开发模式启动。来源：`scripts/setup.sh`、`setup.ps1`、`setup.py`、`scripts/runtime_tools.py`、`runtime_tools.json`、`konden/initialize.py`、`scripts/dev.sh`、`dev.ps1`、`scripts/start.sh`、`start.ps1`、`scripts/launch.py`，文档 `docs/运行指南.md`、`docs/开发指南.md`。
 
+需求依据：[运行环境、日常启动与更新](../../../../docs/运行指南.md#运行环境)、[安装与执行内核分开](../../../../docs/架构/总览.md#设计原则)、[内置能力准备](../../../../docs/架构/能力/工具与能力.md#mcp-的加载与恢复)。准备安装依赖，日常启动只复用；不覆盖项目环境或既有配置。
+
 ## Sub-features
 
 - `setup`：`sh scripts/setup.sh`（Windows 为 `scripts/setup.ps1`）先装固定版本 uv、下载 `.python-version` 指定的 Python、建 `konden-env`，再跑 `python -m scripts.setup` 四步：
-  - `[1/4] 准备应用命令行工具`：PATH 上缺失的工具（Node 还要求版本受支持且有 npm）装进 `.tools/runtime/`：Node、rg、fd，Windows 另有 MinGit；OfficeCLI 固定准备在 `.tools/runtime/officecli/`，已有二进制每次按清单核对 SHA-256，不符时重装；Chrome for Testing 固定使用应用专用的 `.tools/runtime/chrome/`，不复用日常浏览器。两者不因系统 PATH 已有同名程序而跳过。Linux 缺 `git` 时经系统包管理器安装；macOS 需提前安装 Git，支持 Apple Silicon 与 Intel，浏览器应用包使用系统 `ditto` 解包。不安装驱动或其他系统组件；版本与下载校验以 `scripts/runtime_tools.json` 为准。
+  - `[1/4] 准备应用命令行工具`：PATH 上缺失的工具（Node 还要求版本受支持且有 npm）装进 `.tools/runtime/`：Node、rg、fd，Windows 另有 MinGit；OfficeCLI 固定准备在 `.tools/runtime/officecli/`，已有二进制每次按清单核对 SHA-256，不符时重装；Chrome for Testing 固定使用应用专用的 `.tools/runtime/chrome/`，不复用日常浏览器。AnyMD 固定准备在 `.tools/runtime/anymd/`，版本与 SHA-256 同样按清单核对；这些内置程序不因系统 PATH 已有同名程序而跳过。Linux 缺 `git` 时经系统包管理器安装；macOS 需提前安装 Git，支持 Apple Silicon 与 Intel，浏览器应用包使用系统 `ditto` 解包。不安装驱动或其他系统组件；版本与下载校验以 `scripts/runtime_tools.json` 为准。
   - `[2/4] 安装 Python 依赖`、`[3/4] 安装浏览器能力与前端依赖并构建网页`（`scripts/browser` 与 `web` 分别 `npm ci`，再 build 网页）、`[4/4] 初始化配置`（`python -m konden.initialize`，带 `--configure` 时进向导）。
   - 成功末行 `运行环境准备完成。使用 scripts/start.ps1 或 scripts/start.sh 启动，在网页侧栏配置模型。`；子命令失败打印 `准备未完成（命令退出码 N）。请处理上方错误后重新执行。`；下载、校验或文件操作错误打印 `准备未完成：<具体原因>` 并退出 1。`setup.sh` 接受 Linux/macOS，其他系统打印 `Use setup.sh on Linux/macOS or setup.ps1 on Windows.` 退出 1。
 - `setup-flags`：`setup.py` 只有 `--configure`（安装后在终端配模型；默认在网页配）与 `--check`。`--check` 先把 `.tools/runtime/` 下已有工具加到本进程 PATH 前面，再查 Git/rg/fd/Node/npm，Node 须 22.x（≥22.13）或 24.x；不通过时打印 `系统依赖未就绪：` 加各项（如 `Node.js 版本不支持；请使用 22.x（至少 22.13）或 24.x，或重新运行准备命令自动安装。`）退出 1，通过时打印 `系统依赖检查通过。`。
@@ -39,7 +41,11 @@
   - (d) 缺 `konden-env`：`start.sh` 打印 `Run sh scripts/setup.sh first to prepare konden.`，`dev.sh`（还检查 `web/node_modules/vite/bin/vite.js`）打印 `Run sh scripts/setup.sh first to prepare the project environment.`，都退出 1。Windows 的 `start.ps1` / `dev.ps1` 抛出 `Run scripts\setup.ps1 first to prepare konden.` / `Run scripts\setup.ps1 first to prepare the project environment.`。
   - (d) 有 venv 但缺 `web/dist/index.html`（`--dev` 时缺 `web/node_modules/vite/bin/vite.js`）→ `scripts/launch.py` 退出并打印 `网页尚未准备好，请先运行 scripts/setup.ps1 或 scripts/setup.sh。`。
 
+- **准备与启动分工**：默认 setup 在空 home 完成四步而不等待模型向导，只有显式配置选项才进入向导；AnyMD 与 Chrome、OfficeCLI 一样按固定版本及校验准备。正式 start 入口复用依赖，不安装、不改系统 PATH、锁文件或既有配置；Doctor 和无模型首页分别留证，已有运行环境检查通过不等于完成全新安装验证。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：新 worktree 默认 setup 四步、构建、--check、Doctor 与无模型首页通过；复用已校验工具缓存。显式模型向导、从零下载所有工具及 Linux/macOS 未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - `setup.ps1` 需 Windows 机器。
 - Linux 自动安装 `git` 会调用 `apt-get`/`dnf`，可能要 sudo 密码；无人值守环境提前装好。

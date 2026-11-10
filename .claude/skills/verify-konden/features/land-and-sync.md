@@ -4,6 +4,8 @@
 
 Bot 的项目工作树位于其个人目录的 `projects/<挂载项目名>`；以名册 `projects[].directory` 或 `link_project` 返回的目录为准。集成工作树仍在 `$KONDEN_HOME/state/coding_bot/<sha256(workspace_id) 的前 20 位>/integration`。提交可以直接在 Agent 工作树里用 Git 准备，再请模型单独调用工具；工具只搬已提交的内容。
 
+需求依据：[Git 历史、落地与同步](../../../../docs/架构/多智能体/项目与工作树.md#git-历史落地与同步)、[未知结果](../../../../docs/架构/运行语义规约.md#四条约束)。真实 Git 拥有成果关系，不自动提交、不压缩历史，不猜测中断操作的结果。
+
 ## Sub-features
 
 - `land`：已提交的工作进入集成分支。能快进则快进，否则产生作者为该 Agent 名字、说明为 `合入 <名字> 的工作` 的合并提交。
@@ -48,7 +50,11 @@ Bot 的项目工作树位于其个人目录的 `projects/<挂载项目名>`；�
   - (c) Agent 工作树里的提交都还在。不要让 Agent 去清理集成工作树。
   - (d) 在 `Lin` 的工作树留一个会被同步覆盖的未提交文件，再 `sync_branch` → `SYNC_BLOCKED`，错误含 `会被同步覆盖，同步没有执行`，`Lin` 的 HEAD 不变，该文件还在。
 
+- **历史与恢复**：准备两次独立提交再落地，核对原提交均为集成 HEAD 的祖先，未被压缩替换；另留未提交草稿，普通回合、压缩与重启均不自动提交，草稿、HEAD 及用户 Git 配置保持。中断或停止后先等待操作收口，再按原操作核对 Git；无法证明结果时保留未知，不自动重跑，复用 [crash-recovery](crash-recovery.md)。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：真实 land_branch 保留两次原始提交，未提交草稿排除，人的 HEAD 和文件不变。同步、冲突、停止与未知合并恢复未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 两个工具都必须单独调用。同一步里还有别的工具时，这一步不会落地或同步，Git 状态保持调用前的样子。
 - 两个工具都要求唯一非空参数 `project`。缺失、空白或带其他参数时得到 `INVALID_ARGUMENT`，提示 `<工具名> 只接受非空的 project。`。

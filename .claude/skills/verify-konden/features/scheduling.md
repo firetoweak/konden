@@ -2,6 +2,8 @@
 
 助手可用 `schedule_once` 安排一次性稍后提醒，用 `cancel_schedule` 取消；等待期间输入框上方显示倒计时一行。来源：`konden/automation/tool.py`（工具参数与结果）、`konden/automation/once.py`（`OneShotSchedules` 存储、`OneShotClock.run` 触发循环、事实 `automation.time_reached`）、`konden/automation/recovery.py`（只补全重启前 UNKNOWN 的 `schedule_once`/`cancel_schedule` 调用）、`konden/assistant/host/supervisor.py`（`_deliver_scheduled`、`schedule_changed`）、`konden/assistant/conversations.py`（`waiting_until`）、`ScheduledWait.tsx`。存储 `$KONDEN_HOME/state/automation.sqlite`。
 
+需求依据：[自动化：一次性唤醒](../../../../docs/架构/运行/自动化.md#一次性唤醒)、[Web：展示状态的来源](../../../../docs/架构/入口/Web.md#展示状态的来源)。定时安排不新建会话，取消与恢复沿原身份，归零和送达不证明工作完成。
+
 ## Sub-features
 
 - `schedule`：`schedule_once`，参数 `delay_seconds`（整数 1..31536000）与 `purpose`（必填非空字符串），只接受这两个参数；成功结果 `code=SCHEDULED`，`data` 含 `schedule_id`、`due_at`、`purpose`。
@@ -24,7 +26,11 @@
 - **取消**：安排后发 `请取消刚才的定时`。(a) `schedule_cancellations` 表出现一行 `code=CANCELLED`；`schedules` 行仍在、`fired_at` 为空；`waiting_until` 变回 null。(b) 工具结果 `code=CANCELLED`、`ok=true`；倒计时消失；SSE `schedule_changed`。(c) 到点后没有新一轮。(d) 对已触发的定时取消 → `ALREADY_FIRED`；对不存在的 id 取消 → `NOT_FOUND`，两者 `ok=false`。
 - **重启后仍触发**：安排 120 秒，30 秒后杀掉服务（命令见 crash-recovery）并用同一 `KONDEN_HOME` 重启。(a) 重启后 `schedules` 行仍在、`delivered_at` 为空，`waiting_until` 不变；到点后写入 `fired_at` 与 `delivered_at`。(b) 页面重新显示倒计时；到点后会话多一轮。(c) 只触发一次。(d) 重启后丢失或触发两次 → 记为问题。
 
+- **取消与跨到期恢复**：安排两项短定时，取消一项，停止 Host 并跨过另一项到期后重启。未取消项按原身份仅补投一次，取消项不恢复；重复取消认回原结果。登记／取消已发生但确认丢失时只认回原操作，不新建安排。分别记录倒计时归零、触发接纳与实际回复，不能相互推断。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：真实安排45秒提醒，无新用户输入即 MAP_WAKE，原会话只触发一次。取消与跨到期停机恢复未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 时间较长，放在一轮验证的最后做。
 - 倒计时文字是英文（`Waiting up to ...`），照原样匹配，不要找中文。

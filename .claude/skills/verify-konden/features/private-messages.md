@@ -2,6 +2,8 @@
 
 Agent 用 `send_message` 按全局名册中同事的名字发私信。参数是 `recipient`、`text`，回复已有交流时加 `reply_to`。发送成功只表示已经进入对方时间线，不等待回复；对方离线时会拉起它的 Worker。人的 `停止` 只打断当前轮；后续私信仍触发处理。来源：`konden/assistant/agent_messages.py`、`konden/assistant/host/agent_messages.py`、`konden/assistant/agents.py`。普通回复展示见 [reply-delivery.md](./reply-delivery.md)。
 
+需求依据：[成员通信：通信边界与恢复](../../../../docs/架构/多智能体/成员通信.md#通信边界与恢复)、[多智能体作用域](../../../../docs/架构/运行语义规约.md#多智能体作用域)。送达与处理、验收分开，来源和投递身份明确，通信不产生人的授权。
+
 ## Sub-features
 
 - `deliver`：送达后对方 journal 有 `bot.private_message`，并因此开始一轮决策。
@@ -38,7 +40,7 @@ Agent 用 `send_message` 按全局名册中同事的名字发私信。参数是 
   - (c) `GET /api/inbox` 出现交流超限提示（`kind: limit`），没有批准按钮；人在发送方会话再发消息后消失，详见 inbox。不能再按「收件箱只有授权和控制提案」判定。
   - (d) 超限的那一次调用之后，对方 journal 的私信条数不增加。
 
-## 外部会话协作（MCP）
+**外部会话协作（MCP）**
 
 当前外部会话的接入、持续收发、Web 导航和撤销验收见 [external-conversations.md](external-conversations.md)。独立验证是普通对话中的任务，由验证 Skill 约定方法、版本与证据，不再使用专门的验证通信入口。
 
@@ -48,7 +50,11 @@ Agent 用 `send_message` 按全局名册中同事的名字发私信。参数是 
 
 2026-10-24 增量通过：Windows、独立 home/端口，页面全局生成配置，无外部名称和固定交接人；同一真实 Codex CLI 会话自动领取身份、交付样例仓库版本，真实 DeepSeek 验证 Bot 通过内置 Playwright 独立发现正常路径自测遗漏的人数上限缺陷（14 例），原编码会话收到 issues_found 后提交修复，关联原请求以新版本复验，21 例后收到 passed。请求版本与实际测试版本一致，截图与矩阵真实落盘。Host 真正重启前后，两轮报告、回复关系及游标完全一致；390×844 全局设置撤销后旧凭据返回 401，1440×900 页面与刷新记录通过。Python 统一入口 856 项通过、3 项因 Windows 符号链接权限跳过；前端 187 项、类型检查与构建通过。证据在本地 `.tools/mcp-verification/evidence/`。业务闭环使用受控本机样例仓库，未据此宣称真实远端 PR、其他原生客户端、Linux、多机连接或空闲客户端自动唤醒已验证。
 
+- **源头、授权与结果未知**：同一源头另起话题、跨群或转私信不重置总量，不同源头分别计数；同事转述不能批准待执行调用，复用 [tool-authorization](tool-authorization.md)。在发送确认丢失处恢复，按原消息身份核对已投递结果，已收信只接纳一次、未投递才补齐；收信不证明对方已处理或任务验收，故障准备复用现有消息进程用例与 [crash-recovery](crash-recovery.md)。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：Ada 向 Lin 显式送达回执，双方历史及来源可见。源头额度、发送确认丢失与授权转述未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 私信只装配给有长期身份的 Agent。普通会话、子 Agent 没有 `send_message`。
 - 上限数字是起步值：回复链 10 跳，同一源头 20 条。

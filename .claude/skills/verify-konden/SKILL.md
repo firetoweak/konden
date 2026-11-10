@@ -9,6 +9,12 @@ Drive the Web app a person actually uses. The page is served by `web_chat.py`. C
 
 UI copy is Chinese. Match the accessible names below exactly. Set the browser viewport to at least 1280×800 before any click; below the `sm` breakpoint the sidebar is collapsed behind `打开 Agent 名册`.
 
+## Acceptance basis
+
+Read `features/README.md` and the feature’s **需求依据** before choosing assertions. Honor project `AGENTS.md`, including explicitly registered exceptions. Product positioning defines the user value; current architecture rules and the runtime semantics define required behavior. Source and tests locate the current entry point and observations. If implementation violates an explicit requirement, keep the requirement and report a product gap; do not rewrite the expected result to match the implementation. Conflicting current documents remain an unresolved basis conflict. History and future directions are not current acceptance requirements.
+
+A path exercised per feature is feature coverage, not proof that every requirement or the external verification feedback loop passed. Record the exact version, requirement/scenario, actual evidence, result and unverified scope.
+
 ## Launch
 
 One verification run owns one data directory, one port, and one process. Do not start it on `~/.konden` or on a port that already answers. Do not pass `--workspace`; the empty-home path is part of the map. Do not pass `--dev` for this port: Vite's proxy is fixed at `127.0.0.1:8765`, so an isolated port must serve the built files in `web/dist`.

@@ -2,14 +2,16 @@
 
 `console_chat.py` 是即开即用的终端单会话，使用自己的数据目录（默认 `~/.konden-tui`，`--home` 指定；不读 `KONDEN_HOME` / `KONDEN_CONFIG`），与 Web 的数据互不相干；同一目录同时只能开一个，会话不跨启动保留。来源：`console_chat.py`、`konden/channels/tui/console.py`、`images.py`。
 
+需求依据：[入口与授权：身份与消息接纳、输出与展示](../../../../docs/架构/入口/入口与授权.md#身份与消息接纳)、[终端数据边界](../../../../docs/运行指南.md#其他入口与数据位置)。普通输入及时接纳且不隐式中断，预览和正式输出不重复，终端不破坏长期 Bot 数据。
+
 ## Sub-features
 
-- `start`：每次启动都新建一个会话并打印：`konden 已启动。model=<模型>`、`工作区：<访问范围>`（完全访问时为 `工作区：整台电脑`，否则 `工作区：工作区 <工作区名>`）、`当前对话：<session_id>`，随后是提示行 `/new 新对话（关闭后不保留会话）`、`/mcp  /skill  管理外部能力`、`直接输入任务。运行中再输入会打断当前任务。`、`Ctrl+C 或 Ctrl+D 退出。`、`Ctrl+V 粘贴图片或文字；终端拦截时用 Alt+V。删除 [Image #n] 可取消附件。`。
+- `start`：每次启动都新建一个会话并打印：`konden 已启动。model=<模型>`、`工作区：<访问范围>`（完全访问时为 `工作区：整台电脑`，否则 `工作区：工作区 <工作区名>`）、`当前对话：<session_id>`，随后是提示行 `/new 新对话（关闭后不保留会话）`、`/mcp  /skill  管理外部能力`、`直接输入任务。运行中再输入会打断当前任务。`（当前提示与接纳需求冲突，不能作为正确预期）、`Ctrl+C 或 Ctrl+D 退出。`、`Ctrl+V 粘贴图片或文字；终端拦截时用 Alt+V。删除 [Image #n] 可取消附件。`。
 - `new`：`/new` 另开新对话；切走后不能切回，没有 `/resume`。
 - `first-run`：数据目录里没有可用默认模型时，启动前先在终端走模型配置向导。
 - `fresh`：启动时丢弃上次运行留下的 `runtime_sessions/` 与 `state/`，保留 `config.json`、`connections.json` 与扩展登记；`--home` 已承载长期 Bot 工作目录或项目工作树时拒绝启动并提示换独立目录，包括未关联项目的 Bot，不清理其文件与会话。
 - `single-instance`：同一数据目录已有入口在运行时，第二个启动报错退出并写明占用者。
-- `interrupt`：运行中再输入会打断当前任务。
+- `send-while-running`：运行中普通输入及时接纳，不隐式打断当前任务；需要停止时使用明确停止操作。
 - `approve`：待授权或待确认时输入 `yes`/`y` 批准、`no`/`n` 拒绝（见 extensions、tool-authorization）。
 - `paste-image`：Ctrl+V（被拦截时 Alt+V）粘贴图片，删掉 `[Image #n]` 取消附件。
 - `ext-commands`：`/mcp`、`/skill`（见 extensions）。
@@ -36,7 +38,11 @@
 - **Bot 数据保护**：只用本轮隔离 Bot 的数据副本，分别覆盖未关联项目与关联项目的情况；用 `--home` 指向副本启动 TUI，应拒绝启动并提示换目录。启动前后核对 Bot 文件及会话哈希不变；不能只测仍被 Web 占用的数据目录。
 - **退出**：Ctrl+D（或 Ctrl+C）退出，打印 `已退出。`。(c) 无残留子进程。
 
+- **运行中输入与授权**：前台长命令运行时编辑并提交新消息；编辑行不被后台输出破坏，新消息及时处理，原命令不中断、不重跑，正式结果与预览不重复。控制确认优先于工具授权；明确 yes／no 处理当时全部待授权调用，其他文本仍为普通消息，不能被当作批准。当前启动提示声称输入会打断，与现行接纳规则及实际 `submit_input(interrupt=false)` 冲突，应记录提示问题。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：独立 ConPTY 启动、/mcp list、/new、真实 TUI_REQUIREMENTS_OK 与 Ctrl+D 退出通过。启动“输入会打断”提示仍与规则冲突；运行中输入追加演练捕获不完整，未计通过，授权组合与粘贴未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 需要真 TTY（prompt_toolkit）；不能用管道喂输入。Linux 用 tmux；Windows 必须在真实控制台（Windows Terminal / ConPTY）里跑。
 - 与 Web 不同，终端缺省会用启动目录登记工作区，且每次启动都是全新会话，没有办法接回旧会话。

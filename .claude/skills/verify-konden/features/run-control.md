@@ -2,6 +2,8 @@
 
 控制正在执行的回合。来源：`Composer.tsx`（运行中 `停止`、`发送`）、`Conversation.tsx`（新消息接 `POST .../inputs`，携带 `interrupt=false`；`停止` 接 `POST .../cancel`；模型失败横幅 `执行已停止` 带 `查看详情`/`再试`；请求失败横幅 `操作失败`）、`ErrorNotice.tsx`、`ExecutionProcess.tsx`（结果不确定的调用显示 `中断`）、`konden/tools/builtin/command_execution.py`（`COMMAND_INTERRUPTED`）、`konden/assistant/host/supervisor.py`（`cancel_turn`/`retry`/`accept_input`）。用户侧没有「停止执行」按钮。
 
+需求依据：[Web：对话与操作](../../../../docs/架构/入口/Web.md#对话与操作)、[平台与回收边界](../../../../docs/架构/能力/执行环境.md#平台与回收边界)、[子协作回收](../../../../docs/架构/运行/SubAgent.md#回收与资源)。输入接纳、当前轮停止、后台命令和子协作各有范围，停止不回退成果。
+
 ## Sub-features
 
 - `stop`：运行中点 `停止`（aria-label `停止`）→ `POST /api/sessions/{id}/cancel`；取消当前轮，仍在前台等待的 `execute_command` 被中断（Linux 杀进程组，Windows 终止 Job）。已转后台的命令继续运行，需要在 Bot 资料的 `后台任务` 中点击该条的 `停止命令`，或用 `stop_command` 单独停止。
@@ -38,14 +40,18 @@
   - (c) 子任务去留由父的工具调用决定；独立 `停止` 仍收回全部未完成子任务。
   - (d) 改为要求父收回指定任务，核对实际 `reclaim` 调用及子会话出现结束事实并保留父给出的原因，普通回复和等待不代表结束；必须确认实际收回。
 
+- **停止范围对照**：父有独立后台命令、子有前后台命令并写出标记时，再让父执行前台长命令。点父 `停止` 应结束父前台并回收子资源，父独立后台继续，已写标记保留；回收失败须暴露。最后单独停止父后台，按精确进程身份核对，不能只看按钮消失；见 [subagents-parallel](subagents-parallel.md)。macOS 只承诺进程组范围，主动脱离的程序不能据此声称已收回。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：父收到子回复仍保留协作，页面停止使两子 closed，文件保留，停止按钮消失。父独立后台与子前后台组合、回收失败未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 2026-10-26 增量：Windows Chrome 1440×900、独立 home/端口、受控本地模型。长命令工具返回前的两次插话均已回复，旧进程继续；释放后真实完成通知与最终报告各一次。结果在插话生成期间到达、连续插话后的结果保护、停止与未知结果恢复由自动化验证。未调用真实供应商模型，未重验窄屏、TUI、macOS/Linux。证据 `.tools/human-input/ui-run/evidence/`。
 
 - 2026-10-22 打断并发送增量：Windows Chrome、隔离 home、真实 DeepSeek，1440×900 点击和 390×844 回车均在前台长命令运行中提交新指令。旧命令留下 `COMMAND_INTERRUPTED`，后续文件未生成；模型直接回复指定标记，`paused=false`，不需要继续。窄屏无页面横向溢出。重投不再次打断及冲突输入由进程测试验证；未验证 Linux、MCP 长调用或独立后台命令停止。完整证据留在本地 `.tools/interrupt-evidence/`。
 - 2026-10-22 子任务保留增量（旧显式报告协议的历史记录，状态字段与报告方式已被自然回复协议替换）：同样使用隔离 Web、Windows Chrome 与真实 DeepSeek，等待子任务时从 `打断并发送` 提交保留要求，父约 1.5 秒后回复 `PARENT_INTERVENED`，同时 `has_active_subagents=true`、`paused=false`，子任务未被收回。另一次在新子任务运行中要求收回，父实际调用 `reclaim`，观察页与 GET 均显示已收回和用户给出的原因，`cancelled=true`。首次收回尝试撞上子自然结束，不计作收回通过。选择性收回一个、另一个正常报告和独立停止全部收回由进程测试验证；本轮未重验代码项目写入、后台命令停止与其他平台。证据留在 `.tools/interrupt-adjust-evidence/`。
 
-- 进程级中断两平台实现不同：Linux 在 `konden/execution/process_posix.py`（`os.killpg(..., SIGKILL)`），Windows Host 命令在 `konden/execution/process_win.py`（`TerminateJobObject`），两边都要单独验。
+- 进程级中断按平台核对：Linux／macOS 在 `konden/execution/process_posix.py`（`os.killpg(..., SIGKILL)`），Windows Host 命令在 `konden/execution/process_win.py`（`TerminateJobObject`），分别实机验；macOS 仅承诺进程组范围。
 - 输入框里的 `重试` 只属于附件上传失败的重试，与回合控制无关。
 - 提示只写 runtime 真知道的：被用户停止、可能已部分执行、续跑前先检查现场。不要求给出退出码、耗时等细节。
 - 中断后计划仍显示 `in_progress` 不算问题（见 work-plan）。

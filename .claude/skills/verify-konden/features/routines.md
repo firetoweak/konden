@@ -2,6 +2,8 @@
 
 长期 Agent 用 `save_routine` / `set_routine_state` / `list_routines` 管理自己的例行任务；人在该 Agent 的 `Agent 资料`（点 `显示 Bot 资料` 打开）的 `例行任务` 页签里查看、暂停、恢复与删除。来源：`konden/automation/routines.py`（`RoutineStore`、`RoutineClock`、状态 `active`/`paused`/`paused_by_user`/`paused_unwatched`/`deleted`、事实 `automation.routine_due`、表 `routine_fires`）、`konden/automation/routine_tool.py`、`konden/assistant/host/supervisor.py`（`list_routines`、`routine_fires`、`set_routine_state_by_user`、`schedule_changed`）、`konden/channels/web/channel.py`、`web/src/features/conversation/RoutineList.tsx`。存储 `$KONDEN_HOME/state/routines.sqlite`。
 
+需求依据：[自动化：例行任务、无人查看时的取舍](../../../../docs/架构/运行/自动化.md#例行任务)、[Web：设置与需要人介入的事项](../../../../docs/架构/入口/Web.md#设置与需要人介入的事项)。未来安排与过去触发分开，人暂停不能被模型恢复，停机不补跑全部欠账。
+
 ## Sub-features
 
 - `list`：`Agent 资料` 侧栏（`aside`，`aria-label="Agent 资料"`）里的 `例行任务` 页签，不折叠。每项是按钮 `查看 <名字>`，显示名字、状态（`运行中` / `Agent 暂停` / `人暂停` / `无人查看已暂停`）、可读时间安排和 `上次 <时间> · 下次 <时间>`。可读安排例如 `@every 10m` → `每 10 分钟`、`0 2 * * *` → `每天 02:00`；译不出的时间表照原样显示。还没有跑过时上次是 `尚未运行`，暂停因而没有下一次时下次是 `未安排`。没有例行任务时这一节显示灰色 `无例行任务`。对话的输入框上方不再显示例行任务。
@@ -30,7 +32,11 @@
 - **窄屏与时间表**：1000×800 和 390×844 打开资料抽屉，核对例行任务入口仍可操作。`*/40 * * * *`、`0 */5 * * *` 跨小时或跨日不等间隔，应保留原文；`*/15 * * * *`、`0 */6 * * *` 才能读为每 15 分钟、每 6 小时。`@every 40m` 仍读为每 40 分钟。抽屉中点执行记录跳转后，抽屉关闭且原回复可见。
 - **无人查看暂停**：复用 inbox 的 absence 场景，满足离开时间、未读回复和例行触发门槛后等待询问及暂停。(a) 接口状态为 `paused_unwatched`、`next_run=null`。(b) 列表显示 `无人查看已暂停`，有 `恢复 <名字>` 和删除入口。(c) Agent 尝试恢复或删除得到 `PAUSED_UNWATCHED`，状态不变；人恢复后重新排下一次。(d) 未满足门槛时不把这一状态记为已验证。
 
+- **改写与停机恢复**：真实触发一次后修改名称与意图，只影响未来安排，旧触发内容冻结。停止 Host 跨过多个周期再恢复，至多补一次，下次安排在未来；沿原触发身份恢复，不新建 Session 或重复接纳。手写触发记录只能证明展示，不能证明实际时钟、恢复或幂等；未等待时钟的部分明确未验证。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：真实 save_routine，页面由人暂停后显示人暂停、下次未安排。改写历史冻结、跨多周期恢复和无人查看未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 最短间隔 5 分钟，等一次真实触发至少要 5 分钟，放在一轮验证的最后做；只验列表、详情与按钮时可以用已写入的触发记录，不必等时钟。
 - 例行任务到点开始的一轮普通回复直接给人看，见 reply-delivery。跳转落在这轮回复上，时间线里没有单独的「例行任务」气泡。
