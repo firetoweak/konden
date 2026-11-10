@@ -17,7 +17,7 @@ def prepare(root: Path) -> None:
         if source.hostname != "github.com":
             continue
         executable = runtime_tools.tool_directory(root, name) / package["bin"] / package["executable"]
-        if executable.is_file() or package.get("format") != "binary" and shutil.which(name):
+        if executable.is_file() or package.get("format") not in {"binary", "binary-archive"} and shutil.which(name):
             continue
         owner, repository, _, _, tag, filename = source.path.strip("/").split("/")
         with tempfile.TemporaryDirectory(prefix=f"konden-ci-{name}-") as temporary:

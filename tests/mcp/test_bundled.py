@@ -8,7 +8,7 @@ from mcp.types import Tool
 
 from konden.llm.config import initial_connections
 from konden.mcp.approval import McpInstallProposalInput
-from konden.mcp.bundled import BROWSER_SERVER_IDS, BUILTIN_SERVER_IDS, OFFICECLI_SERVER_ID
+from konden.mcp.bundled import BROWSER_SERVER_IDS, BUILTIN_SERVER_IDS, DOCUMENT_SERVER_ID, OFFICECLI_SERVER_ID
 from konden.mcp.client_manager import McpClientError
 from konden.mcp.composition import build_mcp
 from konden.mcp.errors import McpConfigurationError
@@ -23,7 +23,7 @@ def test_bundled_catalog_is_available_without_installation_or_connection(tmp_pat
     assembly = build_mcp(home)
     provider = assembly.toolset_provider
     assert {item.id for item in provider.descriptors()} == {
-        "mcp:builtin-chrome-devtools", "mcp:builtin-playwright", "mcp:builtin-officecli",
+        "mcp:builtin-chrome-devtools", "mcp:builtin-playwright", "mcp:builtin-officecli", "mcp:builtin-documents",
     }
     assert provider.descriptors(read_only_only=True) == ()
     assert assembly.service.registry.snapshot() == ()
@@ -81,7 +81,7 @@ class BundledBrowserTest(unittest.IsolatedAsyncioTestCase):
     async def test_bundled_connection_failure_points_to_product_preparation(self):
         assembly = self.assembly
         assembly.client_manager.list_tools = AsyncMock(side_effect=McpClientError("node missing"))
-        for server_id in sorted(BROWSER_SERVER_IDS | {OFFICECLI_SERVER_ID}):
+        for server_id in sorted(BROWSER_SERVER_IDS | {OFFICECLI_SERVER_ID, DOCUMENT_SERVER_ID}):
             with self.subTest(server_id=server_id):
                 with self.assertRaises(ToolsetLoadError) as caught:
                     await assembly.toolset_provider.discover_tools(f"mcp:{server_id}")

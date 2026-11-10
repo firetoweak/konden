@@ -47,6 +47,16 @@
       "root": "chrome-win64",
       "bin": ".",
       "executable": "chrome.exe"
+    },
+    "anymd": {
+      "version": "8.5.11",
+      "url": "https://github.com/SylphxAI/anymd/releases/download/v8.5.11/anymd-win32-x64-msvc.zip",
+      "sha256": "ef8658735afa81b8e28af4b2ab5fcb002ede83f0df10a287775b9ac3ff25fa68",
+      "executable_sha256": "82fb54b3a052b4e624d51fd581dddb316bfcf147e07680db4a405403157e8d1d",
+      "format": "binary-archive",
+      "root": ".",
+      "bin": ".",
+      "executable": "anymd.exe"
     }
   },
   "linux-x86_64": {
@@ -89,6 +99,16 @@
       "root": "chrome-linux64",
       "bin": ".",
       "executable": "chrome"
+    },
+    "anymd": {
+      "version": "8.5.11",
+      "url": "https://github.com/SylphxAI/anymd/releases/download/v8.5.11/anymd-linux-x64-gnu.tar.gz",
+      "sha256": "05b5466899e233ace66961ae39e263b21141b9766caf6a83bd1190dedbbe8b68",
+      "executable_sha256": "699ef67e1730616a4ff06882e78183b870051f7637df64a65a295cd35b3e1c8a",
+      "format": "binary-archive",
+      "root": ".",
+      "bin": ".",
+      "executable": "anymd"
     }
   },
   "darwin-arm64": {
@@ -131,6 +151,16 @@
       "bin": "Google Chrome for Testing.app/Contents/MacOS",
       "executable": "Google Chrome for Testing",
       "sha256": "ad7f2b49a4dc679af286b1b1b386670d93ca7868079f69012d21ba0ac8293df3"
+    },
+    "anymd": {
+      "version": "8.5.11",
+      "url": "https://github.com/SylphxAI/anymd/releases/download/v8.5.11/anymd-darwin-arm64.tar.gz",
+      "sha256": "b032bf8ec3759d795daafa8c86ad38eafb1c14ad79d2abb911212a895ceb71da",
+      "executable_sha256": "729fc040ad6c3700e8ab63191a9d4c330722a008dac97a3cd4d588b339c40cf0",
+      "format": "binary-archive",
+      "root": ".",
+      "bin": ".",
+      "executable": "anymd"
     }
   },
   "darwin-x86_64": {
@@ -173,6 +203,16 @@
       "bin": "Google Chrome for Testing.app/Contents/MacOS",
       "executable": "Google Chrome for Testing",
       "sha256": "5a38b8e3d621514fff0775dcae678a152ce378890188c88eef79fc97aa59fccd"
+    },
+    "anymd": {
+      "version": "8.5.11",
+      "url": "https://github.com/SylphxAI/anymd/releases/download/v8.5.11/anymd-darwin-x64.tar.gz",
+      "sha256": "6cd2f3c8ccbaa2ab69022198b4b8111d7f53b6456fc348b0a86cfee461e9c764",
+      "executable_sha256": "46a852aa8525013104577eb06a885346fd65688c1133a5f0cf7547eae8017385",
+      "format": "binary-archive",
+      "root": ".",
+      "bin": ".",
+      "executable": "anymd"
     }
   }
 }

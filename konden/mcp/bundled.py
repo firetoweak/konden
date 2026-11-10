@@ -22,7 +22,8 @@ OPENAI_SERVER_ID = "builtin-openai-search"
 SEARCH_SERVER_IDS = frozenset({DEEPSEEK_SERVER_ID, OPENAI_SERVER_ID})
 IMAGE_SERVER_ID = "builtin-image-generation"
 OFFICECLI_SERVER_ID = "builtin-officecli"
-BUILTIN_SERVER_IDS = BROWSER_SERVER_IDS | SEARCH_SERVER_IDS | {IMAGE_SERVER_ID, OFFICECLI_SERVER_ID}
+DOCUMENT_SERVER_ID = "builtin-documents"
+BUILTIN_SERVER_IDS = BROWSER_SERVER_IDS | SEARCH_SERVER_IDS | {IMAGE_SERVER_ID, OFFICECLI_SERVER_ID, DOCUMENT_SERVER_ID}
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -89,7 +90,22 @@ def create_bundled_servers(home: KondenHome, task_root: Path | None = None) -> C
         enabled=True,
         revision=int.from_bytes(hashlib.sha256(office_content).digest()[:6]) + 1,
     )
-    fixed = (*browser_servers(task_root), office)
+    document_content = b"".join((ROOT / path).read_bytes() for path in (
+        "konden/mcp/bundled.py", "konden/mcp/documents.py", "scripts/runtime_tools.json"))
+    documents = McpServerRecord(
+        id=DOCUMENT_SERVER_ID,
+        display_name="PDF Reader · AnyMD",
+        description="PDF 阅读：提取文字与目录、按页查看原始画面、按区域放大，图片直接返回模型。双栏、图表和扫描页可结合页图理解，无需配置 OCR。阅读前加载 pdf-reading Skill；也支持其他常用文档格式。",
+        transport=TransportKind.STDIO,
+        transport_config=StdioTransportConfig(
+            command=sys.executable,
+            args=(str(ROOT / "konden/mcp/documents.py"), str(home.root / "cache/anymd")),
+            cwd=None if task_root is None else str(task_root),
+        ),
+        enabled=True,
+        revision=int.from_bytes(hashlib.sha256(document_content).digest()[:6]) + 1,
+    )
+    fixed = (*browser_servers(task_root), office, documents)
     revision = int.from_bytes(hashlib.sha256((ROOT / "konden/mcp/deepseek_web.py").read_bytes()).digest()[:6]) + 1
     deepseek = McpServerRecord(
         id=DEEPSEEK_SERVER_ID,

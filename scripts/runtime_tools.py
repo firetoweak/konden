@@ -90,6 +90,15 @@ def install_package(root: Path, name: str, package: dict) -> None:
         executable = source / package["bin"] / package["executable"]
         if not executable.is_file():
             raise ValueError(f"{name} 运行包缺少程序：{package['executable']}")
+        if package.get("format") == "binary-archive":
+            with executable.open("rb") as stream:
+                if hashlib.file_digest(stream, "sha256").hexdigest() != package["executable_sha256"]:
+                    raise ValueError(f"{name} 程序校验失败，未安装。请重新运行准备命令。")
+            destination = destination / package["bin"] / package["executable"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            executable.chmod(0o755)
+            executable.replace(destination)
+            return
         executable.chmod(0o755)
         # Windows can refuse a directory rename; shutil.move then uses a copy.
         assert source.resolve().is_relative_to(staging.resolve())
@@ -116,12 +125,12 @@ def prepare(root: Path, *, include_browser: bool = True) -> None:
     for name, package in packages(root).items():
         if name == "chrome" and not include_browser:
             continue
-        if name == "chrome" or package.get("format") == "binary":
+        if name == "chrome" or package.get("format") in {"binary", "binary-archive"}:
             executable = tool_directory(root, name) / package["bin"] / package["executable"]
             ready = executable.is_file()
-            if ready and package.get("format") == "binary":
+            if ready and package.get("format") in {"binary", "binary-archive"}:
                 with executable.open("rb") as stream:
-                    ready = hashlib.file_digest(stream, "sha256").hexdigest() == package["sha256"]
+                    ready = hashlib.file_digest(stream, "sha256").hexdigest() == package.get("executable_sha256", package["sha256"])
         elif name == "node":
             ready = supported_node() and shutil.which("npm.cmd" if os.name == "nt" else "npm")
         else:
