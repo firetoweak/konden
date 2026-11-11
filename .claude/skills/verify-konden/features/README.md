@@ -4,7 +4,28 @@
 
 原有条目的历史验证基线与日期保留在各自状态里。2026-10-13 按当前工作区新增会话变更审阅的增量地图，不表示全量重验，也不将源码核对或自动化测试标为真实 UI 通过。
 
-2026-10-22 按 `origin/main@4c000ca` 核对全部 27 个功能文件，使用同一个隔离 Web 实例、真实 DeepSeek 和 Windows Chrome，每个功能至少实跑一条路径；终端另用独立 home 与 ConPTY。下表与条目末尾记录本轮覆盖，不代表所有子功能和错误路径都通过。窄屏内容页隐藏输入框仍是产品缺口，维护未修改产品代码。
+2026-10-22 按 `origin/main@4c000ca` 核对全部 27 个功能文件，使用同一个隔离 Web 实例、真实 DeepSeek 和 Windows Chrome，每个功能至少实跑一条路径；终端另用独立 home 与 ConPTY。该日期保留历史轮次，不代表当前所有子功能和错误路径都通过。该轮记录的窄屏输入缺口属于当时结果；当前状态见下表及 layout-appearance 的增量记录，维护不修改产品代码。
+
+2026-11-10 需求对齐以 `origin/main@bab1ca4b` 为基线：27 个功能逐项关联现行需求并补判据，同一隔离 Windows Web／Chrome、真实 DeepSeek 复核入口，终端另用独立 home 与 ConPTY。下表记录本轮实际范围；新增判据未全部实跑，尤其外部独立验证修复复验闭环、长时间条件与故障交错不能计为通过。
+
+## 需求与验收怎么对齐
+
+每个功能文件开头的**需求依据**链接到应满足的现行规则，`Driving it with ...` 把规则落实为用户操作、可观察结果与不变量。产品目标先看[产品定位](../../../../docs/产品定位.md)，跨层边界先看[运行语义规约](../../../../docs/架构/运行语义规约.md)；项目约束及登记例外对照 [AGENTS.md](../../../../AGENTS.md) 与[异常边界登记](../../../../tests/architecture/test_exception_boundaries.py)；实现入口再用代码和测试核对。历史与后续方向不作为当前验收要求。
+
+发现差异时：遗漏的需求补判据；与明确需求不符的实际行为记**产品缺口**并保留正确预期；现行依据互相冲突时记**依据冲突**，不凭当前实现替需求作决定。每个功能实跑一条只说明功能可达，不等于其全部需求通过。记录须区分需求已映射、实际通过、失败、受阻和未验证，附实际提交号、场景与证据。
+
+首个外部场景的验收见 [external-conversations：独立验证](external-conversations.md#driving-it-with-the-browser)：交付验收要求与版本、独立操作取证、反馈回原聊天并被处理、新版本复验。消息往返、提醒入队、CI 或报告完成均不能替代这个闭环。
+
+### 当前差异的处理
+
+| 类型 | 对照 | 验收处理 |
+|---|---|---|
+| 已登记设计例外 | [通用工具 handler](tool-coding-round.md#gotchas) 在架构测试中明确登记，允许转为可见 `TOOL_HANDLER_ERROR` | 按该显式例外验收，不误报为 Worker 故障；不得扩展到其他内部异常。 |
+| 产品提示冲突 | [终端输入](console-chat.md)：启动提示说会打断，接纳规则和当前实现均不隐式打断 | 按普通输入不打断验收，提示另记问题。 |
+| 产品可访问性缺口 | [侧栏调宽](layout-appearance.md)：当前无键盘焦点／处理 | 保留键盘可达预期，不用“仅指针支持”豁免。 |
+| 依据冲突 | [运行指南](../../../../docs/运行指南.md#运行环境)仍提“只读子 Agent”，[当前 SubAgent](../../../../docs/架构/运行/SubAgent.md#能力与授权)与委派入口没有此模式 | 当前父子按实际可达的读写能力验收；受限目录过滤与不存在的只读子模式分开，不凭此报浏览器回归。 |
+| 依据冲突 | [Web](../../../../docs/架构/入口/Web.md#对话与操作)仍定义回复耗时，地图和界面已只显示提交时间 | 时间来源继续核对；是否恢复耗时未作需求决定。 |
+| 依据冲突 | [模型配置指南](../../../../docs/模型配置.md)称首次准备自动进入终端向导，[运行指南](../../../../docs/运行指南.md#准备选项)规定默认网页、显式选项才进向导 | 分别记录实际默认流程与显式向导范围，不误报默认不进向导为产品失败。 |
 
 ## 基线前置条件
 
@@ -40,7 +61,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 
 ## 判据写法约定
 
-每个功能文件的 `Driving it with ...` 一节里，每个子功能都给出四类可检查判据：
+每个功能文件的 `Driving it with ...` 一节汇总以下四类可检查判据；同一场景可以覆盖多个需求，共享边界优先链接已有场景，不为每条规则复制一套操作：
 
 - **(a) 状态**：磁盘、配置文件、journal 或 `GET` 接口里应看到什么。
 - **(b) 信号**：HTTP 状态码、SSE 事件、日志或界面文字。
@@ -59,39 +80,39 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 
 ## 功能条目约定
 
-每个功能文件：一个 H1、一段开场说明，然后按顺序四个 H2：`Sub-features`、`How to get to it (user POV)`、`Driving it with <harness>`、`Gotchas`。
+每个功能文件：一个 H1、开场说明与需求依据，然后按顺序四个 H2：`Sub-features`、`How to get to it (user POV)`、`Driving it with <harness>`、`Gotchas`。
 
 ## 功能列表（27 个）
 
-| id | 文件 | 一句话 | 最近已记录的 live 覆盖（非全部子功能） |
+| id | 文件 | 一句话 | 本轮 live 范围（2026-11-10，非全部需求） |
 |---|---|---|---|
-| web-session-chat | [web-session-chat.md](./web-session-chat.md) | 空首页 → 新建 Agent → 发消息 | 无项目 Bot 真实发送与回复、刷新历史通过；长历史、引用跳转与异常 API 未重验。 |
-| workspace-management | [workspace-management.md](./workspace-management.md) | 创建 Bot 同页选目录、按目录名展示、复用与后续关联 | 2026-10-23 增量：取消不登记、两位 Bot 复用同目录、后续关联同名仓库、路径区分、错误草稿保留及桌面与窄屏通过；原生目录窗口与解除未重验。 |
-| session-sidebar | [session-sidebar.md](./session-sidebar.md) | 全局 Bot 名册、无项目创建、搜索、Bot/群聊分组与状态圆点 | 2026-10-26 首次引导：无模型时只显示模型配置且不能开始，配置可用后预填名字可改，开始后进入对话并由新 Bot 主动介绍（入口说法与界面一致）；删除唯一 Bot 后引导重新出现。此前无项目 Ada 与有项目 Lin 创建、名册切换和状态对照 GET 通过；分组与搜索未重验。 |
-| colleague-tools | [colleague-tools.md](./colleague-tools.md) | 名册工具与加入事实；共同／个人工作约束的工具读写与页面编辑 | 2026-10-27 观察追加增量：真实页面和模型验证连续轮次、共同／个人更新、Compact 后续接与清空的实际请求前缀；隔离和并发草稿沿用原轮次页面及自动化证据。 |
-| private-messages | [private-messages.md](./private-messages.md) | `send_message` 送达、打断后新私信仍触发处理、已知拒绝与交流上限 | 有项目 Lin 向无项目 Ada 送达 PRIVATE_MAP_OK，双方可见来源与跳转；停止执行接收和交流上限未重验。 |
-| external-conversations | [external-conversations.md](./external-conversations.md) | 原生聊天独立身份、通用双向消息与 Web 对话 | 2026-10-25 Windows、真实 DeepSeek：登记可见、双身份分流、主动后续、重启续读与撤销历史通过；原生客户端界面与 Linux 未测。 |
-| land-and-sync | [land-and-sync.md](./land-and-sync.md) | `land_branch`、`sync_branch`；未提交不带走，冲突与挡住时集成分支或自己的提交保留 | 真实指定 project 落地后同步，包含两个子任务成果，差异清零且人的原始 note.txt 不变；同步他人新增成果、冲突和阻挡未重验。 |
-| composer-attachments | [composer-attachments.md](./composer-attachments.md) | 图片/文件拖入粘贴上传、`Add attachment` 后端本机选择、下载附件 | 有效 64×64 PNG 真实粘贴、发送、刷新预览通过，GET 下载与原件逐字节相同；本机选择、普通文件、跨会话边界未重验。 |
-| tool-authorization | [tool-authorization.md](./tool-authorization.md) | 待处理条、批准/拒绝、默认自动放行与控制确认 | 全局关闭自动放行后 write_file 等待，展开参数并允许后执行一次，待处理消失；拒绝与控制确认未重验。 |
-| inbox | [inbox.md](./inbox.md) | Bot 旁提示 → 对应对话处理授权、控制、交流超限与无人查看询问 | 名册提示与会话待处理参数、批准后清除通过；交流超限、停止执行积压与长时间无人查看未重验。 |
-| group-chat | [group-chat.md](./group-chat.md) | 全局 `新建群聊`、群资料与成员跳转、人发言与 `点名` | 创建两成员群、@all 补全、人发言及两个 Bot 的真实群回复实时显示通过；成员改动与群回复引用跳转未重验。 |
-| tool-coding-round | [tool-coding-round.md](./tool-coding-round.md) | 文件工具、前台/后台命令与非零退出 `COMMAND_EXIT_NONZERO` | 真实 read_file/apply_patch/write_file/execute_command 通过，文件只改在挂载项目内；后台命令与非零退出未重验。 |
-| run-control | [run-control.md](./run-control.md) | 运行中继续发送、停止当前轮或子协作、失败再试；后台命令单独停止 | 子助手已回复但协作未结束时，父空闲显示发送与停止；显式回收后停止消失；认证失败再试通过。 |
-| subagents | [subagents.md](./subagents.md) | `delegate`、`instruct_subagent`、`list_subagents`、`reclaim`、内容页 `子 Agent`、共享文件、命令授权与资源回收 | 2026-10-26 Windows Chrome、受控模型：无项目共享写入、子命令在父处授权、运行中插话与显式回收通过；真实供应商及多子并行未重验。 |
-| work-plan | [work-plan.md](./work-plan.md) | 计划生命周期：创建、状态标记、更新、回收（结束/中断/compact/另一个 Agent/子 Agent）、完成归档 | 真实 update_plan 建两步计划并全部完成，展开归档与 GET 一致；中断、compact 和跨 Agent 回收未重验。 |
-| work-plan-and-usage | [work-plan-and-usage.md](./work-plan-and-usage.md) | 消息时间、`上下文用量`、compact（计划部分指向 work-plan） | 真实回合时间与上下文用量环、200K 阈值和 GET 一致，不再有轮次耗时；compact 未触发。 |
-| model-settings | [model-settings.md](./model-settings.md) | `设置 → 模型配置` 抽屉、`测试`、`保存配置`、会话切换模型 | 2026-11-05 增量：失效模型带历史会话引用仍可删除保存，原历史保留并可选新模型续聊，另一会话不变，重启与窄屏通过；使用受控本地接口，未实调供应商失效密钥。 |
-| scheduling | [scheduling.md](./scheduling.md) | `schedule_once` / `cancel_schedule` 定时唤醒 | 真实 schedule_once 45 秒倒计时可见，无新用户输入即 MAP_WAKE；取消、重启持久化与错参未重验。 |
-| routines | [routines.md](./routines.md) | `Bot 资料` 侧栏／窄屏 `Agent 资料` 抽屉的 `例行任务` 页签：开关 `暂停 <名字>` / `恢复 <名字>`，`删除 <名字>` → `确认删除 <名字>`；`查看 <名字>` 看意图与执行记录 | 真实 save_routine，1100 宽度资料抽屉查看与暂停，状态变为人暂停且下次未安排；删除、失败和无人查看策略未重验。 |
-| reply-delivery | [reply-delivery.md](./reply-delivery.md) | 长期 Agent 的普通结尾直接给人看，实时与历史一致；协作消息仍须显式发送 | 普通回复、私信与定时触发的结果可见，刷新后原文一致；正文右键复制消息的剪贴板为原文。send_file 未重验。 |
-| extensions | [extensions.md](./extensions.md) | 侧栏 `能力` 清单、MCP / Skill / CLI 的安装、启用、测试（对话内与 `/mcp` `/skill`） | 隔离 Web 的能力清单、搜索、展开、启停与读取失败重试通过；真实模型的安装、测试、控制提案和移除未重验。 |
-| realtime-events | [realtime-events.md](./realtime-events.md) | `/api/events` SSE、连接状态、多标签页同步 | Doctor 首事件与双标签实时状态、全局自动授权同步通过；保活时间、断线重连和失效连接未重验。 |
-| layout-appearance | [layout-appearance.md](./layout-appearance.md) | 三栏布局、资料栏、`外观`、侧栏宽度与窄屏名册 | 亮色主题刷新保持、桌面内容页和 1100 资料抽屉通过；390 窄屏内容页仍隐藏输入框，作为产品缺口保留。 |
-| console-chat | [console-chat.md](./console-chat.md) | 终端单会话入口 `console_chat.py`、`/new` | 真实 Windows ConPTY 启动、/mcp list、/new、新会话 TUI_PING_OK 与 Ctrl+D 退出通过；更新终端说明后另建 home 复跑。粘贴、底栏和并发占用未重验。 |
-| subagents-parallel | [subagents-parallel.md](./subagents-parallel.md) | 并行委派、共享文件、选择性回收与父会话控制 | 2026-10-26 按共享工作区更新；多子并行页面未重验，单子执行与回收见 subagents。 |
-| crash-recovery | [crash-recovery.md](./crash-recovery.md) | kill -9 Web/Worker、断网、模型 429/5xx/超时/断流/无效 key 后的恢复与去重 | 隔离配置无效 key 触发认证失败，刷新横幅仍在，恢复配置后再试成功且原输入仅一条；杀进程、断网、429 和未知命令恢复未重验。 |
-| setup-and-launch | [setup-and-launch.md](./setup-and-launch.md) | `setup.sh`/`setup.ps1` 四步准备、模型向导、`start.sh`/`dev.sh` | Windows setup 四步、setup --check、隔离 Web 启动、Doctor 与首页通过；Linux、首次模型向导和开发启动未重验。 |
+| web-session-chat | [web-session-chat.md](./web-session-chat.md) | 空首页 → 新建 Agent → 发消息 | 无项目 Bot 创建、问候、真实发送和回复，刷新保留历史；引用往返、长历史与部署换版未重验。 |
+| workspace-management | [workspace-management.md](./workspace-management.md) | 创建 Bot 同页选目录、按目录名展示、复用与后续关联 | 页面创建 Lin 时关联隔离 Git 项目，个人根与项目分开，人的检出不变；模型关联批准、解除与重挂未重验。 |
+| session-sidebar | [session-sidebar.md](./session-sidebar.md) | 全局 Bot 名册、无项目创建、搜索、Bot/群聊分组与状态圆点 | 无模型不能开始，配置后无项目 Ada 与项目 Lin 创建、名册切换通过；曾用名保留、删除与头像未重验。 |
+| colleague-tools | [colleague-tools.md](./colleague-tools.md) | 名册工具与加入事实；共同／个人工作约束的工具读写与页面编辑 | 真实 list_colleagues 返回同事与目录，未改记忆；临时要求、个人例外与记忆版本语义未重验。 |
+| private-messages | [private-messages.md](./private-messages.md) | `send_message` 送达、打断后新私信仍触发处理、已知拒绝与交流上限 | Ada 向 Lin 显式送达回执，双方历史及来源可见；源头额度、发送确认丢失与授权转述未重验。 |
+| external-conversations | [external-conversations.md](./external-conversations.md) | 原生聊天独立身份、通用双向消息与 Web 对话 | 新建连接先命名，取消后 GET 配置仍空，未生成凭据；原生客户端、双向消息及新增独立验证修复复验闭环未重跑。 |
+| land-and-sync | [land-and-sync.md](./land-and-sync.md) | `land_branch`、`sync_branch`；未提交不带走，冲突与挡住时集成分支或自己的提交保留 | 真实 land_branch 保留两次原始提交，未提交草稿排除，人的 HEAD 和文件不变；同步、冲突、停止与未知合并恢复未重验。 |
+| composer-attachments | [composer-attachments.md](./composer-attachments.md) | 图片/文件拖入粘贴上传、`Add attachment` 后端本机选择、下载附件 | 64×64 PNG 粘贴上传，草稿与发送材料分开，真实回复、下载与原件逐字节一致；同名普通文件、工作副本和压缩后回读未重验。 |
+| tool-authorization | [tool-authorization.md](./tool-authorization.md) | 待处理条、批准/拒绝、默认自动放行与控制确认 | 同事文件写入被范围校验拒绝；自己的文件经待处理批准后才写入，双方文件独立核对；子调用批准与控制恢复组合未重验。 |
+| inbox | [inbox.md](./inbox.md) | Bot 旁提示 → 对应对话处理授权、控制、交流超限与无人查看询问 | 待授权提示与参数可见，查看、刷新不清除，决定后才消失；不同暂停来源的批量恢复与长时间无人查看未重验。 |
+| group-chat | [group-chat.md](./group-chat.md) | 全局 `新建群聊`、群资料与成员跳转、人发言与 `点名` | 项目 Lin 与无项目 Ada 同群，@all 后两位均显式发带引用的群消息；额度、恢复及人插话交错未重验。 |
+| tool-coding-round | [tool-coding-round.md](./tool-coding-round.md) | 文件工具、前台/后台命令与非零退出 `COMMAND_EXIT_NONZERO` | 真实 read_file、apply_patch、execute_command 与磁盘结果一致；已登记异常边界另以探针核对；命令环境隔离、后台组合与非零退出未重验。 |
+| run-control | [run-control.md](./run-control.md) | 运行中继续发送、停止当前轮或子协作、失败再试；后台命令单独停止 | 父收到子回复仍保留协作，页面停止使两子 closed，文件保留，停止按钮消失；父独立后台与子前后台组合、回收失败未重验。 |
+| subagents | [subagents.md](./subagents.md) | `delegate`、`instruct_subagent`、`list_subagents`、`reclaim`、内容页 `子 Agent`、共享文件、命令授权与资源回收 | 真实委派、共享文件写入与父读回；过程观察仍在父会话，子保持等待；父附件引用隔离与子能力负面清单未重验。 |
+| work-plan | [work-plan.md](./work-plan.md) | 计划生命周期：创建、状态标记、更新、回收（结束/中断/compact/另一个 Agent/子 Agent）、完成归档 | 两步计划建立、更新、归档；实际文件读回与工具过程核对；目标变更、清除、压缩和子计划未重验；完成勾选不代替任务验收。 |
+| work-plan-and-usage | [work-plan-and-usage.md](./work-plan-and-usage.md) | 消息时间、`上下文用量`、compact（计划部分指向 work-plan） | 消息时间和本窗口用量环与 GET 对照；真实 compact 及交接期间事实与身份保持未重验；耗时口径冲突单列。 |
+| model-settings | [model-settings.md](./model-settings.md) | `设置 → 模型配置` 抽屉、`测试`、`保存配置`、会话切换模型 | 模型设置抽屉真实测试 DeepSeek 通过（1118 ms）；子模型继承、在途选择与连接热更新组合未重验。 |
+| scheduling | [scheduling.md](./scheduling.md) | `schedule_once` / `cancel_schedule` 定时唤醒 | 真实安排45秒提醒，无新用户输入即 MAP_WAKE，原会话只触发一次；取消与跨到期停机恢复未重验。 |
+| routines | [routines.md](./routines.md) | `Bot 资料` 侧栏／窄屏 `Agent 资料` 抽屉的 `例行任务` 页签：开关 `暂停 <名字>` / `恢复 <名字>`，`删除 <名字>` → `确认删除 <名字>`；`查看 <名字>` 看意图与执行记录 | 真实 save_routine，页面由人暂停后显示人暂停、下次未安排；改写历史冻结、跨多周期恢复和无人查看未重验。 |
+| reply-delivery | [reply-delivery.md](./reply-delivery.md) | 长期 Agent 的普通结尾直接给人看，实时与历史一致；协作消息仍须显式发送 | 普通回复直接可见，私信与定时结果保持来源，刷新历史一致；send_file 副本在源文件修改／删除后的保持未重验。 |
+| extensions | [extensions.md](./extensions.md) | 侧栏 `能力` 清单、MCP / Skill / CLI 的安装、启用、测试（对话内与 `/mcp` `/skill`） | 内置 pdf-reading 可发现，PDF Reader 展开与真实连接检测通过，用户安装登记未增加；PDF 视觉阅读、文字与目录读取、加载版本恢复及安装审批未重验。 |
+| realtime-events | [realtime-events.md](./realtime-events.md) | `/api/events` SSE、连接状态、多标签页同步 | Doctor 首事件 connected，第二标签切换全局自动放行，本页实时同步；Worker 退出预览、旧响应和重连交错未重验。 |
+| layout-appearance | [layout-appearance.md](./layout-appearance.md) | 三栏布局、资料栏、`外观`、侧栏宽度与窄屏名册 | 390px 子过程页保留输入，真实发送并收到 NARROW_INPUT_OK；桌面侧栏分隔条 tabIndex=-1；旧窄屏输入缺口本轮未复现；侧栏键盘调宽仍是产品缺口，减少动态效果与实体触屏未验。 |
+| console-chat | [console-chat.md](./console-chat.md) | 终端单会话入口 `console_chat.py`、`/new` | 独立 ConPTY 启动、/mcp list、/new、真实 TUI_REQUIREMENTS_OK 与 Ctrl+D 退出通过；启动“输入会打断”提示仍与规则冲突；运行中输入追加演练捕获不完整，未计通过，授权组合与粘贴未重验。 |
+| subagents-parallel | [subagents-parallel.md](./subagents-parallel.md) | 并行委派、共享文件、选择性回收与父会话控制 | 两个子实际并行写独立文件并回复，回复后均等待；人停止后均已结束，成果保留；选择性回收、后台结果归属及回收失败未重验。 |
+| crash-recovery | [crash-recovery.md](./crash-recovery.md) | kill -9 Web/Worker、断网、模型 429/5xx/超时/断流/无效 key 后的恢复与去重 | 先加载可用目录，再失效隔离 Key：认证失败刷新保留，恢复后再试成功，原用户输入仅一条；杀进程、429、断流及未知副作用恢复未重验。 |
+| setup-and-launch | [setup-and-launch.md](./setup-and-launch.md) | `setup.sh`/`setup.ps1` 四步准备、模型向导、`start.sh`/`dev.sh` | 新 worktree 默认 setup 四步、构建、--check、Doctor 与无模型首页通过；复用已校验工具缓存；显式模型向导、从零下载所有工具及 Linux/macOS 未重验。 |
 
 ## 入口 → 地图条目 覆盖表
 
@@ -142,7 +163,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | `read_image` | `konden/assistant/attachments.py` | composer-attachments |
 | `update_plan` | `konden/assistant/work_plan.py` | work-plan |
 | `find_history`（`model_usage` 不是工具，是用量元数据键，模型调不到） | `konden/assistant/compact/core.py` | work-plan-and-usage |
-| `read_command` `stop_command` `list_commands`（后台命令，Linux/Windows） | `konden/tools/builtin/background_commands.py` | tool-coding-round |
+| `read_command` `stop_command` `list_commands`（后台命令，Linux/Windows/macOS） | `konden/tools/builtin/background_commands.py` | tool-coding-round |
 | `schedule_once` `cancel_schedule` | `konden/automation/tool.py` | scheduling |
 | `save_routine` `set_routine_state` `list_routines` | `konden/automation/routine_tool.py` | routines |
 | `list_colleagues` | `konden/assistant/agent_messages.py` | colleague-tools |

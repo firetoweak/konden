@@ -2,17 +2,21 @@
 
 助手可按需加载和管理外部能力；安装、更新、删除等都以 `propose_*` 形式请用户确认。终端入口另有 `/mcp`、`/skill` 命令（没有 `/cli` 命令）。来源：`konden/mcp/`（`approval.py`、`console.py`、`application.py`）、`konden/skills/`（`approval.py`、`console.py`）、`konden/cli/`（`approval.py`、`management_tools.py`、`models.py`、`runtime.py`）、`konden/assistant/management.py`、`konden/assistant/toolsets.py`、`konden/assistant/sessions.py`（终端的 yes/no 回答）、`web/src/features/conversation/PendingActions.tsx`（输入框上方待处理条）。
 
+需求依据：[工具与能力：MCP 的加载与恢复、Skill](../../../../docs/架构/能力/工具与能力.md#mcp-的加载与恢复)、[普通文件与工作副本](../../../../docs/架构/上下文/多模态附件.md#普通文件与工作副本)。能力按需加载，旧契约不可静默换新，上传材料不自动解析，读取方法不授予执行许可。
+
 ## Sub-features
 
 - `capability-inventory`：侧栏底部 `能力` 图标直接打开 `/capabilities`，不经过设置。Skill、MCP、CLI 页签展示数量、搜索与可展开的清单；产品内置项与用户安装项一起呈现，停用项仍可查。用户安装的 Skill、MCP 可启停，CLI 没有启停开关。MCP 可逐项 `检测连接`，结果与启用状态分开；CLI 体检、版本均为已有记录。读取清单不连接 MCP、不运行 CLI；主动检测只连接 MCP 并读取工具清单，不执行工具，不展示 MCP 凭据与连接配置。
 
 - `bundled-browsers`：空安装登记的 Bot 默认可见 `mcp:builtin-chrome-devtools` 与 `mcp:builtin-playwright`；通过 `load_toolset` 按需加载，具体工具下一步才可调用，不产生安装提案或安装记录。每个连接使用独立的无头 Chrome，会话关闭后不保留登录状态。内置能力随产品更新，安装管理清单仍只列用户安装的 Server。
 
+- `bundled-pdf`：内置 `mcp:builtin-documents` 提供目录与已有文字、页图和局部裁剪；`builtin:pdf-reading` 按需给出阅读方法，上传原件不自动解析。从能力清单核对该身份。
+
 - `bundled-officecli`：空安装登记默认可见 `mcp:builtin-officecli`，通过上游 MCP 读取、创建和编辑 DOCX、XLSX、PPTX。服务自己的 `load_skill` 命令提供场景指南，不复制为 konden 的独立文档工具。普通文件与预览图沿用现有交付。
 
 - `deepseek-web-search`：在当前 home 的 `connections.json` 填写 `deepseek.api_key`，并从 `模型配置 → 网络搜索` 启用、选择 DeepSeek 后，只读 `mcp:builtin-deepseek` 可用，无安装登记或密钥副本。能力清单列为产品内置，启用状态由搜索配置与密钥共同决定，在能力清单没有独立开关；Bot 按需加载 `web_search`、`web_fetch`，来源与错误如实返回。修改密钥后下一次请求生效，清空后从模型目录移除。搜索优先用户配置的搜索 MCP，其次可用的 DeepSeek；浏览器按需补充动态内容、交互与视觉证据，也能在检索服务不可用时搜索。准备环境不探测外部检索服务。
 
-- `bundled-skills`：空数据根无需安装即可在能力目录发现 `builtin:coding` 与 `builtin:git-collaboration`，正文经 `load_skill` 读取，不注入系统提示，也不作为用户安装记录。工作目录的 `.claude/skills/` 在无 Git、无登记项目的 Bot 中同样可发现为 `project:` Skill。验证时让普通 Bot 按目录自定义 Skill 交付文件，并核对调用与真实文件。
+- `bundled-skills`：空数据根无需安装即可在能力目录发现 `builtin:coding`、`builtin:git-collaboration`、`builtin:independent-verification` 与 `builtin:pdf-reading`，正文经 `load_skill` 读取，不注入系统提示，也不作为用户安装记录。工作目录的 `.claude/skills/` 在无 Git、无登记项目的 Bot 中同样可发现为 `project:` Skill。验证时让普通 Bot 按目录自定义 Skill 交付文件，并核对调用与真实文件。
 
 - `load`：`load_management_tools`、`load_toolset`、`load_skill`、`read_skill_resource`、`load_cli`。
 - `inspect`：`list_mcp_servers`、`test_mcp_server`、`list_installed_skills`、`test_installed_skill`、`list_installed_clis`、`inspect_cli`、`test_cli`。
@@ -80,7 +84,11 @@
 - **未知子命令**：(d) `/skill foo` → `未知 /skill 子命令: foo`；`/skill set_enabled x maybe` → `/skill set_enabled <id> <true|false>`；`/mcp foo` → `未知 /mcp 子命令: foo`。
 - **密钥**：安装带密钥的 MCP 后，(c) 回复、journal、`GET /api/sessions/<id>` 里不出现明文密钥（`konden/mcp/secrets.py`）。
 
+- **加载版本与 PDF 材料**：目录或 Skill 内容更新后，旧判断保持原契约；旧版本不可用应明确失败，不能按旧引用静默加载新版本，历史加载记录不能消失。Skill 中脚本仍走普通命令授权。PDF 上传只生成原文件材料路径，不自动解析；模型按需加载 `pdf-reading`，分别读取目录与已有文字（显式 `ocr:false`）、页图和局部，核对页码、回答、原件哈希及当前数据根内的独立缓存。没有视觉模型时，只能验证文本／连接，不能声称已看图。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：内置 pdf-reading 可发现，PDF Reader 展开与真实连接检测通过，用户安装登记未增加。PDF 视觉阅读、文字与目录读取、加载版本恢复及安装审批未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 2026-11-09 PDF 阅读增量：Windows 隔离 Web、AnyMD 8.5.11、本机路径输入，能力目录与真实连接检测通过。GPT-6.1 Sol（低强度）实际渲染 BERT 双栏论文与纯图片扫描页，正确辨认阅读顺序、图内六位编号、橙色三角形，并用 PDF 点坐标返回完整的 1350×570 局部图；三个原生 MCP 图片块与附件原件逐一核对，未运行 OCR 或下载模型。证据留在本地 `.tools/pdf-evidence/`。GPT-4.1 初轮识图正确，但曾混用像素和 PDF 点，未正确核对裁剪区域；指南已补充单位换算与实际返回图检查，未据此声称所有型号均可稳定看图。隐藏实例的本机文件选择窗口未显示，本轮未计入附件选择/上传通过；未实跑 Linux/macOS GUI、旋转页面及超长文档。
 

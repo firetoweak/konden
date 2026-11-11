@@ -4,6 +4,8 @@
 
 来源：`assistant/subagent/subagent.py`、`host/supervisor.py`、`host/worker.py`、`assembly.py`、`conversations.py`、`SubagentPanel.tsx`、`SubagentList.tsx`、`SubagentCallCard.tsx`、`Conversation.tsx`。
 
+需求依据：[SubAgent](../../../../docs/架构/运行/SubAgent.md)、[附件引用边界](../../../../docs/架构/上下文/多模态附件.md#回读与请求边界)。共享文件、独立上下文；回复不自动结束协作，父核对真实成果并显式回收。
+
 ## Sub-features
 
 - 委派、普通回复与持续追问。
@@ -55,7 +57,11 @@
 
 保存 snapshot.txt / page.png / state.json / child-state.json / note.txt；多轮保留第一批等待与最终结束两个现场，并从 journal 核对普通回复正文、稳定身份、父处理来源与结束先后。完整日志和一次性脚本只放 `.tools/`。
 
+- **上下文与能力边界**：父保留未交代的信息及附件，子只能依据委派内容与共享文件，不能自动读取父聊天或复用父附件引用；补齐必要背景后可向同一子继续交代。子可改文件、运行命令和按需加载能力，但没有团队通信、长期安排、安装管理或再次委派能力。父按实际成果验收，不以子自述完成或普通回复代替回收。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：真实委派、共享文件写入与父读回；过程观察仍在父会话，子保持等待。父附件引用隔离与子能力负面清单未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 旧设计曾通过显式工具链路，但自然追问出现不主动询问，分批正文还出现写出却未送达、空闲被提前结束。旧证据在 `.tools/subagent-natural-evidence/`，不代表当前普通回复契约已验证。
 

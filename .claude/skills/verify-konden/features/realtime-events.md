@@ -2,6 +2,8 @@
 
 页面通过 `GET /api/events`（SSE）接收所有实时更新，`connected` 事件里的 `connection_id` 用于后续写操作。来源：`konden/channels/web/app.py` 的 `stream_events` 与 `SSE_KEEPALIVE_SECONDS`、`konden/channels/web/hub.py`（`subscribe` 快照）、`konden/channels/web/channel.py`（`_require_connection`）、`konden/assistant/host/supervisor.py`（`release`）、`web/src/realtime/eventBridge.ts`、`runtimeSlice.ts`、`textDeltaBuffer.ts`、`AgentSidebar.tsx`、`Composer.tsx`。
 
+需求依据：[Web：展示状态的来源](../../../../docs/架构/入口/Web.md#展示状态的来源)、[输出与展示](../../../../docs/架构/入口/入口与授权.md#输出与展示)。旧响应不覆盖新事实，预览不冒充正式回复，工具活动必须精确关联调用。
+
 ## Sub-features
 
 - `connect`：首个事件 `connected` 带 `connection_id`；紧接着服务端补发一份当前运行态快照（运行中会话的 `session_activity`=`running`、运行中工具的 `tool_progress`=`running`、进行中的 `preview.started`/`preview.delta` 与 `thinking.started`/`thinking.delta`）；空闲时约每 15 秒有 keep-alive 注释，应用输出 `: keep-alive`，框架也可能输出 `: ping`，不把注释当业务事件。
@@ -43,7 +45,11 @@ npm --prefix web test -- --run tests/conversationTiming.test.tsx tests/realtimeR
 
 Windows PowerShell 可使用 `npm.cmd`。这些用例也包含在默认 `npm test` 中；上述定向命令不替代提交前应做的完整检查。测试以实际 API 缓存、事件桥和页面为对象，预期回复及版本来自独立样例；HTTP 与 SSE 可以交错，同一 SSE 连接内仍保持发送顺序。业务契约变化时同步改判据与测试，不为保留旧用例增加兼容路径。
 
+- **预览和精确活动**：正文已流出但未提交时退出对应 Worker，旧预览应中止，失败说明与工具结果分开；重连／刷新只从已提交事实恢复。整个会话活跃不能将其他调用标为运行中；活动来源丢失时回到事实状态，未知不得猜成成功或失败。复用既有重连和投影用例控制时序，实际页面未触发则写明未验证。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：Doctor 首事件 connected，第二标签切换全局自动放行，本页实时同步。Worker 退出预览、旧响应和重连交错未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 代理或浏览器扩展可能缓冲 SSE；用 `curl -N` 做基准。
 - 外部编辑器直接修改文件不会产生这些 SSE 通知；当前 Web 没有文件改动页，用真实目录与 Git 核对文件，不把未监听外部编辑当成事件丢失。

@@ -2,6 +2,8 @@
 
 在输入框添加图片或文件随消息发送。来源：`web/src/features/conversation/Composer.tsx`、`AttachmentTile.tsx`、`FileAttachmentTile.tsx`、`app.py` 的附件接口、`konden/channels/web/channel.py`、`konden/channels/web/directory_picker.py`、`konden/assistant/attachments.py`、`konden/assistant/file_attachments.py`。
 
+需求依据：[多模态附件：普通文件与工作副本、回读与请求边界](../../../../docs/架构/上下文/多模态附件.md#普通文件与工作副本)、[Web：对话与操作](../../../../docs/架构/入口/Web.md#对话与操作)。发送才形成材料，材料原件只读，引用按会话隔离，附件失败不能被悄悄略过。
+
 ## Sub-features
 
 - `upload-image`：拖入/粘贴 PNG、JPEG、WebP、GIF → `POST .../attachments`（multipart，字段 `connection_id`、`file`），201，响应 `kind: "image"`、`name`、`size`、`attachment_id`（`sha256:<64位十六进制>`）、`mime`、`width`、`height`。
@@ -37,7 +39,11 @@
   - (c) 两种情况 journal 都不增加用户消息。
   - (d) 不存在 `附件不存在` 这条提示，不要按它判定。
 
+- **发送边界与工作副本**：挂入两个同名不同内容文件，发送前仍只是草稿；移除其一后发送，模型只能取得已发送材料。失败附件必须重试或移除才能发送。核对两个文件身份独立；直接写材料原件应拒绝，明确复制到个人目录后可编辑副本，原件哈希与下载字节不变。刷新、压缩与恢复保留已发送材料；父附件引用不自动授予子会话，见 [subagents](subagents.md) 与 [work-plan-and-usage](work-plan-and-usage.md)。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：64×64 PNG 粘贴上传，草稿与发送材料分开，真实回复、下载与原件逐字节一致。同名普通文件、工作副本和压缩后回读未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 本机选择与目录选择一样依赖运行后端的电脑有可用桌面；已知不可用返回 503，未知异常仍原样暴露。等待用户选择不设固定超时。
 - 浏览器不再提交任何服务器路径；后端只返回附件引用或取消结果。本机选择挂入的是指针，原文件之后被改动或删除会影响后续读取。

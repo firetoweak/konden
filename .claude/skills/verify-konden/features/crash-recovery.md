@@ -2,7 +2,9 @@
 
 进程被杀、断网、模型 API 出错之后，会话能否正确续上：journal 状态、执行一半的工具、待授权、重连后的界面、再试不重复。
 
-源码事实（判据以此为准，2026-10-18 核对）：
+需求依据：[Runtime：副作用与恢复](../../../../docs/架构/运行/Runtime.md#副作用与恢复)、[会话进程与恢复](../../../../docs/架构/运行/多活跃会话.md)、[运行语义规约](../../../../docs/架构/运行语义规约.md#四条约束)。原操作身份用于核对，未知保持未知，不能因进程死亡猜结果或重跑副作用。
+
+入口与观测说明（2026-10-18 核对；验收预期以需求依据为准）：
 - **进程结构**：Web 进程内的 `HostSupervisor`（`konden/assistant/host/supervisor.py`）为每个会话用 `multiprocessing` spawn 起 Worker 子进程（命令行含 `spawn_main`）；Worker 在父进程退出后自行退出（`worker.py` 的 `parent_process().join()`）。Worker 失败经 `report_worker_failures`（`konden/channels/web/app.py`）发 SSE `session_failed`，文案 `Session 进程失败：...`，同一文案也记为该会话的 `last_error`。
 - **重启恢复**：Web 启动时自动推进仍可运行的顶层会话；顶层即使已静止，仍恢复未结束的子任务、已提交的控制准备和已批准但尚未开始的控制执行。未知命令结果交给模型观察并决定后续动作，无需人工点击继续。子会话由父恢复时带起，未批准的控制操作仍等人，已开始而结果未知的操作不由系统重试。
 - **执行一半的工具**：journal 已记 attempt 但无结果的命令处于 `CommandPhase.UNKNOWN`（`konden/runtime/state.py`）。新 Worker 接管或 Web 启动时，`SqliteJournal.prepare_recovery` 为每个未完成 attempt 追加 `command.attempt.orphaned`（不是 Outcome，状态仍 unknown）；之后新消息不再被它挡住，接管时先找回已完成的真实命令结果；仍无法确认的调用以 `NO_RESULT_YET` 如实进入后续模型判断；重启自动恢复可运行会话，Web 没有会话级 `继续` 按钮。给模型的投影 `NO_RESULT_YET`（`konden/assistant/context/projection.py`）：error「这次调用已经开始但没有结果，原因未知。它可能仍在运行，也可能已部分执行（<name>）。」，hint「你可以不等这个结果就回应用户的新消息。不要重复提交调用，也不要假定它已成功。在基于这项未完成的工作采取行动或重试之前，先检查相关文件、外部状态和正在运行的操作。」。Web 中该调用状态 `unknown`、徽标 `中断`，错误文字 `执行已开始，但未取得最终结果，原因未知，可能已部分执行`（`konden/assistant/conversations.py` 的 `UNKNOWN_TOOL_ERROR`）。**不会自动重试**。子 Agent 同理（`record_interrupted_return`）。
@@ -11,6 +13,7 @@
 - **模型错误**（`thinllm/chat_completions.py`、`konden/assistant/failures.py`）：超时为 `connect=10, read=60, write=30, pool=10` 秒。408/425/429/500/502/503/504 与 `httpx.TransportError`（含 `ReadTimeout`、`ConnectTimeout`、连接被拒）→ `LLMTransientError`，**仅在流尚未开始时**按 0.5/1/2 秒重试 3 次（共 4 次尝试）；收到任何一行后就不再重试。401/403 → `模型认证失败：登录凭据无效，或当前账号无权访问配置的模型……`；`context_length_exceeded` → `模型输入超出上下文限制`；流没有 `[DONE]` → `模型响应不符合约定`；空回复 → `模型这一拍没有给出可用回复或工具调用。下一条消息会从同一触发重试。`。
 - **失败可见与再试**：已识别的模型失败只停该会话，SSE `session_failed` 与 `last_error` 文案均为 `运行失败：<原因>`（`konden/assistant/runner.py`）；界面横幅 `执行已停止。运行失败：…`，按钮 `查看详情`、`再试`。`last_error` 只在 Web 进程内存里，刷新页面仍在，重启 Web 后消失。`再试` 沿用原待处理输入，不新增用户消息、不重复已完成工具。
 - **定时任务**：`konden/automation/recovery.py` 只补全重启前处于 UNKNOWN 的 `schedule_once`/`cancel_schedule` 调用；定时本身的持久与触发见 scheduling。
+
 
 ## Sub-features
 
@@ -61,11 +64,17 @@
 - **重发去重**：保持有效 SSE 连接，把一次 `POST .../inputs` 原样重放（同一 `delivery_id`）。(a) `GET` 中消息只有一条，journal 事件数不变。(b) 重放返回 2xx。(c) 会话不新开回合。(d) 同一 `delivery_id` 但改了 `text` 重放 → 409，`detail` 为「该消息编号已用于不同内容，请重新发送消息。」；事件数不变、无失败横幅，新消息仍能得到回复。失效连接的 409 不算冲突验证通过。
 - **重连界面**：每个故障后刷新页面，(a) 转录、步骤状态、`当前计划`、子 Agent 卡片与 `GET /api/sessions/<id>` 一致。
 
+- **Host 尚在时核对原命令**：命令写 START、等待后写 DONE，仅退出 Worker 而保留 Host；恢复后按原 command_id 取得真实结果，START／DONE 各一次，不重新执行。清除旧预览、不补造工具终态，其他 Bot 不受影响；与 [realtime-events](realtime-events.md) 合并观察。Host 也退出且无可靠结果时仍保持未知，不用这个已知结果场景代替。
+
 ## Gotchas
+
+- 认证失败演练先加载可用模型目录，再临时失效隔离连接并立即发送；若先出现目录认证失败、发送禁用，记录为目录阶段拦截，恢复到已知可用页面后重做，不将它当作“执行失败后再试”通过。
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：先加载可用目录，再失效隔离 Key：认证失败刷新保留，恢复后再试成功，原用户输入仅一条。杀进程、429、断流及未知副作用恢复未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 已修复（2026-10-20 live）：修改消息内容后沿用原 `delivery_id`，修复前复现 500 + Worker 失败，修复后返回输入冲突 409，原事件不变。IPC 只回传指定操作的已知输入/授权错误；未知异常仍作为失败暴露。
 - 疑似问题：流开始判定太早。收到任何一行（包括空行/keep-alive）就置 `stream.started`，之后的 5xx/断流/读超时不再重试；`Retry-After` 头没有被读取。
-- 工具 handler 的普通 `Exception` 不是会话崩溃路径：应表现为工具结果 `TOOL_HANDLER_ERROR`（见 tool-coding-round），不应变成 `session_failed`。
+- **已登记边界与未知异常分开**：通用工具 handler 已在架构测试中登记，普通 `Exception` 返回可见的 `TOOL_HANDLER_ERROR`，不作为 Worker 崩溃路径；具体例外见 [工具编码回合](tool-coding-round.md#gotchas)。其他未登记的内部异常、持久化损坏仍原样暴露，不能据这个例外增加兜底。
 - 已知入口错误已分类：失效连接 409、空消息 422、授权目标不存在 404、重复授权/拒绝 409；内部契约违规与未知异常原样暴露，不做全局兜底。
 - `last_error` 不持久：重启 Web 后失败横幅消失，这是当前实现；"刷新后仍可见"只针对不重启的刷新。
 - 重启后无需点继续。认证错误、模型调用失败等仍如实显示错误及再试入口，不做无限重试。

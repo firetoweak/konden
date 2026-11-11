@@ -2,6 +2,8 @@
 
 待授权调用和控制请求在所属 Bot 头像旁提示，进入它的对话后在待处理条操作（见 [inbox.md](./inbox.md)）；没有独立的待处理汇总页。写文件工具 `write_file`、`apply_patch`、`replace_all`，以及 `execute_command` 每次启动命令都要用户批准（包含立即转后台）；命令不按文本放行，`git status` 这类只读命令也要批准。子 Agent 共享父工作区，可选择已有可访问目录；写文件与命令沿用父的授权选择，待授权调用在父对话处理。没有 `merge_subagent` 或子任务成果合并入口。可全局打开自动放行；模型发起的控制请求另需确认。待授权调用与控制请求都列在输入框上方的待处理条里，没有弹窗。来源：`ExecutionProcess.tsx`、`PendingActions.tsx`、`AutoAuthorize.tsx`、`Conversation.tsx`、`app.py` 的 `/authorize`、`/auto-authorize`、`/control`、`konden/assistant/sessions.py`、`konden/assistant/host/supervisor.py`、`konden/tools/builtin/command_execution.py`。
 
+需求依据：[入口与授权：命令授权、控制提案](../../../../docs/架构/入口/入口与授权.md#命令授权)、[文件范围](../../../../docs/架构/能力/执行环境.md#文件范围与任务根)、[子协作授权](../../../../docs/架构/运行/SubAgent.md#能力与授权)。批准绑定实际调用，不扩大访问范围；同事、子任务与外部请求不能替人批准。
+
 ## Sub-features
 
 - `pending`：需要授权的工具调用在步骤卡片上显示徽标 `待授权`，卡片内有 `允许`/`拒绝`；同时输入框上方出现区域 `待处理`（标题 `待处理 · N 项`），每项为 `<工具名> · <参数摘要>`，按钮 `允许 <工具名>`/`拒绝 <工具名>`（可见文字 `允许`/`拒绝`），点 `查看 <工具名> 的参数` 展开参数 JSON。待处理条只读服务端 `session.pending_authorization_commands`，与步骤卡片同源；SSE 发 `authorization_required`；侧栏该会话活动点为 `等授权`。
@@ -43,7 +45,12 @@
   - (c) `取消` 后被提议的变更不生效；重复提交与已作决定相同的选择返回原结果，不重复执行。
   - (d) 对已拒绝的请求再 `approved: true`、对已批准/已执行的请求再 `approved: false`、或用不存在的 `request_id` → 应是 409 且有 `detail`（当前源码不满足，见 Gotchas）。
 
+- **批准与访问范围**：用文件工具修改同事目录或已发送材料中的哨兵文件，范围校验必须拒绝，批准或自动放行也不能变成可写；原件保持。再写自己的测试文件，应只为实际调用批准并执行一次。此处不使用能访问任意路径的命令代替文件工具范围验证。
+- **委派与控制边界**：父交代任务、同事转述或外部消息均不算人的批准；子实际写入／命令在父对话按调用处理。控制提案准备和确认前配置不变，重启仍保留确定变更对象与待确认状态；已开始而结果未知时不能自动重跑，完成操作不能重复执行，复用 [extensions](extensions.md) 的控制恢复场景。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：同事文件写入被范围校验拒绝；自己的文件经待处理批准后才写入，双方文件独立核对。子调用批准与控制恢复组合未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 所有 `execute_command` 调用都需授权，包括只读命令；自动放行关闭时，验证中要跑的每条命令都会停在 `待授权`。
 - 没有单独的「文件管理」工具；`file_manage.py` 只注册 `write_file`。

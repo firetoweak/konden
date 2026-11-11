@@ -2,6 +2,8 @@
 
 模型用 `update_plan` 维护计划；消息尾部显示时间；输入框显示上下文用量，超过阈值自动 compact。来源：`konden/assistant/work_plan.py`、`WorkPlanPanel.tsx`、`workPlanPlacement.ts`、`messageTime.ts`、`ContextUsage.tsx`（私聊与三方输入区共用用量环）、`Conversation.tsx`（compact 失败提示）、`ModelSettings.tsx`（阈值字段）、`konden/assistant/compact/core.py`（`find_history`、`compact.window_rolled_over`、`latest_input_tokens`；`model_usage` 是写进 journal 的用量元数据键，不是模型工具）。
 
+需求依据：[上下文压缩](../../../../docs/架构/上下文/上下文压缩.md)、[用量与压缩](../../../../docs/架构/上下文/上下文投影.md#用量与压缩)、[Web：展示状态的来源](../../../../docs/架构/入口/Web.md#展示状态的来源)。切窗不丢事实、不重跑副作用，用量缺失保持未知。
+
 ## Sub-features
 
 - `plan-panel`：见 [work-plan.md](./work-plan.md)。
@@ -36,7 +38,11 @@
   - (d) 查询不含样本的时间范围应返回空结果；不带时区或起止颠倒应返回 `INVALID_ARGUMENT`。外置正文仍沿引用读取，不把未命中解释成历史已被删除。
   - (e) 另测自然语言回忆，提问不提供工具名、精确时间或独特标记：如“九月份那个日志传不上去的事”“之前那个发一条却收到两条的事”“上个月聊过哪些问题”。样本应包含不同月份、早期方案和后续修正；先确认当前模型上下文没有答案，再对照实际检索结果与最终答复。构造历史与人工设置摘要的验收，要与真实 compact 验收分别记录；不能把少量样本通过视为数千轮历史的检索效果。
 
+- **切窗期间与恢复**：后台命令、子协作尚在进行时触发 compact，并在交接期间发送新消息；切窗后新事实保留，原命令不重跑，子身份不重建。后台交接只读，失败不能自动重试或发布半成品；已接纳发布中断后接续原发布。用现有 compact／进程用例准备确定时序，实际触发情况与页面观察分别记录，未注入的边界不计通过。
+
 ## Gotchas
+
+- 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：消息时间和本窗口用量环与 GET 对照。真实 compact 及交接期间事实与身份保持未重验；耗时口径冲突单列。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 改 `上下文整理阈值` 会写 `config.json`，验证结束要改回或丢弃临时 home。
 - 阈值字段不接受 0、负数和小数；表单校验见 model-settings。
