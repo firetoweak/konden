@@ -11,7 +11,7 @@ import httpx
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from thinllm import Endpoint
+from thinllm import Endpoint, describe_transport_error
 
 
 class ImageProviderError(Exception):
@@ -56,8 +56,8 @@ async def _request(endpoint: Endpoint, method: str, path: str, *, body=None, tra
             response = await client.request(method, path, json=body)
     except httpx.TransportError as error:
         detail = ("请求中断，无法确认是否已生成图片；请核对用量后再决定是否重新生成。"
-                  if method == "POST" else "图片模型目录连接失败，请重试。")
-        raise ImageProviderError(detail) from error
+                  if method == "POST" else "未取得供应商的完整 HTTP 响应，无法判断密钥是否有效。")
+        raise ImageProviderError(f"OpenAI 图片服务请求失败：{describe_transport_error(error)}\n{detail}") from error
     if response.is_error:
         if response.status_code in (401, 403):
             detail = "认证或访问失败，请检查 OpenAI 连接与图片模型权限。"

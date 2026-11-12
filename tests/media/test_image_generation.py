@@ -1,5 +1,6 @@
 """Protect credential reuse, full-resolution delivery, and paid-request failure semantics."""
 import asyncio
+import errno
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -107,6 +108,20 @@ def test_catalog_uses_actual_account_and_keeps_images_out_of_chat(service):
     assert asyncio.run(service.catalog(transport=httpx.MockTransport(handle))) == [
         {"model":"openai/chatgpt-image-latest","name":"chatgpt-image-latest"},
         {"model":"openai/gpt-image-1.5","name":"gpt-image-1.5"}]
+
+
+def test_image_catalog_exposes_socket_cause_without_credentials(service):
+    def fail(request):
+        raise httpx.ConnectError("existing-private-key", request=request) from ConnectionRefusedError(
+            errno.ECONNREFUSED, "Connection refused")
+
+    with pytest.raises(ImageProviderError) as caught:
+        asyncio.run(service.catalog(transport=httpx.MockTransport(fail)))
+    message = str(caught.value)
+    assert "连接被拒绝" in message and "ConnectionRefusedError" in message
+    assert "https://api.openai.com/v1/models" in message
+    assert "existing-private-key" not in message
+    assert "无法判断密钥是否有效" in message
 
 
 def test_tool_returns_a_relative_path_usable_by_send_file(service, tmp_path):

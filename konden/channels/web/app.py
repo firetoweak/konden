@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -62,6 +63,7 @@ from konden.filesystem.registry import (
 )
 
 SSE_KEEPALIVE_SECONDS = 15
+_LOGGER = logging.getLogger("uvicorn.error")
 
 
 class EventStreamCancellation:
@@ -377,7 +379,9 @@ def create_web_app(
         return JSONResponse(status_code=400, content={"detail": str(error)})
 
     @app.exception_handler(ModelCatalogUnavailable)
-    async def unavailable_model_catalog(_request: Request, error: ModelCatalogUnavailable):
+    @app.exception_handler(ImageProviderError)
+    async def unavailable_model_catalog(request: Request, error: ModelCatalogUnavailable | ImageProviderError):
+        _LOGGER.warning("模型目录读取失败 [%s %s，konden HTTP 502]\n%s", request.method, request.url.path, error)
         return JSONResponse(status_code=502, content={"detail": str(error)})
 
     @app.exception_handler(SessionNotFoundError)
@@ -540,10 +544,7 @@ def create_web_app(
 
     @app.get("/api/model-settings/images/catalog")
     async def image_catalog(request: Request):
-        try:
-            return await ImageGeneration(request.app.state.models.connections_path).catalog()
-        except ImageProviderError as error:
-            return JSONResponse(status_code=502, content={"detail": str(error)})
+        return await ImageGeneration(request.app.state.models.connections_path).catalog()
 
     @app.get("/api/shared-memory")
     async def read_shared_memory(request: Request):

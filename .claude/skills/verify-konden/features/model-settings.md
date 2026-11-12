@@ -34,6 +34,8 @@
 
 ## Gotchas
 
+- 连接错误核对页面和后台 WARNING：两处应包含请求地址与实际异常原因；用关闭的本机代理复现 Windows 连接被拒绝时，不能丢掉 HTTP 库隐藏的 `ConnectionRefusedError`。图片目录同样保留原因；密钥、代理认证与地址查询参数不得回显，不能把本应用的 502 当成供应商 HTTP 状态。
+
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：模型设置抽屉真实测试 DeepSeek 通过（1118 ms）。子模型继承、在途选择与连接热更新组合未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 ### 留证
