@@ -1,4 +1,4 @@
-"""Launch the prepared application; --dev enables source hot reload."""
+"""Launch the prepared application; --dev adds Vite and supported backend reload."""
 from __future__ import annotations
 
 from pathlib import Path

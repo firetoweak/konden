@@ -53,6 +53,9 @@ def main(argv: list[str] | None = None) -> None:
         help="显式登记工作区路径；缺省不从启动目录隐式创建",
     )
     args = parser.parse_args(argv)
+    # Uvicorn's Windows reloader requires SelectorEventLoop, which cannot run
+    # our async CLI calls. Proactor cannot reuse its listener after a reload.
+    reload_backend = args.dev and os.name != "nt"
 
     log_config = deepcopy(uvicorn.config.LOGGING_CONFIG)
     if not args.dev:
@@ -61,6 +64,10 @@ def main(argv: list[str] | None = None) -> None:
 
     frontend = None
     if args.dev:
+        if os.name == "nt":
+            logging.getLogger("uvicorn.error").warning(
+                "Windows 开发模式：前端自动更新；修改 Python 后请重启此命令。"
+            )
         web = Path(__file__).parent / "web"
         frontend = subprocess.Popen(
             ["node", web / "node_modules" / "vite" / "bin" / "vite.js"],
@@ -72,11 +79,11 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         uvicorn.run(
-            "web_chat:app" if args.dev else production_app(args.workspace),
+            "web_chat:app" if reload_backend else production_app(args.workspace),
             host=args.host,
             port=args.port,
-            reload=args.dev,
-            reload_dirs=[str(Path(__file__).parent)] if args.dev else None,
+            reload=reload_backend,
+            reload_dirs=[str(Path(__file__).parent)] if reload_backend else None,
             log_config=log_config,
             timeout_graceful_shutdown=1,
         )

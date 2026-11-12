@@ -13,7 +13,7 @@
 - `setup-flags`：`setup.py` 只有 `--configure`（安装后在终端配模型；默认在网页配）与 `--check`。`--check` 先把 `.tools/runtime/` 下已有工具加到本进程 PATH 前面，再查 Git/rg/fd/Node/npm，Node 须 22.x（≥22.13）或 24.x；不通过时打印 `系统依赖未就绪：` 加各项（如 `Node.js 版本不支持；请使用 22.x（至少 22.13）或 24.x，或重新运行准备命令自动安装。`）退出 1，通过时打印 `系统依赖检查通过。`。
 - `start`：`sh scripts/start.sh` → `scripts.launch` → `web_chat.py`。
 - `initialize`：`python -m konden.initialize --configure`（交互添加/修改默认模型）、`--if-needed`（缺默认模型或连接时进入向导）；两者互斥。
-- `dev`：`sh scripts/dev.sh` → `scripts.launch --dev` → `web_chat.py --dev`。
+- `dev`：`sh scripts/dev.sh` → `scripts.launch --dev` → `web_chat.py --dev`。前端开发页面为 `http://localhost:5173`；Linux/macOS 保留 Python 热重载，Windows 只启用前端热更新，并提示修改 Python 后重启命令，以保留后端的异步子进程能力。
 
 ## How to get to it (user POV)
 
@@ -38,12 +38,15 @@
   - (c) 已配置时 `--if-needed` 不进入向导、文件不变。
   - (d) 非交互终端（stdin/stdout 不是 TTY）跑 `--configure` → argparse 错误 `请在交互终端运行项目 Python -m konden.initialize --configure，或编辑上面的配置文件。` 退出 2；`--if-needed` 未配置但非 TTY 时只打印同一句、退出 0。
 - **start / dev**：
+  - (b) Windows 从 `scripts/dev.ps1` 启动，出现前端自动更新与 Python 修改需重启的提示；已有未手动改名的外部会话能读取标题，`GET /api/external-sessions` 重复请求均返回 200，不抛出 `NotImplementedError`。重启开发命令后仍正常。通过开发启动实际选用的 Uvicorn 配置启动异步子进程，能读取输出并正常退出，回归入口为 `tests/scripts/test_dev_process.py::test_dev_server_event_loop_supports_async_subprocesses`。
   - (d) 缺 `konden-env`：`start.sh` 打印 `Run sh scripts/setup.sh first to prepare konden.`，`dev.sh`（还检查 `web/node_modules/vite/bin/vite.js`）打印 `Run sh scripts/setup.sh first to prepare the project environment.`，都退出 1。Windows 的 `start.ps1` / `dev.ps1` 抛出 `Run scripts\setup.ps1 first to prepare konden.` / `Run scripts\setup.ps1 first to prepare the project environment.`。
   - (d) 有 venv 但缺 `web/dist/index.html`（`--dev` 时缺 `web/node_modules/vite/bin/vite.js`）→ `scripts/launch.py` 退出并打印 `网页尚未准备好，请先运行 scripts/setup.ps1 或 scripts/setup.sh。`。
 
 - **准备与启动分工**：默认 setup 在空 home 完成四步而不等待模型向导，只有显式配置选项才进入向导；AnyMD 与 Chrome、OfficeCLI 一样按固定版本及校验准备。正式 start 入口复用依赖，不安装、不改系统 PATH、锁文件或既有配置；Doctor 和无模型首页分别留证，已有运行环境检查通过不等于完成全新安装验证。
 
 ## Gotchas
+
+- 2026-11-12 Windows 开发启动增量（基线 `codex/chat-seam-scroll@72ffbc4d`）：开发配置的真实异步子进程回归先复现 `NotImplementedError`，修复后通过；Windows 停用后端自动重载并保留 Vite，启动明确提示 Python 修改需重启。隔离 home、合成外部会话与本地 stdio 标题服务，真实 `dev.ps1` 启动后外部会话列表连续 10 次返回 200；重启开发后端后 Windows Chrome 打开及刷新外部会话、标题读取通过。`python scripts/ci.py python smoke` 通过（1054 项 Python 通过、7 项跳过，10 项进程冒烟通过）。未调用真实 Codex CLI、自动接续或模型，未重跑 Linux/macOS 开发模式；证据在任务 worktree 的 `.tools/verification/windows-dev-loop/evidence/`。
 
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：新 worktree 默认 setup 四步、构建、--check、Doctor 与无模型首页通过；复用已校验工具缓存。显式模型向导、从零下载所有工具及 Linux/macOS 未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 

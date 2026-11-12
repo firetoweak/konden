@@ -77,9 +77,12 @@ class WebEntryTests(unittest.TestCase):
                            if web_chat.os.name == "nt" else 0),
         )
         run.assert_called_once()
-        self.assertEqual(run.call_args.args, ("web_chat:app",))
+        if web_chat.os.name != "nt":
+            self.assertEqual(run.call_args.args, ("web_chat:app",))
+        else:
+            self.assertNotIsInstance(run.call_args.args[0], str)
         self.assertEqual(run.call_args.kwargs["host"], "127.0.0.1")
         self.assertEqual(run.call_args.kwargs["port"], 8765)
-        self.assertTrue(run.call_args.kwargs["reload"])
+        self.assertEqual(run.call_args.kwargs["reload"], web_chat.os.name != "nt")
         frontend.terminate.assert_called_once_with()
         frontend.wait.assert_called_once_with()
