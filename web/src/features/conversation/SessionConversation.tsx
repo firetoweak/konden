@@ -102,7 +102,7 @@ export function SessionConversation() {
   return (
     <div className="session-page">
       <div className="session-main">
-      <header className="page-header session-header">
+      <header className="page-header session-header session-header-overlay">
         {fromGroup === undefined ? null : <ActionIcon component={Link} to={`/groups/${encodeURIComponent(fromGroup.id)}`} aria-label={`返回 ${fromGroup.name}`} title={`返回 ${fromGroup.name}`} variant="subtle" color="gray"><IconArrowLeft size={18} /></ActionIcon>}
         <Group gap={10} wrap="nowrap" className="session-header-identity">
           <BotAvatar name={name} sessionId={sessionId} />

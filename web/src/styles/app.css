@@ -122,10 +122,10 @@ body {
 .sidebar-agent-identity { min-width: 0; flex: 1; }
 .sidebar-unread { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 18px; height: 18px; padding-inline: 5px; border-radius: 9px; background: var(--mantine-color-red-8); color: white; font-size: 11px; font-weight: 600; line-height: 1; }
 
-.page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 77px; padding: 0 29px; border-bottom: 1px solid var(--konden-border); }
+.page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 0 20px; }
 .agent-home, .session-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .session-page { flex-direction: row; min-width: 0; }
-.session-main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.session-main { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .agent-details { flex: 0 0 264px; min-width: 0; overflow-y: auto; background: var(--konden-sidebar); border-left: 1px solid var(--konden-border); }
 .agent-details-profile { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 28px 20px 24px; }
 .agent-details-avatar { width: 48px; height: 48px; border-radius: 12px; font-size: 22px; margin-bottom: 6px; }
@@ -153,7 +153,7 @@ body {
 .routine-fire { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding-top: 8px; border-top: 1px solid var(--konden-border); }
 .conversation-turn.is-focused { margin-inline: -8px; padding: 8px; border-radius: 12px; box-shadow: inset 3px 0 0 var(--mantine-color-ember-5); background: color-mix(in srgb, var(--mantine-color-ember-5) 14%, transparent); }
 .session-page:has(.content-page) > .agent-details { display: none; }
-.session-page:has(.content-page) .agent-details-toggle { display: none; }
+.session-page:has(.content-page) .session-header-overlay { display: none; }
 .session-page:has(.agent-details) .composer-workspace { display: none; }
 @media (min-width: 1700px) { .agent-details { flex-basis: 290px; } }
 .bot-details-panel { position: relative; flex-basis: min(var(--bot-details-width), max(220px, calc(100% - 480px))); overflow: visible; }
@@ -171,7 +171,7 @@ body {
 .subagent-summary-task { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .subagent-summary-open { padding-inline: 0; }
 @media (max-width: 73.75em) { .agent-details { display: none; } }
-.details-body { padding: 0; height: calc(100dvh - 77px); overflow: hidden; }
+.details-body { padding: 0; height: calc(100dvh - 56px); overflow: hidden; }
 .details-body > .bot-details-tabs { height: 100%; }
 .home-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 .home-content { width: min(880px, 100%); margin: 0 auto; padding: 48px 32px 32px; }
@@ -190,9 +190,13 @@ body {
 .home-groups { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .home-groups a { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--konden-border); border-radius: 8px; color: inherit; text-decoration: none; font-size: 12px; }
 .home-groups a:hover { background: var(--konden-hover); }
-.session-header { flex-shrink: 0; height: 77px; min-height: 77px; padding: 0 29px; gap: 12px; }
+.session-header { flex-shrink: 0; height: 56px; min-height: 56px; padding: 8px 20px; gap: 12px; }
+.session-header-overlay { position: absolute; inset: 0 0 auto; z-index: 4; pointer-events: none; }
+.session-header-overlay > * { pointer-events: auto; background-color: color-mix(in srgb, var(--konden-canvas) 94%, transparent); backdrop-filter: blur(8px); border-radius: 8px; }
+.session-header-overlay > .session-header-identity { flex: 0 1 auto; margin-right: auto; margin-left: -6px; padding: 4px 6px; }
 .session-header-identity, .session-header-name { min-width: 0; }
 .session-header-identity { flex: 1; }
+.session-header-name { display: flex; align-items: center; gap: 6px; }
 .session-project-link { display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 30%; color: var(--mantine-color-dimmed); text-decoration: none; font-size: 12px; }
 .session-project-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-project-link:hover { color: var(--mantine-color-text); }
@@ -204,7 +208,7 @@ body {
 
 @media (max-width: 48em) {
   .sidebar-toolbar { padding-left: 40px; }
-  .page-header { min-height: 64px; padding: 12px 16px 12px 60px; gap: 8px; }
+  .page-header { min-height: 56px; padding: 8px 14px 8px 60px; gap: 8px; }
   .home-content { padding: 32px 20px 20px; }
   .home-intro { margin-bottom: 28px; }
   .onboarding-panel { padding: 24px; }
@@ -517,7 +521,7 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
   padding-bottom: 26px;
 }
 
-.timeline-start { height: 28px; }
+.timeline-start { height: 72px; }
 .timeline-end { height: calc(var(--composer-height, 0px) + 24px - 16px); }
 
 .tool-card {
@@ -632,6 +636,7 @@ a.private-message-peer:focus-visible { outline: 2px solid var(--konden-composer-
 .assistant-reply, .group-message-bubble { position: relative; flex: 0 1 auto; width: fit-content; max-width: min(calc(100% - 84px), calc(72ch + 32px)); min-width: 0; padding: 12px 16px 15px; border-radius: 10px; background: var(--konden-surface); font-size: 15px; }
 .group-chat-scroll { flex: 1; min-height: 0; }
 .group-transcript { display: flex; flex-direction: column; gap: 26px; width: min(var(--konden-conversation-width), calc(100% - 48px)); margin-inline: auto; padding-block: 28px 20px; }
+.group-chat .group-transcript { padding-top: 72px; }
 .group-message { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 0; font-size: 15px; }
 
 .group-message.is-human .group-message-row { flex-direction: row-reverse; }
@@ -1005,7 +1010,7 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .editable-agent-name > svg { flex-shrink: 0; color: var(--mantine-color-dimmed); }
 .editable-agent-name:hover > svg { color: var(--mantine-color-text); }
 .editable-agent-name:disabled { cursor: default; }
-.session-header-name .editable-agent-name > span { font-size: 18px; font-weight: 650; }
+.session-header-name .editable-agent-name > span { font-size: 14px; font-weight: 650; }
 
 .routine-list-toggle:hover {
   background: var(--konden-hover);
@@ -1068,7 +1073,7 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .is-quote-target .group-message-bubble, .is-quote-target .assistant-reply, .is-quote-target .user-message-row { outline: 2px solid var(--konden-accent-ring); outline-offset: 3px; }
 .conversation-turn.is-focused { box-shadow: none; outline: 1px solid var(--konden-accent-ring); outline-offset: 3px; }
 .conversation-loading { display: flex; align-items: center; justify-content: center; gap: 12px; height: 100%; }
-.details-heading { display: flex; align-items: center; justify-content: space-between; height: 77px; min-height: 77px; padding: 0 20px; border-bottom: 1px solid var(--konden-border); }
+.details-heading { display: flex; align-items: center; justify-content: space-between; height: 56px; min-height: 56px; padding: 0 20px; }
 .sidebar-content { padding: 20px 16px 15px; gap: 20px; }
 .sidebar-toolbar .mantine-ActionIcon-root { border-radius: 6px; }
 .sidebar-create { color: var(--konden-accent-text); }
@@ -1087,11 +1092,11 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .sidebar-agent-avatar > .agent-avatar { width: 32px; height: 32px; }
 .home-agent-identity { flex: 1; min-width: 0; }
 .home-agent-identity p { overflow-wrap: anywhere; }
-.group-chat .session-header-name > p:first-child, .session-header-name > p:first-child { font-size: 18px; font-weight: 650; }
-.session-header-name > p + p { margin-top: 3px; font-size: 12px; }
-.session-header-identity > .agent-avatar { width: 37px; height: 37px; border-radius: 10px; border: 1px solid var(--konden-border); }
-.session-header-identity { gap: 12px; }
-.session-header-subtitle { display: flex; align-items: center; gap: 6px; margin-top: 5px; color: var(--mantine-color-dimmed); font-size: 12px; font-weight: 400; }
+.group-chat .session-header-name > p:first-child, .session-header-name > p:first-child { font-size: 14px; font-weight: 650; }
+.session-header-name > p + p { font-size: 11px; }
+.session-header-identity > .agent-avatar { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--konden-border); }
+.session-header-identity { gap: 8px; }
+.session-header-subtitle { display: flex; align-items: center; gap: 6px; color: var(--mantine-color-dimmed); font-size: 12px; font-weight: 400; }
 .session-header-subtitle .agent-status { font-size: 12px; }
 .group-chat .session-header-identity > .agent-avatar { background: var(--konden-panel); }
 .session-row.is-active .agent-avatar:not([data-identity]) { background: var(--konden-canvas); color: var(--konden-accent-text); }
@@ -1114,10 +1119,8 @@ textarea { caret-color: var(--konden-focus); }
 * { scrollbar-width: thin; scrollbar-color: var(--konden-border-strong) transparent; }
 time { font-variant-numeric: tabular-nums; }
 @media (max-width: 48em) {
-  .session-header { min-height: 69px; padding: 12px 14px 12px 58px; gap: 8px; }
-  .session-header-name > p:first-child { font-size: 16px; }
-  .session-header-name .editable-agent-name > span { font-size: 16px; }
-  .session-header-identity > .agent-avatar { width: 30px; height: 30px; }
+  .session-header { padding: 8px 14px 8px 58px; gap: 8px; }
+  .session-header-name > p + p { display: none; }
   .session-header-identity > .agent-status { display: none; }
   .group-header-members { display: none; }
   .home-content { padding: 28px 20px; }

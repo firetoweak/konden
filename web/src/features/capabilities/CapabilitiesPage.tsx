@@ -79,13 +79,13 @@ export function CapabilitiesPage() {
   const matches = (item: { name: string; description: string }) => `${item.name}\n${item.description}`.toLocaleLowerCase().includes(query);
   const count = data?.[category].filter(matches).length ?? 0;
   return <section className="capabilities-page">
-    <header className="page-header"><Text fw={600} size="md">能力</Text>
-      <Tooltip label="刷新能力清单"><ActionIcon variant="subtle" color="gray" aria-label="刷新能力清单"
-        loading={isFetching} onClick={() => void refetch()}><IconRefresh size={18} /></ActionIcon></Tooltip>
-    </header>
     <div className="capabilities-scroll"><div className="capabilities-content">
-      <div className="capabilities-heading"><Title order={1}>能力</Title>
-        <Text c="dimmed" size="sm">查看系统提供的 Skill、MCP 和已登记 CLI。</Text></div>
+      <header className="capabilities-heading">
+        <div><Title order={1}>能力</Title>
+          <Text c="dimmed" size="sm">查看系统提供的 Skill、MCP 和已登记 CLI。</Text></div>
+        <Tooltip label="刷新能力清单"><ActionIcon variant="subtle" color="gray" aria-label="刷新能力清单"
+          loading={isFetching} onClick={() => void refetch()}><IconRefresh size={18} /></ActionIcon></Tooltip>
+      </header>
       <Tabs value={category} variant="pills" onChange={(value) => { setCategory(value as Category); setSearch(""); }}>
       <div className="capabilities-toolbar">
           <Tabs.List aria-label="能力分类">{(Object.keys(labels) as Category[]).map((key) =>

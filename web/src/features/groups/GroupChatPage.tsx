@@ -138,7 +138,7 @@ function GroupConversation({ groupId }: { groupId: string; }) {
     <ChatPresentation value={{ names: group.members, quote, onQuote: setQuote, onJump: reading.jump }}>
     <div className="session-page group-chat">
       <div className="session-main">
-        <header className="page-header session-header">
+        <header className="page-header session-header session-header-overlay">
           <Group gap={10} wrap="nowrap" className="session-header-identity">
             <span className="agent-avatar agent-avatar-small"><IconUsersGroup size={18} /></span>
             <div className="session-header-name">

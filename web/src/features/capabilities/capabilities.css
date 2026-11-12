@@ -1,6 +1,7 @@
 .capabilities-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .capabilities-scroll { flex: 1; min-height: 0; overflow: auto; }
 .capabilities-content { width: min(100%, 1040px); margin: 0 auto; padding: 44px 40px 48px; }
+.capabilities-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .capabilities-heading h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; }
 .capabilities-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: 36px 0 28px; }
 .capabilities-toolbar .mantine-Tabs-tab { color: var(--mantine-color-dimmed); padding: 9px 12px; border-radius: 9px; }
@@ -35,7 +36,7 @@
 .capabilities-empty p + p { margin-top: 8px; }
 .capabilities-scope { margin: 32px 8px 0; line-height: 1.7; }
 @media (max-width: 47.99em) {
-  .capabilities-content { padding: 28px 16px 32px; }
+  .capabilities-content { padding: 64px 16px 32px; }
   .capabilities-heading h1 { font-size: 24px; }
   .capabilities-toolbar { align-items: stretch; flex-direction: column; gap: 16px; margin-top: 24px; }
   .capabilities-toolbar .mantine-TextInput-root { width: 100%; }
