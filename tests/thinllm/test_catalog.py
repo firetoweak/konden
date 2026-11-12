@@ -1,5 +1,8 @@
 import asyncio
+import errno
 import json
+import socket
+import ssl
 
 import httpx
 import pytest
@@ -104,12 +107,14 @@ def test_new_request_reads_new_credentials_and_catalog_without_local_cache(auth_
     (httpx.ProxyError, "代理连接失败", "代理地址、认证和可用性"),
     (httpx.ConnectError, "网络通信失败", "网络、代理或证书"),
     (httpx.ReadError, "网络通信失败", "网络、代理或证书"),
-    (httpx.RemoteProtocolError, "网络通信失败", "网络、代理或证书"),
+    (httpx.RemoteProtocolError, "不符合 HTTP 协议", "下方原因"),
+    (httpx.LocalProtocolError, "请求格式或地址协议错误", "密钥格式和服务地址"),
 ])
 def test_transport_failures_do_not_claim_credentials_are_invalid(auth_file, provider, error, reason, action):
     """A missing catalog response cannot establish whether the supplied credential is valid."""
     def fail(request):
-        raise error("private-transport-detail", request=request)
+        credential = "private-access" if provider == "openai-codex" else "private-key"
+        raise error(f"connection failed with {credential}", request=request)
 
     with pytest.raises(LLMTransientError) as caught:
         asyncio.run(list_models(provider, {"auth_file": str(auth_file), "api_key": "private-key"},
@@ -118,8 +123,74 @@ def test_transport_failures_do_not_claim_credentials_are_invalid(auth_file, prov
     credential = "登录凭据" if provider == "openai-codex" else "密钥"
     assert reason in message and action in message
     assert f"无法判断{credential}是否有效" in message
-    assert "private-transport-detail" not in message and "private-key" not in message
+    assert "connection failed with" in message
+    assert "private-access" not in message and "private-key" not in message
+    assert "请求：GET https://" in message and error.__name__ in message
     assert isinstance(caught.value.__cause__, error)
+
+
+@pytest.mark.parametrize(("cause", "reason", "detail"), [
+    (ssl.SSLCertVerificationError(1, "certificate verify failed: self-signed certificate"),
+     "HTTPS 证书校验失败", "self-signed certificate"),
+    (socket.gaierror(socket.EAI_NONAME, "getaddrinfo failed"), "域名解析失败", "getaddrinfo failed"),
+    (ConnectionRefusedError(errno.ECONNREFUSED, "Connection refused"), "连接被拒绝", "Connection refused"),
+    (ExceptionGroup("multiple connection attempts failed", [
+        ConnectionRefusedError(errno.ECONNREFUSED, "IPv4 refused"),
+        ConnectionRefusedError(errno.ECONNREFUSED, "IPv6 refused")]), "连接被拒绝", "IPv6 refused"),
+])
+def test_catalog_explains_the_actual_transport_cause(cause, reason, detail):
+    """httpx's generic ConnectError must not hide DNS, TLS or socket errors behind another retry hint."""
+    def fail(request):
+        raise httpx.ConnectError("All connection attempts failed", request=request) from cause
+
+    with pytest.raises(LLMTransientError) as caught:
+        asyncio.run(list_models("openai", {"api_key": "private-key"}, transport=httpx.MockTransport(fail)))
+    message = str(caught.value)
+    assert reason in message and detail in message
+    assert "https://api.openai.com/v1/models" in message
+    assert "ConnectError" in message and "private-key" not in message
+
+
+def test_transport_diagnostics_redact_credentials_and_url_secrets():
+    from thinllm import describe_transport_error
+
+    request = httpx.Request("GET", "https://url-user:url-password@api.example/models?key=query-secret", headers={
+        "Authorization": "Bearer header-secret", "ChatGPT-Account-Id": "account-secret"})
+    error = httpx.ProxyError(
+        f"407 Proxy Authentication Required; {request.url}; http://proxy-user:proxy-password@proxy.example; "
+        "Bearer header-secret; Basic proxy-encoded-secret; account-secret", request=request)
+    message = describe_transport_error(error)
+    assert "407 Proxy Authentication Required" in message
+    assert "GET https://api.example/models" in message
+    assert "proxy.example" in message
+    for secret in ("url-user", "url-password", "query-secret", "header-secret", "account-secret",
+                   "proxy-user", "proxy-password", "proxy-encoded-secret"):
+        assert secret not in message
+
+
+def test_suppressed_socket_context_is_retained_in_diagnostics():
+    """A real Windows refused connection has errno 22/WinError 1225, hidden by the HTTP transport."""
+    def fail(request):
+        try:
+            raise ConnectionRefusedError(22, "remote computer refused the network connection")
+        except ConnectionRefusedError:
+            raise httpx.ConnectError("All connection attempts failed", request=request) from None
+
+    with pytest.raises(LLMTransientError) as caught:
+        asyncio.run(list_models("openai", {"api_key": "private-key"}, transport=httpx.MockTransport(fail)))
+    assert "连接被拒绝" in str(caught.value)
+    assert "ConnectionRefusedError" in str(caught.value)
+    assert "remote computer refused the network connection" in str(caught.value)
+
+
+def test_invalid_authorization_header_is_not_exposed_by_protocol_diagnostics():
+    from thinllm import describe_transport_error
+
+    request = httpx.Request("GET", "https://api.example/models", headers={"Authorization": "Bearer first\nsecond"})
+    error = httpx.LocalProtocolError("Illegal header value b'Bearer first\\nsecond'", request=request)
+    message = describe_transport_error(error)
+    assert "请求格式或地址协议错误" in message and "LocalProtocolError" in message
+    assert "first" not in message and "second" not in message
 
 
 def test_corrupt_credentials_and_unknown_errors_propagate(auth_file):

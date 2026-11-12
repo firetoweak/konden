@@ -711,10 +711,14 @@ class WebFirstSliceTest(unittest.TestCase):
 
     def test_codex_catalog_reports_known_failures_and_exposes_unknown_errors(self):
         for error in [LLMAuthenticationError("请重新授权"), LLMTransientError("请重试")]:
-            with self.subTest(error=error), patch("konden.model_settings.list_models", new=AsyncMock(side_effect=error)):
+            with self.subTest(error=error), patch("konden.model_settings.list_models", new=AsyncMock(side_effect=error)), \
+                    self.assertLogs("uvicorn.error", level="WARNING") as logged:
                 response = self.client.get("/api/model-settings/catalog/openai-codex")
                 self.assertEqual(response.status_code, 502)
                 self.assertEqual(response.json(), {"detail": str(error)})
+            self.assertIn("/api/model-settings/catalog/openai-codex", logged.output[0])
+            self.assertIn("konden HTTP 502", logged.output[0])
+            self.assertIn(str(error), logged.output[0])
         with patch("konden.model_settings.list_models", new=AsyncMock(side_effect=LookupError("unknown"))):
             with self.assertRaisesRegex(LookupError, "unknown"):
                 self.client.get("/api/model-settings/catalog/openai-codex")
@@ -779,8 +783,11 @@ class WebFirstSliceTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/model-settings/images").json(), config)
         self.assertEqual(before, (self.models.path.read_bytes(), self.models.connections_path.read_bytes()))
         self.assertNotIn("private-existing-key", saved.text)
-        with patch("konden.media.images.list_image_models", new=AsyncMock(side_effect=ImageProviderError("目录不可用"))):
+        with patch("konden.media.images.list_image_models", new=AsyncMock(side_effect=ImageProviderError("目录不可用"))), \
+                self.assertLogs("uvicorn.error", level="WARNING") as logged:
             self.assertEqual(self.client.get("/api/model-settings/images/catalog").status_code, 502)
+        self.assertIn("/api/model-settings/images/catalog", logged.output[0])
+        self.assertIn("目录不可用", logged.output[0])
         with patch("konden.media.images.list_image_models", new=AsyncMock(side_effect=LookupError("internal"))):
             with self.assertRaises(LookupError):
                 self.client.get("/api/model-settings/images/catalog")

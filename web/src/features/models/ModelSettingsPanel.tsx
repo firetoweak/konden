@@ -124,7 +124,7 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
           <div className="catalog-column-head" aria-hidden="true"><span>使用</span><span>模型</span></div>
           {loading ? <Stack gap={14} p="lg" aria-label="正在读取模型目录"><Skeleton height={48} /><Skeleton height={48} /><Skeleton height={48} /></Stack>
             : error ? <Alert color="red" title="模型目录读取失败" m="lg">
-              <Text size="sm">{error}</Text><Button size="xs" variant="subtle" color="red" mt="sm" onClick={() => setRefresh((value) => value + 1)}>重新加载</Button>
+              <Text size="sm" style={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{error}</Text><Button size="xs" variant="subtle" color="red" mt="sm" onClick={() => setRefresh((value) => value + 1)}>重新加载</Button>
             </Alert>
             : visible.length === 0 ? <div className="catalog-empty"><IconSearch size={25} stroke={1.4} /><Text fw={500}>没有找到匹配的模型</Text>
               <Text size="sm" c="dimmed">{query ? "试试其他关键词，或清空搜索。" : "当前供应商没有可展示的模型。"}</Text>

@@ -83,7 +83,7 @@ export function SearchSettingsPanel({ models, api, loadModels, connections, conn
           data={available.filter((model) => model.provider === "openai" && model.webSearch).map((model) => ({ value: model.id, label: model.name }))}
           onChange={(value) => change({ openaiModel: value! })} /> : null}
       </div>
-      {catalogError && draft.provider === "openai" ? <Alert color="red" title="搜索模型目录读取失败" mt="md">{catalogError}<Button size="xs" variant="subtle" onClick={() => setCatalogReload((value) => value + 1)}>重新加载模型</Button></Alert> : null}
+      {catalogError && draft.provider === "openai" ? <Alert color="red" title="搜索模型目录读取失败" mt="md"><Text size="sm" style={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{catalogError}</Text><Button size="xs" variant="subtle" onClick={() => setCatalogReload((value) => value + 1)}>重新加载模型</Button></Alert> : null}
       {!configured ? <Text size="xs" c="dimmed" mt="md">请先在供应商连接文件中配置 {providerName(draft.provider)}。</Text> : null}
       {!draft.enabled ? <Text size="xs" c="dimmed" mt="md">网络搜索已停用，服务与模型选择会保留。</Text> : null}
       <section className="search-test-section" aria-label="搜索测试">

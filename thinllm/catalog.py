@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from thinllm.auth import CodexAuth, codex_auth_path
 from thinllm.errors import InvalidLLMResponse, LLMAuthenticationError, LLMProviderError, LLMTransientError
+from thinllm.http_errors import describe_transport_error
 from thinllm.providers import PROVIDERS, resolve_endpoint
 from thinllm.model_metadata import openai_conversation_model, openai_metadata
 
@@ -18,15 +19,10 @@ _CATALOG_CLIENT_VERSION = "0.164.0"
 
 
 def _catalog_transport_error(provider: str, error: httpx.TransportError) -> LLMTransientError:
-    if isinstance(error, httpx.TimeoutException):
-        reason, action = "请求超时", "检查网络或代理后重新加载"
-    elif isinstance(error, httpx.ProxyError):
-        reason, action = "代理连接失败", "检查代理地址、认证和可用性后重新加载"
-    else:
-        reason, action = "网络通信失败", "检查网络、代理或证书设置后重新加载"
     credential = "登录凭据" if provider == "Codex" else "密钥"
     return LLMTransientError(
-        f"{provider} 模型目录{reason}，未能取得完整响应，无法判断{credential}是否有效。请{action}。")
+        f"{provider} 模型目录读取失败：{describe_transport_error(error)}\n"
+        f"未取得供应商的完整 HTTP 响应，无法判断{credential}是否有效。")
 
 
 def _check_catalog_response(provider: str, response: httpx.Response) -> None:

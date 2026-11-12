@@ -75,7 +75,7 @@ export function ImageSettingsPanel({active, connected, configured, api}: {
           placeholder={catalogLoading ? "正在读取图片模型…" : "选择图片模型"} searchable allowDeselect={false}
           value={draft.model} data={choices} disabled={disabled || !draft.enabled || !configured || catalogLoading || catalogError !== null}
           onChange={(value) => change({model:value})}/>
-        {catalogError ? <Alert color="red" title="图片模型目录读取失败">{catalogError}
+        {catalogError ? <Alert color="red" title="图片模型目录读取失败"><Text size="sm" style={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{catalogError}</Text>
           <Button variant="subtle" size="xs" onClick={() => setCatalogReload((value) => value + 1)}>重新加载图片模型</Button></Alert>
           : configured && !catalogLoading && models.length === 0 ? <Text size="sm" c="dimmed">当前连接没有返回可选择的图片模型。</Text> : null}
         <Text size="sm" c="dimmed">保存配置不会生成图片。启用后，在 Bot 对话中描述想要的图片；生成后可查看预览并下载原图。第一版支持文字生图。</Text>
