@@ -17,6 +17,42 @@ from thinllm.model_metadata import openai_conversation_model, openai_metadata
 _CATALOG_CLIENT_VERSION = "0.164.0"
 
 
+def _catalog_transport_error(provider: str, error: httpx.TransportError) -> LLMTransientError:
+    if isinstance(error, httpx.TimeoutException):
+        reason, action = "请求超时", "检查网络或代理后重新加载"
+    elif isinstance(error, httpx.ProxyError):
+        reason, action = "代理连接失败", "检查代理地址、认证和可用性后重新加载"
+    else:
+        reason, action = "网络通信失败", "检查网络、代理或证书设置后重新加载"
+    credential = "登录凭据" if provider == "Codex" else "密钥"
+    return LLMTransientError(
+        f"{provider} 模型目录{reason}，未能取得完整响应，无法判断{credential}是否有效。请{action}。")
+
+
+def _check_catalog_response(provider: str, response: httpx.Response) -> None:
+    status = response.status_code
+    if status == 200:
+        return
+    if status == 401:
+        action = ("请运行 python -m thinllm auth codex --login 重新登录，并更新 connections.json 中的 auth_file。"
+                  if provider == "Codex" else
+                  f"请检查 connections.json 中的 {provider}.api_key，确认密钥正确且未失效后重新加载。")
+        raise LLMAuthenticationError(f"{provider} 模型目录认证未通过（HTTP 401）。{action}")
+    if status == 403:
+        raise LLMAuthenticationError(
+            f"{provider} 拒绝访问模型目录（HTTP 403）。请检查账号权限、服务地区限制或代理的访问策略。")
+    if status in (408, 504):
+        raise LLMTransientError(f"{provider} 模型目录请求超时（HTTP {status}）。请稍后重新加载；若持续超时，请检查网络或代理。")
+    if status == 429:
+        raise LLMTransientError(
+            f"{provider} 模型目录请求受限（HTTP 429）。请稍后重新加载；若持续出现，请检查供应商账号的配额或额度。")
+    if status in (500, 502, 503):
+        raise LLMTransientError(f"{provider} 模型目录服务异常（HTTP {status}）。请稍后重新加载；若持续出现，请联系服务方。")
+    if status == 425:
+        raise LLMTransientError(f"{provider} 模型目录暂不可用（HTTP 425）。请稍后重新加载。")
+    raise LLMProviderError(f"读取 {provider} 模型目录失败（HTTP {status}）。请核对供应商连接设置，或联系服务方。")
+
+
 class _ReasoningLevel(BaseModel):
     model_config = ConfigDict(strict=True)
     effort: str = Field(min_length=1)
@@ -47,14 +83,8 @@ async def list_codex_models(connection: Mapping[str, str], *, transport: httpx.A
         ) as client:
             response = await client.get("models", params={"client_version": _CATALOG_CLIENT_VERSION})
     except httpx.TransportError as error:
-        raise LLMTransientError("Codex 模型列表连接失败，请重试。") from error
-    if response.status_code in (401, 403):
-        raise LLMAuthenticationError(
-            "无法读取 Codex 模型列表，请运行 python -m thinllm auth codex --login 并更新连接配置。")
-    if response.status_code in (408, 425, 429, 500, 502, 503, 504):
-        raise LLMTransientError(f"Codex 模型列表暂时不可用（HTTP {response.status_code}），请重试。")
-    if response.status_code != 200:
-        raise LLMProviderError(f"读取 Codex 模型列表失败（HTTP {response.status_code}）。")
+        raise _catalog_transport_error("Codex", error) from error
+    _check_catalog_response("Codex", response)
     try:
         catalog = _Catalog.model_validate_json(response.content)
     except ValidationError as error:
@@ -109,13 +139,8 @@ async def list_models(provider: str, connection: Mapping[str, str], *,
                                     transport=transport, timeout=30) as client:
             response = await client.get("models")
     except httpx.TransportError as error:
-        raise LLMTransientError(f"{provider} 模型目录连接失败，请重试。") from error
-    if response.status_code in (401, 403):
-        raise LLMAuthenticationError(f"{provider} 模型目录认证失败，请检查供应商连接。")
-    if response.status_code in (408, 425, 429, 500, 502, 503, 504):
-        raise LLMTransientError(f"{provider} 模型目录暂不可用（HTTP {response.status_code}），请重试。")
-    if response.status_code != 200:
-        raise LLMProviderError(f"读取 {provider} 模型目录失败（HTTP {response.status_code}）。")
+        raise _catalog_transport_error(provider, error) from error
+    _check_catalog_response(provider, response)
     try:
         catalog = _ApiCatalog.model_validate_json(response.content)
     except ValidationError as error:

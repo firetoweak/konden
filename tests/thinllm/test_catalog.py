@@ -45,13 +45,29 @@ def test_lists_account_models_without_hidden_entries_or_prompt_metadata(auth_fil
     assert auth_file.read_bytes() == before
 
 
-@pytest.mark.parametrize(("status", "error"), [(401, LLMAuthenticationError), (403, LLMAuthenticationError),
-                                              (429, LLMTransientError), (503, LLMTransientError), (400, LLMProviderError)])
-def test_provider_failure_is_not_an_empty_catalog_and_does_not_echo_response(auth_file, status, error):
+@pytest.mark.parametrize("provider", ["openai", "openai-codex"])
+@pytest.mark.parametrize(("status", "error", "reason", "action"), [
+    (401, LLMAuthenticationError, "认证未通过", "connections.json"),
+    (403, LLMAuthenticationError, "拒绝访问", "账号权限"),
+    (408, LLMTransientError, "请求超时", "网络或代理"),
+    (425, LLMTransientError, "暂不可用", "稍后重新加载"),
+    (429, LLMTransientError, "请求受限", "配额或额度"),
+    (500, LLMTransientError, "服务异常", "联系服务方"),
+    (502, LLMTransientError, "服务异常", "联系服务方"),
+    (503, LLMTransientError, "服务异常", "联系服务方"),
+    (504, LLMTransientError, "请求超时", "网络或代理"),
+    (400, LLMProviderError, "读取", "核对供应商连接设置"),
+])
+def test_provider_failure_identifies_reason_and_recovery_without_secrets(auth_file, provider, status, error, reason, action):
+    """Avoid sending users to rotate keys for network/permission failures or blindly retry a rejected key."""
     transport = httpx.MockTransport(lambda _: httpx.Response(status, text="private-response"))
     with pytest.raises(error) as caught:
-        asyncio.run(list_codex_models({"auth_file": str(auth_file)}, transport=transport))
-    assert "private-response" not in str(caught.value)
+        asyncio.run(list_models(provider, {"auth_file": str(auth_file), "api_key": "private-key"}, transport=transport))
+    message = str(caught.value)
+    assert reason in message and action in message and f"HTTP {status}" in message
+    assert "private-response" not in message and "private-key" not in message
+    if status == 401:
+        assert ("--login" if provider == "openai-codex" else "openai.api_key") in message
 
 
 @pytest.mark.parametrize("payload", [{}, {"models": {}}, {"models": [model(context_window=True)]},
@@ -81,12 +97,39 @@ def test_new_request_reads_new_credentials_and_catalog_without_local_cache(auth_
     assert tokens == ["Bearer private-access", "Bearer rotated"]
 
 
-def test_transport_errors_are_transient_and_corrupt_credentials_propagate(auth_file):
+@pytest.mark.parametrize("provider", ["openai", "openai-codex"])
+@pytest.mark.parametrize(("error", "reason", "action"), [
+    (httpx.ConnectTimeout, "请求超时", "网络或代理"),
+    (httpx.ReadTimeout, "请求超时", "网络或代理"),
+    (httpx.ProxyError, "代理连接失败", "代理地址、认证和可用性"),
+    (httpx.ConnectError, "网络通信失败", "网络、代理或证书"),
+    (httpx.ReadError, "网络通信失败", "网络、代理或证书"),
+    (httpx.RemoteProtocolError, "网络通信失败", "网络、代理或证书"),
+])
+def test_transport_failures_do_not_claim_credentials_are_invalid(auth_file, provider, error, reason, action):
+    """A missing catalog response cannot establish whether the supplied credential is valid."""
     def fail(request):
-        raise httpx.ConnectError("network unavailable", request=request)
+        raise error("private-transport-detail", request=request)
 
-    with pytest.raises(LLMTransientError):
-        asyncio.run(list_codex_models({"auth_file": str(auth_file)}, transport=httpx.MockTransport(fail)))
+    with pytest.raises(LLMTransientError) as caught:
+        asyncio.run(list_models(provider, {"auth_file": str(auth_file), "api_key": "private-key"},
+                                transport=httpx.MockTransport(fail)))
+    message = str(caught.value)
+    credential = "登录凭据" if provider == "openai-codex" else "密钥"
+    assert reason in message and action in message
+    assert f"无法判断{credential}是否有效" in message
+    assert "private-transport-detail" not in message and "private-key" not in message
+    assert isinstance(caught.value.__cause__, error)
+
+
+def test_corrupt_credentials_and_unknown_errors_propagate(auth_file):
+    def fail(request):
+        raise RuntimeError("internal failure")
+
+    for provider in ("openai", "openai-codex"):
+        with pytest.raises(RuntimeError, match="internal failure"):
+            asyncio.run(list_models(provider, {"auth_file": str(auth_file), "api_key": "private-key"},
+                                    transport=httpx.MockTransport(fail)))
     auth_file.write_text("{", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         asyncio.run(list_codex_models({"auth_file": str(auth_file)}, transport=httpx.MockTransport(fail)))
