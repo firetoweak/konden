@@ -8,6 +8,7 @@ from thinllm.chat_completions import ChatCompletionsClient
 from thinllm.catalog import list_codex_models, list_models
 from thinllm.codex import CodexResponsesClient
 from thinllm.responses import ResponsesClient
+from thinllm.http_errors import describe_transport_error
 from thinllm.errors import (
     InvalidLLMResponse,
     LLMAuthenticationError,
@@ -35,6 +36,7 @@ __all__ = [
     "CodexResponsesClient",
     "ResponsesClient",
     "create_client",
+    "describe_transport_error",
     "list_codex_models",
     "list_models",
     "ContentDeltaSink",
