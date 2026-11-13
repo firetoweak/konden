@@ -1,6 +1,6 @@
 import { ActionIcon, Menu } from "@mantine/core";
 import { IconArrowBackUp, IconCopy, IconX } from "@tabler/icons-react";
-import { createContext, useContext, type ReactElement } from "react";
+import { cloneElement, createContext, useContext, useState, type DOMAttributes, type ReactElement, type SyntheticEvent } from "react";
 import type { AvatarSelection, Avatars } from "../../api/contracts";
 import { botAvatarPath, identityHash } from "./botAvatar";
 
@@ -81,14 +81,28 @@ export function MessageQuote({ quote, onRemove }: { quote: MessageReference; onR
 }
 
 export function MessageMenu({ id, author, text, children }: {
-  id?: string; author: string; text: string; children: ReactElement;
+  id?: string; author: string; text: string; children: ReactElement<DOMAttributes<HTMLElement>>;
 }) {
   const { onQuote } = useContext(ChatPresentation);
+  const [selectedText, setSelectedText] = useState<string | null>(null);
+  function captureSelection(event: SyntheticEvent<HTMLElement>) {
+    const selection = window.getSelection();
+    const inside = selection !== null && !selection.isCollapsed
+      && event.currentTarget.contains(selection.anchorNode)
+      && event.currentTarget.contains(selection.focusNode);
+    setSelectedText(inside ? selection.toString().trim() || null : null);
+  }
   return <Menu withinPortal position="bottom-start" returnFocus>
-    <Menu.ContextMenu>{children}</Menu.ContextMenu>
+    <Menu.ContextMenu>{cloneElement(children, {
+      onContextMenuCapture: captureSelection,
+      onTouchStartCapture: captureSelection,
+    })}</Menu.ContextMenu>
     <Menu.Dropdown>
       <Menu.Item leftSection={<IconArrowBackUp size={15} />} disabled={id === undefined}
-        aria-label={`引用 ${author} 的消息`} onClick={() => onQuote(messageReference(id!, author, text))}>引用消息</Menu.Item>
+        aria-label={`引用 ${author} 的${selectedText === null ? "消息" : "选中文字"}`}
+        onClick={() => onQuote(selectedText === null ? messageReference(id!, author, text) : {id: id!, author, preview: selectedText})}>
+        {selectedText === null ? "引用消息" : "引用选中文字"}
+      </Menu.Item>
       <Menu.Item leftSection={<IconCopy size={15} />} onClick={() => void navigator.clipboard.writeText(text)}>复制消息</Menu.Item>
     </Menu.Dropdown>
   </Menu>;
