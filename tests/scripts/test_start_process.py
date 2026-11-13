@@ -16,8 +16,6 @@ def test_start_serves_built_web_without_node_from_another_directory(tmp_path, pr
     source = Path(__file__).resolve().parents[2]
     root = prepared_application
     # Use the actual application code with a small static page; no frontend build tools.
-    (root / "web/dist/assets").mkdir(parents=True)
-    (root / "web/dist/index.html").write_text("<!doctype html><title>Prepared konden</title>", encoding="utf-8")
     if os.name == "nt":
         shell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
         command = [str(shell), "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "scripts/start.ps1")]
@@ -73,3 +71,54 @@ def test_start_serves_built_web_without_node_from_another_directory(tmp_path, pr
     assert '"GET /api/model-settings HTTP/1.1" 200' not in output
     assert '"GET /mcp/ HTTP/1.1" 401' in output
     assert '"GET /api/missing HTTP/1.1" 404' in output
+
+
+@pytest.mark.process
+def test_start_activates_newly_installed_python_dependencies(tmp_path, prepared_application):
+    """New plugin dependencies may need .pth initialization from a fresh interpreter."""
+    root = prepared_application
+    (root / "scripts/setup.py").write_text('''
+from pathlib import Path
+import sysconfig
+root = Path(__file__).resolve().parents[1]
+addon = root / "installed-addon"
+addon.mkdir()
+(addon / "new_plugin.py").write_text("MESSAGE = 'new-plugin-ready'", encoding="utf-8")
+(Path(sysconfig.get_path("purelib")) / "new-plugin.pth").write_text(str(addon) + "\\n", encoding="utf-8")
+''', encoding="utf-8")
+    (root / "web_chat.py").write_text('''
+import new_plugin
+import sys
+from pathlib import Path
+import time
+root = Path(__file__).parent
+assert sys.argv[1:] == ["--port", "9123"]
+(root / "started.txt").write_text(new_plugin.MESSAGE, encoding="utf-8")
+while not (root / "stop.txt").exists():
+    time.sleep(0.01)
+''', encoding="utf-8")
+    if os.name == "nt":
+        command = [shutil.which("powershell"), "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                   str(root / "scripts/start.ps1")]
+    else:
+        command = ["/bin/sh", str(root / "scripts/start.sh")]
+    environment = {**os.environ, "KONDEN_HOME": str(tmp_path / "home"), "PYTHONUTF8": "1"}
+    environment.pop("KONDEN_CONFIG", None)
+    log_path = tmp_path / "launcher.log"
+    with log_path.open("w", encoding="utf-8") as log:
+        process = subprocess.Popen(command + ["--port", "9123"], cwd=tmp_path, env=environment,
+                                   stdout=log, stderr=log)
+        try:
+            deadline = time.monotonic() + 20
+            while not (root / "started.txt").exists():
+                assert process.poll() is None, log_path.read_text(encoding="utf-8")
+                assert time.monotonic() < deadline, log_path.read_text(encoding="utf-8")
+                time.sleep(0.05)
+            assert (root / "started.txt").read_text(encoding="utf-8") == "new-plugin-ready"
+            # The startup command must stay attached to a running application.
+            with pytest.raises(subprocess.TimeoutExpired):
+                process.wait(timeout=0.3)
+        finally:
+            (root / "stop.txt").touch()
+            process.wait(timeout=10)
+    assert process.returncode == 0, log_path.read_text(encoding="utf-8")

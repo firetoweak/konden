@@ -68,7 +68,7 @@ def test_binary_is_product_owned_and_replaced_only_after_verification(tmp_path, 
         record.update(format="binary-archive", url="https://example.test/tool.zip",
                       executable_sha256=hashlib.sha256(b"binary").hexdigest())
     monkeypatch.setattr(tools, "packages", lambda root: {"tool": record})
-    monkeypatch.setattr(shutil, "which", lambda name: f"system/{name}")
+    monkeypatch.setattr(shutil, "which", lambda name, **_: f"system/{name}")
     monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
     tools.prepare(tmp_path)
     executable = tools.tool_directory(tmp_path, "tool") / "tool.exe"
@@ -133,8 +133,8 @@ def test_downloads_match_supported_host_architecture(monkeypatch, system, machin
 
 def test_existing_system_tools_do_not_trigger_downloads(tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "packages", lambda root: {name: package(b"") for name in ("node", "fd", "rg", "git")})
-    monkeypatch.setattr(tools, "supported_node", lambda: True)
-    monkeypatch.setattr(shutil, "which", lambda name: f"system/{name}")
+    monkeypatch.setattr(tools, "supported_node", lambda **_: True)
+    monkeypatch.setattr(shutil, "which", lambda name, **_: f"system/{name}")
     monkeypatch.setattr(tools, "install_package", lambda *args: pytest.fail("must reuse system tools"))
     tools.prepare(tmp_path)
 
@@ -142,7 +142,7 @@ def test_existing_system_tools_do_not_trigger_downloads(tmp_path, monkeypatch):
 def test_browser_uses_application_install_even_when_system_chrome_exists(tmp_path, monkeypatch):
     record = package(b"")
     monkeypatch.setattr(tools, "packages", lambda root: {"chrome": record})
-    monkeypatch.setattr(shutil, "which", lambda name: f"system/{name}")
+    monkeypatch.setattr(shutil, "which", lambda name, **_: f"system/{name}")
     install = []
     browser = tools.tool_directory(tmp_path, "chrome") / record["executable"]
 
@@ -150,6 +150,7 @@ def test_browser_uses_application_install_even_when_system_chrome_exists(tmp_pat
         install.append(name)
         browser.parent.mkdir(parents=True)
         browser.touch()
+        (browser.parent / ".archive-sha256").write_text(package["sha256"], encoding="utf-8")
 
     monkeypatch.setattr(tools, "install_package", install_browser)
     tools.prepare(tmp_path, include_browser=False)
@@ -162,15 +163,41 @@ def test_browser_uses_application_install_even_when_system_chrome_exists(tmp_pat
         assert (browser.parent / "chrome").samefile(browser)
 
 
-def test_missing_tools_are_prepared_before_setup_preflight(monkeypatch):
+def test_missing_tools_are_prepared_before_setup_preflight(prepared_source, monkeypatch):
     from scripts import setup
     events = []
+    monkeypatch.setattr(setup, "ROOT", prepared_source)
     monkeypatch.setattr(tools, "prepare", lambda root: events.append("tools"))
     monkeypatch.setattr(setup.subprocess, "run", lambda *args, **kwargs: None)
     monkeypatch.setattr(setup, "check_dependencies", lambda: events.append("check") or ["still missing"])
     with pytest.raises(SystemExit):
         setup.main([])
     assert events == ["tools", "check"]
+
+
+def test_browser_manifest_upgrade_replaces_the_old_installation(tmp_path, monkeypatch):
+    """Changing the pinned Chrome archive must not keep an existing stale executable."""
+    data = archive()
+    record = package(data)
+    monkeypatch.setattr(tools, "packages", lambda root: {"chrome": record})
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(data))
+    tools.prepare(tmp_path)
+    browser = tools.tool_directory(tmp_path, "chrome") / "tool.exe"
+    assert browser.read_bytes() == b"binary"
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as bundle:
+        bundle.writestr("tool/tool.exe", b"new browser")
+    updated = stream.getvalue()
+    record.update(package(updated))
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(b"bad archive"))
+    with pytest.raises(ValueError, match="校验失败"):
+        tools.prepare(tmp_path)
+    assert browser.read_bytes() == b"binary"
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: io.BytesIO(updated))
+    tools.prepare(tmp_path)
+    assert browser.read_bytes() == b"new browser"
+    monkeypatch.setattr(tools, "urlopen", lambda *args, **kwargs: pytest.fail("must reuse current browser"))
+    tools.prepare(tmp_path)
 
 
 def test_linux_system_packages_use_the_available_package_manager(monkeypatch):

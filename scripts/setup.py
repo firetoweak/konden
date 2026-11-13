@@ -10,7 +10,7 @@ import sys
 import tarfile
 import zipfile
 
-from scripts import runtime_tools
+from scripts import preparation, runtime_tools
 
 ROOT = Path(__file__).resolve().parents[1]
 WINDOWS = os.name == "nt"
@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         runtime_tools.activate(ROOT)
     else:
+        (ROOT / preparation.STAMP).unlink(missing_ok=True)
+        signature = preparation.fingerprint(ROOT)
         print("[1/4] 准备应用命令行工具", flush=True)
         runtime_tools.prepare(ROOT)
     errors = check_dependencies()
@@ -62,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.configure:
         initialize.append("--configure")
     subprocess.run(initialize, cwd=ROOT, check=True)
+    preparation.record(ROOT, signature)
     print("运行环境准备完成。使用 scripts/start.ps1 或 scripts/start.sh 启动，在网页侧栏配置模型。")
     return 0
 
