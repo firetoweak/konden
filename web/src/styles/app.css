@@ -592,7 +592,6 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
 .private-message-modal .mantine-Modal-content { background: var(--konden-composer); }
 .private-message-close { position: absolute; top: 12px; right: 12px; z-index: 1; color: var(--mantine-color-dimmed); }
 .private-message-transcript { min-width: 0; height: min(760px, 84dvh); overflow-y: auto; overscroll-behavior: contain; padding: 48px 24px 24px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
-.private-message-transcript .markdown-message :where(ul, ol) { padding-inline-start: 1.5em; }
 .private-message-entry { width: fit-content; max-width: 90%; min-width: 0; }
 .private-message-entry + .private-message-entry { margin-top: 24px; }
 .private-message-entry[data-direction="sent"] { margin-left: auto; }
@@ -630,10 +629,10 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
 .private-message-peer .agent-avatar { flex: 0 0 18px; width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 a.private-message-peer:hover { text-decoration: underline; text-underline-offset: 3px; }
 a.private-message-peer:focus-visible { outline: 2px solid var(--konden-composer-focus); outline-offset: 3px; border-radius: 3px; }
-.turn-details { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; width: min(calc(100% - 46px), calc(72ch + 32px)); margin-left: 46px; font-size: 15px; }
+.turn-details { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; width: min(calc(100% - 46px), calc(72ch + 40px)); margin-left: 46px; font-size: 15px; }
 .turn-details > .execution-process, .turn-details > .thinking-block { width: fit-content; max-width: 100%; min-width: 0; }
 .turn-details > .is-open { flex-basis: 100%; }
-.assistant-reply, .group-message-bubble { position: relative; flex: 0 1 auto; width: fit-content; max-width: min(calc(100% - 84px), calc(72ch + 32px)); min-width: 0; padding: 12px 16px 15px; border-radius: 10px; background: var(--konden-surface); font-size: 15px; }
+.assistant-reply, .group-message-bubble { position: relative; flex: 0 1 auto; width: fit-content; max-width: min(calc(100% - 84px), calc(72ch + 40px)); min-width: 0; padding: 16px 20px 18px; border-radius: 10px; background: var(--konden-surface); font-size: 15px; }
 .group-chat-scroll { flex: 1; min-height: 0; }
 .group-transcript { display: flex; flex-direction: column; gap: 26px; width: min(var(--konden-conversation-width), calc(100% - 48px)); margin-inline: auto; padding-block: 28px 20px; }
 .group-chat .group-transcript { padding-top: 72px; }
@@ -947,7 +946,7 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
   .message-user, .message-assistant, .group-message-row, .group-message { gap: 8px; font-size: 14px; }
   .message > .agent-avatar { width: 27px; height: 27px; border-radius: 7px; font-size: 12px; }
   .assistant-reply, .group-message-bubble, .user-message-content {
-    max-width: calc(100% - 51px); padding: 10px 12px 12px; font-size: 14px;
+    max-width: calc(100% - 51px); padding: 12px 14px 14px; font-size: 14px;
   }
   .user-message-content { padding: 0; }
   .user-message-row { max-width: 100%; padding: 10px 12px 12px; font-size: 14px; }
@@ -1103,6 +1102,8 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .group-header-members { display: flex; padding-left: 6px; margin-right: 6px; }
 .group-header-members .agent-avatar { width: 25px; height: 25px; border-radius: 50%; border: 2px solid var(--konden-canvas); margin-left: -6px; font-size: 9px; }
 .markdown-message :where(p, li) { line-height: 1.85; }
+.markdown-message :is(ul, ol):not([data-type="taskList"]) { padding-inline-start: 1.75em; }
+.markdown-message li { padding-inline-start: .25em; }
 .markdown-message :where(h1, h2, h3, h4) { margin-block: 1.6em .7em; line-height: 1.5; font-size: 1em; font-weight: 650; }
 .markdown-message :where(p, ul, ol, blockquote, pre, table):first-child { margin-top: 0; }
 .markdown-message :where(p, ul, ol, blockquote, pre, table):last-child { margin-bottom: 0; }
@@ -1111,6 +1112,12 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .markdown-message .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .markdown-message pre { white-space: pre; overflow-wrap: normal; font-size: 12px; line-height: 1.65; }
 .markdown-message pre code { white-space: pre; overflow-wrap: normal; }
+.markdown-message .mantine-CodeHighlightTabs-filesScrollarea,
+.markdown-message :is(.mantine-CodeHighlight-controls, .mantine-CodeHighlightTabs-controls):not(:has([aria-label="Render Mermaid diagram"])) { display: none; }
+.markdown-message .mantine-CodeHighlightTabs-controls:has([aria-label="Render Mermaid diagram"]) > button:not([aria-label="Render Mermaid diagram"]) { display: none; }
+.markdown-message :is(.mantine-CodeHighlight-codeHighlight, .mantine-CodeHighlightTabs-codeHighlight) { border: 0; border-radius: 6px; --ch-background: var(--konden-bubble); }
+.markdown-message :is(.mantine-CodeHighlight-code, .mantine-CodeHighlightTabs-code) { padding: 10px 12px; }
+.markdown-message .mantine-CodeHighlightTabs-pre[data-with-offset] code { padding-top: 10px; }
 .markdown-message :where(img, svg) { max-width: 100%; }
 .markdown-message > div { max-width: 100%; min-width: 0; }
 ::selection { background: var(--konden-selection); color: var(--konden-focus); }

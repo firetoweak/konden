@@ -1,14 +1,9 @@
 import { createRemendPreprocessor } from "@ai-markdown/react";
 import MantineAIMarkdown from "@ai-markdown/react-mantine";
-import hljs from "highlight.js/lib/common";
 import { Children, cloneElement, isValidElement, memo, useContext, type ComponentProps, type ReactNode } from "react";
 import { ChatPresentation, useIdentityColor, MessageQuote, splitMessageQuote } from "./ChatPresentation";
 import { AttachmentTile } from "./AttachmentTile";
 
-const highlightedCodeBlock = {
-  autoDetectUnknownLanguage: true,
-  highlightJs: hljs,
-} as const;
 const contentPreprocessors = [createRemendPreprocessor()];
 
 function MentionText({ children }: { children: ReactNode }) {
@@ -63,11 +58,10 @@ export const MarkdownMessage = memo(function MarkdownMessage({
     <div className="markdown-message" data-streaming={streaming || undefined}>
       {quote === null ? null : <MessageQuote quote={quote} />}
       <MantineAIMarkdown
-        codeBlock={streaming ? undefined : highlightedCodeBlock}
         content={body}
         customComponents={customComponents}
         contentPreprocessors={contentPreprocessors}
-        fontSize="inherit"
+        fontSize="1em"
         streaming={streaming}
       />
     </div>

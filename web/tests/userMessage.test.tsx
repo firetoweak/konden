@@ -20,12 +20,14 @@ afterEach(() => {
 });
 
 it("消息时间独立展示，右键菜单复制原文", async () => {
+  const path = String.raw`C:\Users\19403\.konden\state\bots\6a32b624476bf8c43728\lark.env`;
+  const text = `请打开配置文件：\n\n\`\`\`\n${path}\n\`\`\`\n\n填写完成后继续。`;
   render(<MantineProvider><UserMessage
-    sessionId="session" text="本项目还未提交的代码，都有哪些成分"
+    sessionId="session" text={text}
     occurredAt="2026-10-03T08:00:05Z" images={[]} files={[]}
   /></MantineProvider>);
 
-  const bubble = screen.getByText("本项目还未提交的代码，都有哪些成分").closest(".user-message-row")!;
+  const bubble = screen.getByText(path).closest(".user-message-row")!;
   const message = bubble.closest(".user-message-content")!;
   expect(screen.queryByRole("button", { name: "复制消息" })).not.toBeInTheDocument();
   fireEvent.contextMenu(bubble, { clientX: 100, clientY: 100 });
@@ -34,5 +36,5 @@ it("消息时间独立展示，右键菜单复制原文", async () => {
   expect(message.querySelector("time")).toHaveAttribute("datetime", "2026-10-03T08:00:05Z");
   expect(message.querySelector("time")).toHaveAttribute("title", expect.stringContaining("发送于"));
   fireEvent.click(copy);
-  expect(writeText).toHaveBeenCalledWith("本项目还未提交的代码，都有哪些成分");
+  expect(writeText).toHaveBeenCalledWith(text);
 });
