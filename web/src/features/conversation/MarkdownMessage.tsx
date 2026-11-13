@@ -42,7 +42,12 @@ function MentionListItem({ children, node: _node, ...props }: ComponentProps<"li
 function MessageImage({src, alt}: ComponentProps<"img">) {
   return typeof src === "string" ? <AttachmentTile src={src} name={alt || "图片"} large downloadHref={src} /> : null;
 }
-const customComponents = { p: MentionParagraph, li: MentionListItem, img: MessageImage };
+function MessageLink({href, node: _node, ...props}: ComponentProps<"a"> & {node?: unknown}) {
+  return <a {...props} href={href} target={href?.startsWith("#") ? undefined : "_blank"} rel="noopener noreferrer"
+    onContextMenu={(event) => event.stopPropagation()}
+    onTouchStart={(event) => event.stopPropagation()} />;
+}
+const customComponents = { p: MentionParagraph, li: MentionListItem, img: MessageImage, a: MessageLink };
 
 interface MarkdownMessageProps {
   content: string;

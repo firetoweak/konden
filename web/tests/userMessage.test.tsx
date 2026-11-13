@@ -38,3 +38,20 @@ it("消息时间独立展示，右键菜单复制原文", async () => {
   fireEvent.click(copy);
   expect(writeText).toHaveBeenCalledWith(text);
 });
+
+it("链接保留浏览器原生右键菜单，打开地址不会替换当前聊天", () => {
+  render(<MantineProvider><UserMessage
+    sessionId="session" text="请先[**一键申请权限**](https://example.com/permissions?scope=read)，再[返回说明](#说明)。"
+    occurredAt="2026-10-03T08:00:05Z" images={[]} files={[]}
+  /></MantineProvider>);
+
+  const link = screen.getByRole("link", {name:"一键申请权限"});
+  expect(link).toHaveAttribute("href", "https://example.com/permissions?scope=read");
+  expect(link).toHaveAttribute("target", "_blank");
+  expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  expect(screen.getByRole("link", {name:"返回说明"})).not.toHaveAttribute("target");
+  const event = new MouseEvent("contextmenu", {bubbles:true, cancelable:true});
+  fireEvent(screen.getByText("一键申请权限"), event);
+  expect(event.defaultPrevented).toBe(false);
+  expect(screen.queryByRole("menuitem", {name:"复制消息"})).not.toBeInTheDocument();
+});

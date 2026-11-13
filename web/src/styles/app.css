@@ -1102,6 +1102,7 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .group-header-members { display: flex; padding-left: 6px; margin-right: 6px; }
 .group-header-members .agent-avatar { width: 25px; height: 25px; border-radius: 50%; border: 2px solid var(--konden-canvas); margin-left: -6px; font-size: 9px; }
 .markdown-message :where(p, li) { line-height: 1.85; }
+.markdown-message a { -webkit-touch-callout: default; }
 .markdown-message :is(ul, ol):not([data-type="taskList"]) { padding-inline-start: 1.75em; }
 .markdown-message li { padding-inline-start: .25em; }
 .markdown-message :where(h1, h2, h3, h4) { margin-block: 1.6em .7em; line-height: 1.5; font-size: 1em; font-weight: 650; }
