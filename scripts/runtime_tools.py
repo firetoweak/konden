@@ -34,17 +34,21 @@ def tool_directory(root: Path, name: str) -> Path:
     return root / ".tools/runtime" / name
 
 
-def activate(root: Path) -> None:
+def command_path(root: Path) -> str:
     directories = [tool_directory(root, name) / package["bin"]
                    for name, package in packages(root).items()]
     # Only the current process and its children receive these paths.
     active = [str(path) for path in directories if path.is_dir()]
     inherited = [path for path in os.environ.get("PATH", "").split(os.pathsep) if path not in active]
-    os.environ["PATH"] = os.pathsep.join(active + inherited)
+    return os.pathsep.join(active + inherited)
 
 
-def supported_node() -> bool:
-    node = shutil.which("node")
+def activate(root: Path) -> None:
+    os.environ["PATH"] = command_path(root)
+
+
+def supported_node(*, path: str | None = None) -> bool:
+    node = shutil.which("node", path=path)
     if node is None:
         return False
     version = subprocess.check_output([node, "--version"], text=True).strip()
@@ -103,7 +107,10 @@ def install_package(root: Path, name: str, package: dict) -> None:
         # Windows can refuse a directory rename; shutil.move then uses a copy.
         assert source.resolve().is_relative_to(staging.resolve())
         assert destination.resolve().is_relative_to((root / ".tools/runtime").resolve())
+        if destination.exists():
+            shutil.rmtree(destination)
         shutil.move(source, destination)
+        (destination / ".archive-sha256").write_text(package["sha256"], encoding="utf-8")
 
 
 def install_linux_packages(names: list[str]) -> None:
@@ -120,22 +127,28 @@ def install_linux_packages(names: list[str]) -> None:
         subprocess.run(prefix + command, check=True)
 
 
+def package_ready(root: Path, name: str, package: dict, *, path: str | None = None) -> bool:
+    if name == "chrome" or package.get("format") in {"binary", "binary-archive"}:
+        executable = tool_directory(root, name) / package["bin"] / package["executable"]
+        if not executable.is_file():
+            return False
+        if name == "chrome":
+            stamp = tool_directory(root, name) / ".archive-sha256"
+            return stamp.is_file() and stamp.read_text(encoding="utf-8") == package["sha256"]
+        with executable.open("rb") as stream:
+            return hashlib.file_digest(stream, "sha256").hexdigest() == package.get("executable_sha256", package["sha256"])
+    if name == "node":
+        return supported_node(path=path) and shutil.which("npm.cmd" if os.name == "nt" else "npm", path=path) is not None
+    return (shutil.which(name, path=path) is not None
+            or name == "fd" and shutil.which("fdfind", path=path) is not None)
+
+
 def prepare(root: Path, *, include_browser: bool = True) -> None:
     activate(root)
     for name, package in packages(root).items():
         if name == "chrome" and not include_browser:
             continue
-        if name == "chrome" or package.get("format") in {"binary", "binary-archive"}:
-            executable = tool_directory(root, name) / package["bin"] / package["executable"]
-            ready = executable.is_file()
-            if ready and package.get("format") in {"binary", "binary-archive"}:
-                with executable.open("rb") as stream:
-                    ready = hashlib.file_digest(stream, "sha256").hexdigest() == package.get("executable_sha256", package["sha256"])
-        elif name == "node":
-            ready = supported_node() and shutil.which("npm.cmd" if os.name == "nt" else "npm")
-        else:
-            ready = shutil.which(name) or name == "fd" and shutil.which("fdfind")
-        if not ready:
+        if not package_ready(root, name, package):
             install_package(root, name, package)
             activate(root)
         if name == "chrome" and platform.system() == "Darwin":

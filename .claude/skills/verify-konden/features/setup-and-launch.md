@@ -2,7 +2,7 @@
 
 从源码准备环境、初始化个人目录与模型、日常启动与开发模式启动。来源：`scripts/setup.sh`、`setup.ps1`、`setup.py`、`scripts/runtime_tools.py`、`runtime_tools.json`、`konden/initialize.py`、`scripts/dev.sh`、`dev.ps1`、`scripts/start.sh`、`start.ps1`、`scripts/launch.py`，文档 `docs/运行指南.md`、`docs/开发指南.md`。
 
-需求依据：[运行环境、日常启动与更新](../../../../docs/运行指南.md#运行环境)、[安装与执行内核分开](../../../../docs/架构/总览.md#设计原则)、[内置能力准备](../../../../docs/架构/能力/工具与能力.md#mcp-的加载与恢复)。准备安装依赖，日常启动只复用；不覆盖项目环境或既有配置。
+需求依据：[运行环境、日常启动与更新](../../../../docs/运行指南.md#运行环境)、[安装与执行内核分开](../../../../docs/架构/总览.md#设计原则)、[内置能力准备](../../../../docs/架构/能力/工具与能力.md#mcp-的加载与恢复)。启动入口先核对准备输入和关键产物，按需准备后进入应用；不覆盖项目环境或既有配置。
 
 ## Sub-features
 
@@ -11,7 +11,7 @@
   - `[2/4] 安装 Python 依赖`、`[3/4] 安装浏览器能力与前端依赖并构建网页`（`scripts/browser` 与 `web` 分别 `npm ci`，再 build 网页）、`[4/4] 初始化配置`（`python -m konden.initialize`，带 `--configure` 时进向导）。
   - 成功末行 `运行环境准备完成。使用 scripts/start.ps1 或 scripts/start.sh 启动，在网页侧栏配置模型。`；子命令失败打印 `准备未完成（命令退出码 N）。请处理上方错误后重新执行。`；下载、校验或文件操作错误打印 `准备未完成：<具体原因>` 并退出 1。`setup.sh` 接受 Linux/macOS，其他系统打印 `Use setup.sh on Linux/macOS or setup.ps1 on Windows.` 退出 1。
 - `setup-flags`：`setup.py` 只有 `--configure`（安装后在终端配模型；默认在网页配）与 `--check`。`--check` 先把 `.tools/runtime/` 下已有工具加到本进程 PATH 前面，再查 Git/rg/fd/Node/npm，Node 须 22.x（≥22.13）或 24.x；不通过时打印 `系统依赖未就绪：` 加各项（如 `Node.js 版本不支持；请使用 22.x（至少 22.13）或 24.x，或重新运行准备命令自动安装。`）退出 1，通过时打印 `系统依赖检查通过。`。
-- `start`：`sh scripts/start.sh` → `scripts.launch` → `web_chat.py`。
+- `start`：`sh scripts/start.sh` → `scripts.launch` → 校验准备输入与关键产物，必要时执行 `scripts.setup` → `web_chat.py`。准备成功才记录输入摘要，失败停止启动；内置 Skill 从仓库目录发现，不复制到用户扩展登记。
 - `initialize`：`python -m konden.initialize --configure`（交互添加/修改默认模型）、`--if-needed`（缺默认模型或连接时进入向导）；两者互斥。
 - `dev`：`sh scripts/dev.sh` → `scripts.launch --dev` → `web_chat.py --dev`。前端开发页面为 `http://localhost:5173`；Linux/macOS 保留 Python 热重载，Windows 只启用前端热更新，并提示修改 Python 后重启命令，以保留后端的异步子进程能力。
 
@@ -39,12 +39,15 @@
   - (d) 非交互终端（stdin/stdout 不是 TTY）跑 `--configure` → argparse 错误 `请在交互终端运行项目 Python -m konden.initialize --configure，或编辑上面的配置文件。` 退出 2；`--if-needed` 未配置但非 TTY 时只打印同一句、退出 0。
 - **start / dev**：
   - (b) Windows 从 `scripts/dev.ps1` 启动，出现前端自动更新与 Python 修改需重启的提示；已有未手动改名的外部会话能读取标题，`GET /api/external-sessions` 重复请求均返回 200，不抛出 `NotImplementedError`。重启开发命令后仍正常。通过开发启动实际选用的 Uvicorn 配置启动异步子进程，能读取输出并正常退出，回归入口为 `tests/scripts/test_dev_process.py::test_dev_server_event_loop_supports_async_subprocesses`。
-  - (d) 缺 `konden-env`：`start.sh` 打印 `Run sh scripts/setup.sh first to prepare konden.`，`dev.sh`（还检查 `web/node_modules/vite/bin/vite.js`）打印 `Run sh scripts/setup.sh first to prepare the project environment.`，都退出 1。Windows 的 `start.ps1` / `dev.ps1` 抛出 `Run scripts\setup.ps1 first to prepare konden.` / `Run scripts\setup.ps1 first to prepare the project environment.`。
-  - (d) 有 venv 但缺 `web/dist/index.html`（`--dev` 时缺 `web/node_modules/vite/bin/vite.js`）→ `scripts/launch.py` 退出并打印 `网页尚未准备好，请先运行 scripts/setup.ps1 或 scripts/setup.sh。`。
+  - (d) 缺 `konden-env`：`start.sh` 打印 `Run sh scripts/setup.sh first to prepare konden.`，`dev.sh` 打印 `Run sh scripts/setup.sh first to prepare the project environment.`，都退出 1。Windows 的 `start.ps1` / `dev.ps1` 抛出 `Run scripts\setup.ps1 first to prepare konden.` / `Run scripts\setup.ps1 first to prepare the project environment.`。
+  - (d) 已有 venv，但缺成功准备摘要、网页、内置 MCP 的 npm 入口或运行程序，或锁文件、工具清单、网页源码变化 → 打印 `检测到运行依赖或网页需要更新，正在准备；完成后继续启动。`，自动准备后以原参数启动。再次运行不重复安装；准备失败保留退出码并不启动网页服务，重新启动可重试。
+  - (d) Python 主次版本与 `.python-version` 不一致时，提示所需版本与重新运行准备脚本，不带着不兼容解释器进入应用。`--help` 不触发安装。
 
-- **准备与启动分工**：默认 setup 在空 home 完成四步而不等待模型向导，只有显式配置选项才进入向导；AnyMD 与 Chrome、OfficeCLI 一样按固定版本及校验准备。正式 start 入口复用依赖，不安装、不改系统 PATH、锁文件或既有配置；Doctor 和无模型首页分别留证，已有运行环境检查通过不等于完成全新安装验证。
+- **准备与启动分工**：默认 setup 在空 home 完成四步而不等待模型向导，只有显式配置选项才进入向导；AnyMD 与 Chrome、OfficeCLI 一样按固定版本及校验准备。正式 start 入口按需调用准备流程，应用和执行内核不承担安装；不改系统 PATH、锁文件或既有配置。Doctor 和无模型首页分别留证，已有运行环境检查通过不等于完成全新安装验证。
 
 ## Gotchas
+
+- 2026-11-14 启动更新增量（`origin/main@3ff978f4` 加本任务修改，Windows 隔离 home / 端口）：旧安装无准备摘要时自动完成准备并启动；移走浏览器 MCP 入口后自动修复，已有配置逐字节保留；再次启动不安装，准备摘要与时间不变。Doctor、首页、6 个内置 Skill 与四项内置 MCP 的页面连接检测通过，浏览器真实打开页面、Office 文档编辑预览及 PDF 渲染进程用例共 4 项通过。统一 Python 1081 项通过、7 项平台跳过，启动冒烟 11 项通过，包含新增依赖初始化与启动进程保持前台的回归。默认 Windows 长临时路径导致的附件测试失败保留原始结果，改用短 TEMP/TMP 后完整统一入口通过。未验证 Linux/macOS、交互模型配置或真实模型回合；证据留在任务 worktree 的 `.tools/verification/start-readiness/evidence/`。
 
 - 2026-11-12 Windows 开发启动增量（基线 `codex/chat-seam-scroll@72ffbc4d`）：开发配置的真实异步子进程回归先复现 `NotImplementedError`，修复后通过；Windows 停用后端自动重载并保留 Vite，启动明确提示 Python 修改需重启。隔离 home、合成外部会话与本地 stdio 标题服务，真实 `dev.ps1` 启动后外部会话列表连续 10 次返回 200；重启开发后端后 Windows Chrome 打开及刷新外部会话、标题读取通过。`python scripts/ci.py python smoke` 通过（1054 项 Python 通过、7 项跳过，10 项进程冒烟通过）。未调用真实 Codex CLI、自动接续或模型，未重跑 Linux/macOS 开发模式；证据在任务 worktree 的 `.tools/verification/windows-dev-loop/evidence/`。
 

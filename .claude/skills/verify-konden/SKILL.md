@@ -39,11 +39,10 @@ git -C "$SCRATCH_WORKSPACE" -c user.name=verify -c user.email=verify@example.inv
 
 `KONDEN_HOME` and `SCRATCH_WORKSPACE` are siblings. The personal directory must not sit inside the workspace directory.
 
-Install once if `./konden-env/bin/python` or `web/dist/index.html` is missing. Re-run setup after updates that change browser dependencies. `sh scripts/setup.sh` (Linux x64 and macOS x64/Apple Silicon; network required) downloads the project Python into `konden-env`, then runs `scripts/setup.py` in four steps: it prepares pinned application tools, including OfficeCLI, and a private Chrome for Testing under `.tools/runtime/`, installs Python deps, runs `npm ci` in `scripts/browser/` and `web/` and builds the web bundle, and initializes whichever personal directory `KONDEN_HOME` points at. Existing `config.json` and `connections.json` there are left alone. `setup.py --check` checks system command prerequisites and rejects Node outside 22.x (≥22.13) or 24.x; it does not prove the browser MCP dependencies are installed. If only the web bundle is stale, rebuilding it alone is enough:
+Install once if `./konden-env/bin/python` is missing. Later `scripts/start.sh` / `start.ps1` checks preparation inputs and installed entrypoints, automatically prepares changed or missing dependencies and UI output, then starts the app. A failed preparation stops startup; unchanged prepared installs do not reinstall. `sh scripts/setup.sh` (Linux x64 and macOS x64/Apple Silicon; network required) downloads the project Python into `konden-env`, then runs `scripts/setup.py` in four steps: it prepares pinned application tools, including OfficeCLI, and a private Chrome for Testing under `.tools/runtime/`, installs Python deps, runs `npm ci` in `scripts/browser/` and `web/` and builds the web bundle, and initializes whichever personal directory `KONDEN_HOME` points at. Existing `config.json` and `connections.json` there are left alone. `setup.py --check` checks system command prerequisites and rejects Node outside 22.x (≥22.13) or 24.x; it does not prove the browser MCP dependencies are installed. To exercise preparation and startup, use the start wrapper before the direct `web_chat.py` command below. For a full manual preparation:
 
 ```sh
 sh scripts/setup.sh
-( cd web && npm ci && npm run build )
 ```
 
 Pick another `PORT` if `8876` is already listening. Then start the server in its own tmux session and record the process id. `exec` keeps that id on `web_chat.py`.
