@@ -1079,9 +1079,6 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .sidebar-search input { font-size: 12px; border-radius: 6px; border-color: var(--konden-border); background: var(--konden-canvas); }
 .sidebar-search input::placeholder, .composer textarea::placeholder { color: var(--konden-placeholder); opacity: 1; }
 .sidebar-search kbd { padding: 1px 3px; border: 1px solid var(--konden-border); border-radius: 3px; font: inherit; font-size: 10px; color: var(--mantine-color-dimmed); }
-.sidebar-filter { background: var(--konden-hover); border-radius: 6px; padding: 3px; }
-.sidebar-filter .mantine-SegmentedControl-indicator { border-radius: 4px; }
-.sidebar-filter-option { display: flex; align-items: center; justify-content: center; height: 22px; }
 .sidebar-footer .settings-trigger, .sidebar-footer .color-scheme-trigger, .sidebar-footer .capabilities-trigger { color: var(--mantine-color-dimmed); background: transparent; border: 0; width: 32px; height: 32px; border-radius: 6px; }
 .sidebar-footer .capabilities-trigger[aria-current="page"] { background: var(--konden-tile); color: var(--mantine-color-text); }
 .connection-status { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 24px; height: 32px; color: var(--mantine-color-dimmed); }

@@ -1,5 +1,5 @@
-import { ActionIcon, AppShell, Group, ScrollArea, SegmentedControl, Stack, Text, TextInput, Tooltip, VisuallyHidden } from "@mantine/core";
-import { IconMessageCircle, IconMessages, IconPlugConnected, IconPlugConnectedX, IconPlus, IconSearch, IconUsersGroup, IconX } from "@tabler/icons-react";
+import { ActionIcon, AppShell, Group, ScrollArea, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { IconMessages, IconPlugConnected, IconPlugConnectedX, IconPlus, IconSearch, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 import { useGetAgentsQuery, useGetGroupsQuery, useGetInboxQuery, useGetWorkspacesQuery } from "../../api/kondenApi";
@@ -25,7 +25,6 @@ export function AgentSidebar({ onNavigate }: { onNavigate: () => void }) {
   const [search, setSearch] = useState("");
   const [searchOpened, setSearchOpened] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [filter, setFilter] = useState("all");
   const searchInput = useRef<HTMLInputElement>(null);
   const searchTrigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -61,14 +60,8 @@ export function AgentSidebar({ onNavigate }: { onNavigate: () => void }) {
       {searchOpened ? <TextInput ref={searchInput} className="sidebar-search" aria-label="搜索对话" placeholder="搜索对话" value={search} mt={12} size="sm" leftSection={<IconSearch size={14} />} rightSection={search === "" ? <kbd>Ctrl K</kbd> : <ActionIcon aria-label="清除搜索" size="xs" onClick={() => { setSearch(""); searchInput.current?.focus(); }}><IconX size={12} /></ActionIcon>} rightSectionWidth={48} onChange={(event) => setSearch(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") closeSearch(); }} /> : null}
     </AppShell.Section>
     <AppShell.Section grow className="session-section">
-      <SegmentedControl className="sidebar-filter" aria-label="对话类型" fullWidth size="xs" mb={10} value={filter} onChange={setFilter} data={[
-        { value: "all", label: <Tooltip label="全部"><span className="sidebar-filter-option"><IconMessages aria-hidden="true" size={17} /><VisuallyHidden>全部</VisuallyHidden></span></Tooltip> },
-        { value: "groups", label: <Tooltip label="群聊"><span className="sidebar-filter-option"><IconUsersGroup aria-hidden="true" size={17} /><VisuallyHidden>群聊</VisuallyHidden></span></Tooltip> },
-        { value: "bots", label: <Tooltip label="Bot"><span className="sidebar-filter-option"><IconMessageCircle aria-hidden="true" size={17} /><VisuallyHidden>Bot</VisuallyHidden></span></Tooltip> },
-        { value: "external", label: <Tooltip label="外部会话"><span className="sidebar-filter-option"><IconPlugConnected aria-hidden="true" size={17} /><VisuallyHidden>外部会话</VisuallyHidden></span></Tooltip> },
-      ]} />
-      <ScrollArea className="session-scroll" type="hover"><BotRoster agents={agents.filter((agent) => (filter === "all" || filter === "bots") && agent.name.toLocaleLowerCase().includes(query))} chats={chats.filter((chat) => (filter === "all" || filter === "groups") && chat.name.toLocaleLowerCase().includes(query))} attentionSessionIds={new Set(inbox.map((item) => item.session_id))} sessionId={sessionId} groupId={groupId} searching={query !== "" || filter !== "all"} onOpen={open} />
-        {filter === "all" || filter === "external" ? <ExternalRoster query={query} onOpen={open} /> : null}
+      <ScrollArea className="session-scroll" type="hover"><BotRoster agents={agents.filter((agent) => agent.name.toLocaleLowerCase().includes(query))} chats={chats.filter((chat) => chat.name.toLocaleLowerCase().includes(query))} attentionSessionIds={new Set(inbox.map((item) => item.session_id))} sessionId={sessionId} groupId={groupId} searching={query !== ""} onOpen={open} />
+        <ExternalRoster query={query} onOpen={open} />
       </ScrollArea>
     </AppShell.Section>
     <AppShell.Section className="sidebar-footer"><Group gap={4} wrap="wrap">
