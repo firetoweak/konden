@@ -217,13 +217,13 @@ it("Bot 和群聊可混放分组，折叠与归属刷新保留，删除分组不
   queries.agents = [agent({ session_id: "ada", name: "Ada", workspace_id: "organize" })];
   queries.groups = [{ group_id: "chat", name: "开发群", members: ["Ada", "Lin"] }];
   renderSidebar("/sessions/ada");
-  fireEvent.click(screen.getByRole("button", { name: "新建分组" }));
+  fireEvent.contextMenu(screen.getByRole("button", { name: "Ada", exact: true }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "新建分组", exact: true }));
   fireEvent.change(screen.getByLabelText("分组名称"), { target: { value: "研发" } });
   fireEvent.click(screen.getByRole("button", { name: "创建", exact: true }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-  fireEvent.contextMenu(screen.getByRole("button", { name: "Ada", exact: true }));
-  fireEvent.click(await screen.findByRole("menuitem", { name: "研发", exact: true }));
+  expect(within(screen.getByRole("region", { name: "名册的分组 研发" })).getByRole("button", { name: "Ada", exact: true })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "群聊 开发群 操作" }));
   fireEvent.click(await screen.findByRole("menuitem", { name: "研发", exact: true }));
   const section = screen.getByRole("region", { name: "名册的分组 研发" });

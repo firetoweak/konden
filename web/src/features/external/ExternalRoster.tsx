@@ -34,8 +34,8 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
       if (identity === removing.identity) onOpen("/");
       setRemoving(null);
     }} />}
-    <Group className="roster-section-header" justify="space-between">
-      <Text fz={11}>外部会话</Text><span className="roster-section-count">{sessions.length - revoked.length}</span>
+    <Group className="roster-section-header">
+      <Text fz={11}>外部会话</Text>
     </Group>
     {notice}
     <Stack gap={3}>{entries.map((session) => <div key={session.identity}

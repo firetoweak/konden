@@ -106,7 +106,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
             ? { ...current, ungroupedCollapsed: !current.ungroupedCollapsed }
             : { ...current, sections: current.sections.map((item) => item.id === section.id ? { ...item, collapsed: !item.collapsed } : item) })}>
           {collapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}
-          <Text fz={11} truncate>{name}</Text><span className="roster-section-count" aria-hidden="true">{count}</span>
+          <Text fz={11} truncate>{name}</Text>
         </UnstyledButton>
         {section === null ? null : <Menu position="bottom-end" withinPortal>
           <Menu.Target><ActionIcon className="roster-section-menu" aria-label={`${name} 分组操作`} variant="subtle" color="gray" size="xs"><IconDots size={13} /></ActionIcon></Menu.Target>
@@ -142,11 +142,6 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
       if (removing.kind === "agent" ? removing.id === sessionId : removing.id === groupId) onOpen("/");
       setRemoving(null);
     }} />}
-    <Group className="roster-sections-toolbar" justify="space-between" wrap="nowrap">
-      <Text c="dimmed" fz={10}>分组</Text>
-      <Tooltip label="新建分组" openDelay={400}><ActionIcon aria-label="新建分组" size="xs" variant="subtle" color="gray"
-        onClick={() => setEditing({ id: null, name: "" })}><IconFolderPlus size={13} /></ActionIcon></Tooltip>
-    </Group>
     {organization.sections.map(renderSection)}
     {renderSection(null)}
     {editing === null ? null : <SectionNameModal initialName={editing.name} existing={organization.sections.filter((section) => section.id !== editing.id).map((section) => section.name)}
