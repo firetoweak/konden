@@ -1,5 +1,5 @@
-import { ActionIcon, Alert, Button, Group, Menu, Modal, Stack, Text, UnstyledButton } from "@mantine/core";
-import { IconDots, IconPlugConnected, IconTrash } from "@tabler/icons-react";
+import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { IconArchive, IconDots, IconPlugConnected, IconRefresh, IconSearchOff, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useMatch } from "react-router-dom";
 
@@ -8,7 +8,7 @@ import type { ExternalSessionSummary } from "../../api/contracts";
 import { useAppSelector } from "../../app/hooks";
 import { sessionStatus } from "./sessionStatus";
 
-export function ExternalRoster({ query, onOpen }: { query: string; onOpen: (path: string) => void }) {
+export function ExternalRoster({ query, onOpen, compact = false }: { query: string; onOpen: (path: string) => void; compact?: boolean }) {
   const identity = useMatch("/external/:identity")?.params.identity;
   const { data: sessions = [], isLoading, error, refetch } = useGetExternalSessionsQuery();
   const [showRevoked, setShowRevoked] = useState(false);
@@ -17,6 +17,18 @@ export function ExternalRoster({ query, onOpen }: { query: string; onOpen: (path
   const revoked = sessions.filter((session) => !session.active);
   const visible = sessions.filter((session) => session.name.toLocaleLowerCase().includes(query));
   const entries = visible.filter((session) => session.active || showRevoked || query !== "" || session.identity === identity);
+  let notice = null;
+  if (error !== undefined) {
+    notice = compact
+      ? <Tooltip label="无法读取外部会话，点击重试"><ActionIcon aria-label="重试读取外部会话" variant="subtle" color="red" onClick={() => void refetch()}><IconRefresh size={18} /></ActionIcon></Tooltip>
+      : <Text c="dimmed" size="xs" px={10}>无法读取外部会话。<Button size="compact-xs" variant="subtle" onClick={() => void refetch()}>重试</Button></Text>;
+  } else if (isLoading) {
+    notice = compact ? <span className="sidebar-compact-notice" role="status" aria-label="正在读取外部会话"><Loader size={16} /></span>
+      : <Text c="dimmed" size="xs" px={10}>正在读取外部会话…</Text>;
+  } else if (query !== "" && visible.length === 0) {
+    notice = compact ? <Tooltip label="没有匹配的外部会话"><span className="sidebar-compact-notice" role="status" aria-label="没有匹配的外部会话"><IconSearchOff size={18} /></span></Tooltip>
+      : <Text c="dimmed" size="xs" px={10} py={8}>没有匹配的外部会话。</Text>;
+  }
   return <section className="roster-section external-roster" aria-label="外部会话">
     {removing === null ? null : <RemoveExternalSessionModal target={removing} onClose={() => setRemoving(null)} onRemoved={() => {
       if (identity === removing.identity) onOpen("/");
@@ -25,9 +37,7 @@ export function ExternalRoster({ query, onOpen }: { query: string; onOpen: (path
     <Group className="roster-section-header" justify="space-between">
       <Text fz={11}>外部会话</Text><span className="roster-section-count">{sessions.length - revoked.length}</span>
     </Group>
-    {error !== undefined ? <Text c="dimmed" size="xs" px={10}>无法读取外部会话。<Button size="compact-xs" variant="subtle" onClick={() => void refetch()}>重试</Button></Text>
-      : isLoading ? <Text c="dimmed" size="xs" px={10}>正在读取外部会话…</Text>
-      : query !== "" && visible.length === 0 ? <Text c="dimmed" size="xs" px={10} py={8}>没有匹配的外部会话。</Text> : null}
+    {notice}
     <Stack gap={3}>{entries.map((session) => <div key={session.identity}
       className={identity === session.identity ? "session-row is-active" : "session-row"}
       onContextMenu={(event) => { event.preventDefault(); setMenuIdentity(session.identity); }}>
@@ -44,14 +54,16 @@ export function ExternalRoster({ query, onOpen }: { query: string; onOpen: (path
           </Stack>
         </Group>
       </UnstyledButton>
-      <Menu opened={menuIdentity === session.identity} onChange={(opened) => setMenuIdentity(opened ? session.identity : null)} position="bottom-end" withinPortal>
-        <Menu.Target><ActionIcon className="roster-entry-menu" aria-label={`${session.name} 操作`} color="gray" variant="subtle" size="xs"><IconDots size={13} /></ActionIcon></Menu.Target>
+      <Menu opened={menuIdentity === session.identity} onChange={(opened) => setMenuIdentity(opened ? session.identity : null)} position={compact ? "right-start" : "bottom-end"} withinPortal>
+        <Menu.Target>{compact ? <span className="roster-menu-anchor" aria-hidden="true" /> : <ActionIcon className="roster-entry-menu" aria-label={`${session.name} 操作`} color="gray" variant="subtle" size="xs"><IconDots size={13} /></ActionIcon>}</Menu.Target>
         <Menu.Dropdown><Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => setRemoving(session)}>删除外部会话</Menu.Item></Menu.Dropdown>
       </Menu>
     </div>)}</Stack>
-    {revoked.length === 0 || query !== "" ? null : <Button variant="subtle" color="gray" size="compact-xs"
+    {revoked.length === 0 || query !== "" ? null : <Button className="external-history-toggle" variant="subtle" color="gray" size="compact-xs"
+      aria-label={showRevoked ? "收起已撤销会话" : `已撤销会话（${revoked.length}）`}
+      title={showRevoked ? "收起已撤销会话" : `已撤销会话（${revoked.length}）`}
       aria-expanded={showRevoked} onClick={() => setShowRevoked(!showRevoked)}>
-      {showRevoked ? "收起已撤销会话" : `已撤销会话（${revoked.length}）`}
+      {compact ? <IconArchive size={16} /> : showRevoked ? "收起已撤销会话" : `已撤销会话（${revoked.length}）`}
     </Button>}
   </section>;
 }

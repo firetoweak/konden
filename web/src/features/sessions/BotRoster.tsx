@@ -32,7 +32,7 @@ function deserializeOrganization(value: string | undefined): Organization {
 }
 
 /** 分组只整理当前浏览器的名册，不改变身份或群成员。 */
-export function BotRoster({ agents, chats, attentionSessionIds, sessionId, groupId, searching, onOpen }: {
+export function BotRoster({ agents, chats, attentionSessionIds, sessionId, groupId, searching, onOpen, compact = false }: {
   agents: AgentRosterEntry[];
   chats: GroupSummary[];
   attentionSessionIds: ReadonlySet<string>;
@@ -40,6 +40,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   groupId?: string;
   searching: boolean;
   onOpen: (path: string) => void;
+  compact?: boolean;
 }) {
   const [organization, setOrganization] = useLocalStorage<Organization>({
     key: "konden.sidebarGroups",
@@ -84,7 +85,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   }
 
   function renderRow(entry: string, name: string, active: boolean, path: string, children: ReactNode) {
-    return <RosterRow key={entry} name={name} active={active} onOpen={() => onOpen(path)}
+    return <RosterRow key={entry} name={name} compact={compact} active={active} onOpen={() => onOpen(path)}
       sections={organization.sections} sectionId={assignedSection(entry)} onMove={(id) => move(entry, id)}
       onCreate={() => setEditing({ id: null, name: "", entry })}
       removeLabel={entry.startsWith("agent:") ? "删除 Bot" : "解散群聊"}
@@ -97,7 +98,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
     const count = sectionAgents.length + sectionChats.length;
     if (searching && count === 0) return null;
     const name = section?.name ?? "未分组";
-    const collapsed = !searching && (section?.collapsed ?? organization.ungroupedCollapsed);
+    const collapsed = !compact && !searching && (section?.collapsed ?? organization.ungroupedCollapsed);
     return <section key={section?.id ?? "ungrouped"} className="roster-section" aria-label={`名册的分组 ${name}`}>
       <Group className="roster-section-header" gap={2} wrap="nowrap">
         <UnstyledButton className="roster-section-toggle" aria-label={`分组 ${name}`} aria-expanded={!collapsed}
@@ -116,7 +117,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
         </Menu>}
       </Group>
       <Collapse expanded={!collapsed}><Stack gap={3} className="roster-section-entries">
-        {count === 0 && section !== null ? <Text c="dimmed" fz={11} px={10} py={8}>从条目的菜单移入 Bot 或群聊</Text> : null}
+        {count === 0 && section !== null && !compact ? <Text c="dimmed" fz={11} px={10} py={8}>从条目的菜单移入 Bot 或群聊</Text> : null}
         {sectionAgents.map((agent) => renderRow(`agent:${agent.session_id}`, agent.name, agent.session_id === sessionId,
           `/sessions/${encodeURIComponent(agent.session_id)}`, <Tooltip label={agent.name} openDelay={700} position="right">
             <Group gap={10} wrap="nowrap">
@@ -128,7 +129,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
             </Group>
           </Tooltip>))}
         {sectionChats.map((chat) => renderRow(`chat:${chat.group_id}`, `群聊 ${chat.name}`, chat.group_id === groupId,
-          `/groups/${encodeURIComponent(chat.group_id)}`, <Group gap={10} wrap="nowrap">
+          `/groups/${encodeURIComponent(chat.group_id)}`, <Group gap={10} wrap="nowrap" title={compact ? chat.name : undefined}>
             <span className="agent-avatar agent-avatar-small"><IconUsersGroup size={16} /></span>
             <Stack className="sidebar-agent-identity" gap={2}><Text className="session-title" fz={13} truncate>{chat.name}</Text><Text c="dimmed" fz={11}>群聊 · {chat.members.length} 位 Bot</Text></Stack>
           </Group>))}
@@ -153,17 +154,18 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   </div>;
 }
 
-function RosterRow({ name, active, children, sections, sectionId, onOpen, onMove, onCreate, onRemove, removeLabel }: {
+function RosterRow({ name, active, children, sections, sectionId, onOpen, onMove, onCreate, onRemove, removeLabel, compact }: {
   name: string; active: boolean; children: ReactNode; sections: Section[]; sectionId: string | null;
   onOpen: () => void; onMove: (id: string | null) => void; onCreate: () => void; onRemove: () => void;
   removeLabel: string;
+  compact: boolean;
 }) {
   const [opened, setOpened] = useState(false);
   return <Group className={active ? "session-row is-active" : "session-row"} gap={4} wrap="nowrap"
     onContextMenu={(event) => { event.preventDefault(); setOpened(true); }}>
     <UnstyledButton className="session-row-main" aria-label={name} aria-current={active ? "page" : undefined} onClick={onOpen}>{children}</UnstyledButton>
-    <Menu opened={opened} onChange={setOpened} position="bottom-end" withinPortal>
-      <Menu.Target><ActionIcon className="roster-entry-menu" aria-label={`${name} 操作`} color="gray" variant="subtle" size="xs"><IconDots size={13} /></ActionIcon></Menu.Target>
+    <Menu opened={opened} onChange={setOpened} position={compact ? "right-start" : "bottom-end"} withinPortal>
+      <Menu.Target>{compact ? <span className="roster-menu-anchor" aria-hidden="true" /> : <ActionIcon className="roster-entry-menu" aria-label={`${name} 操作`} color="gray" variant="subtle" size="xs"><IconDots size={13} /></ActionIcon>}</Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>移动到分组</Menu.Label>
         <Menu.Item leftSection={sectionId === null ? <IconCheck size={14} /> : undefined} onClick={() => onMove(null)}>未分组</Menu.Item>

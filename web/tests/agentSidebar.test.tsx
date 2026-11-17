@@ -70,7 +70,7 @@ function CurrentPath() {
   return <Text data-testid="current-path">{useLocation().pathname}</Text>;
 }
 
-function renderSidebar(initialEntry: string) {
+function renderSidebar(initialEntry: string, compact = false) {
   const store = configureStore({ reducer: { runtime: runtimeReducer } });
   store.dispatch(connected("connection"));
   const view = render(
@@ -83,9 +83,9 @@ function renderSidebar(initialEntry: string) {
             <Route path="*" element={null} />
           </Routes>
           <AppShell navbar={{ width: 240, breakpoint: 0 }}>
-            <AppShell.Navbar>
+            <AppShell.Navbar data-compact={compact}>
               <CurrentPath />
-              <AgentSidebar onNavigate={() => {}} />
+              <AgentSidebar compact={compact} onNavigate={() => {}} />
             </AppShell.Navbar>
           </AppShell>
         </MemoryRouter>
@@ -387,4 +387,40 @@ it("侧栏自动放行提交全局设置，返回首页仍显示开关", async (
   expect(queries.setAutoAuthorize).toHaveBeenCalledWith({ connectionId: "connection", enabled: true });
   fireEvent.click(screen.getByRole("button", { name: "所有对话" }));
   expect(screen.getByRole("switch", { name: "自动放行写文件等工具" })).toBeInTheDocument();
+});
+
+it("头像栏展开折叠分组中的图标，搜索与右键可用，恢复宽度后保留分组偏好", async () => {
+  browserStubs();
+  queries.agents = [agent({ session_id: "ada", name: "Ada" }), agent({ session_id: "lin", name: "Lin" })];
+  queries.groups = [{ group_id: "team", name: "开发群", members: ["Ada", "Lin"] }];
+  queries.externalSessions = [{ identity: "1".repeat(32), name: "外部验证", active: true, codex_status: "disabled",
+    created_at: "2026-10-25T01:00:00Z", last_activity_at: "2026-10-25T01:00:00Z", peers: [] }];
+  window.localStorage.setItem("konden.sidebarGroups", JSON.stringify({
+    sections: [{ id: "dev", name: "研发", collapsed: true }], assignments: { "agent:ada": "dev" }, ungroupedCollapsed: true,
+  }));
+  renderSidebar("/", true);
+  expect(screen.getByRole("button", { name: "Ada", exact: true })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Lin", exact: true })).toBeVisible();
+  expect(screen.getByRole("button", { name: "群聊 开发群", exact: true })).toBeVisible();
+  expect(screen.getByRole("button", { name: "外部验证", exact: true })).toBeVisible();
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+  const search = await screen.findByRole("textbox", { name: "搜索对话", exact: true });
+  await waitFor(() => expect(search).toHaveFocus());
+  fireEvent.change(search, { target: { value: "Lin" } });
+  expect(screen.queryByRole("button", { name: "Ada", exact: true })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Lin", exact: true })).toBeVisible();
+  fireEvent.keyDown(search, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: "搜索对话", exact: true })).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "搜索对话", exact: true })).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "Ada", exact: true }));
+  expect(screen.getByTestId("current-path")).toHaveTextContent("/sessions/ada");
+  fireEvent.contextMenu(screen.getByRole("button", { name: "Ada", exact: true }));
+  expect(await screen.findByRole("menuitem", { name: "删除 Bot", exact: true })).toBeVisible();
+  const preferences = JSON.parse(window.localStorage.getItem("konden.sidebarGroups")!);
+  expect(preferences.sections[0].collapsed).toBe(true);
+  expect(preferences.ungroupedCollapsed).toBe(true);
+  cleanup();
+  renderSidebar("/sessions/ada");
+  expect(screen.getByRole("button", { name: "分组 研发", exact: true })).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("button", { name: "分组 未分组", exact: true })).toHaveAttribute("aria-expanded", "false");
 });
