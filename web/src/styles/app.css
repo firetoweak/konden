@@ -273,13 +273,11 @@ body.is-resizing-sidebar {
   padding: 2px 0;
 }
 
-.roster-sections-toolbar { padding: 6px 7px 2px; }
 .roster-section { margin-top: 4px; }
 .roster-section-header { min-height: 28px; padding-inline: 3px; color: var(--mantine-color-dimmed); }
 .roster-section-toggle { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; padding-block: 4px; }
 .roster-section-toggle > p { min-width: 0; }
 .roster-section-toggle > svg { flex-shrink: 0; }
-.roster-section-count { margin-left: 2px; opacity: .75; font-size: 12px; }
 .roster-section-entries { padding-left: 0; }
 .roster-entry-menu, .roster-section-menu { opacity: 0; flex-shrink: 0; }
 .session-row:hover .roster-entry-menu, .session-row:focus-within .roster-entry-menu,
@@ -1090,7 +1088,6 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
 .app-navbar[data-compact="true"] .sidebar-toolbar,
 .app-navbar[data-compact="true"] .sidebar-actions,
 .app-navbar[data-compact="true"] .sidebar-footer-actions { flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; align-items: center; gap: 4px; }
-.app-navbar[data-compact="true"] .roster-sections-toolbar,
 .app-navbar[data-compact="true"] .roster-section-header,
 .app-navbar[data-compact="true"] .sidebar-agent-identity { display: none; }
 .app-navbar[data-compact="true"] .session-row { position: relative; min-height: 48px; padding: 8px 7px; gap: 0; }
