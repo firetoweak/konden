@@ -13,6 +13,7 @@ const queries = vi.hoisted(() => ({
   empty: false,
   modelReady: true,
   createAgent: vi.fn(() => ({ unwrap: () => Promise.resolve({ session_id: "new-agent" }) })),
+  createGroup: vi.fn(() => ({ unwrap: () => Promise.resolve({ group_id: "group-new" }) })),
 }));
 vi.mock("../src/api/kondenApi", () => ({
   useGetWorkspacesQuery: () => ({ isError: queries.failed, data: queries.failed ? undefined : [
@@ -32,7 +33,7 @@ vi.mock("../src/api/kondenApi", () => ({
     config: { model: { default: "openai/gpt", candidates: [] } }, connections_path: "C:/connections.json",
     providers: [{ provider: "openai", configured: queries.modelReady, missing: queries.modelReady ? null : "api_key", local: false }],
   } }),
-  useCreateGroupMutation: () => [vi.fn(), { reset: vi.fn() }],
+  useCreateGroupMutation: () => [queries.createGroup, { isLoading: false, reset: vi.fn() }],
   useCreateAgentMutation: () => [queries.createAgent, { isLoading: false, reset: vi.fn() }],
   useCreateWorkspaceMutation: () => [vi.fn(), { reset: vi.fn() }],
   useSelectWorkspaceDirectoryMutation: () => [vi.fn(), { reset: vi.fn() }],
@@ -44,6 +45,7 @@ beforeEach(() => {
   queries.empty = false;
   queries.modelReady = true;
   queries.createAgent.mockClear();
+  queries.createGroup.mockClear();
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 });
@@ -54,7 +56,8 @@ function renderHome(path = "/") {
   store.dispatch(connected("connection"));
   render(<Provider store={store}><MantineProvider env="test"><MemoryRouter initialEntries={[path]}>
     <Routes><Route path="/" element={<AgentHome />} /><Route path="/workspaces/:workspaceId" element={<AgentHome />} />
-      <Route path="/sessions/:sessionId" element={<p>新 Agent 对话</p>} /></Routes>
+      <Route path="/sessions/:sessionId" element={<p>新 Agent 对话</p>} />
+      <Route path="/groups/:groupId" element={<p>新群聊</p>} /></Routes>
   </MemoryRouter></MantineProvider></Provider>);
 }
 
@@ -73,6 +76,24 @@ it("新建 Bot 默认不关联代码项目，创建后进入对话", async () =>
   fireEvent.click(screen.getByRole("button", { name: "创建", exact: true }));
   await waitFor(() => expect(queries.createAgent).toHaveBeenCalledWith({ connectionId: "connection", path: null, name: "Grace" }));
   expect(await screen.findByText("新 Agent 对话")).toBeInTheDocument();
+});
+
+it("首页仍可创建群聊，成员可选不同项目的 Bot", async () => {
+  renderHome();
+  fireEvent.click(screen.getByRole("button", { name: "新建群聊" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "群名" }), { target: { value: "评审组" } });
+  fireEvent.click(screen.getByRole("combobox", { name: "成员" }));
+  expect(screen.getByRole("option", { name: "Lin" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: "Ada" }));
+  const create = screen.getByRole("button", { name: "创建", exact: true });
+  expect(create).toBeDisabled();
+  fireEvent.click(screen.getByRole("combobox", { name: "成员" }));
+  fireEvent.click(screen.getByRole("option", { name: "Lin" }));
+  fireEvent.click(create);
+  await waitFor(() => expect(queries.createGroup).toHaveBeenCalledWith({
+    connectionId: "connection", name: "评审组", members: ["Ada", "Lin"],
+  }));
+  expect(await screen.findByText("新群聊")).toBeInTheDocument();
 });
 
 it("名册为空时引导先配好模型，再给第一位伙伴起名并进入对话", async () => {

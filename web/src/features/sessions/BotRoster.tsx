@@ -32,7 +32,7 @@ function deserializeOrganization(value: string | undefined): Organization {
 }
 
 /** 分组只整理当前浏览器的名册，不改变身份或群成员。 */
-export function BotRoster({ agents, chats, attentionSessionIds, sessionId, groupId, searching, onOpen, creatingSection = false, onCloseSection }: {
+export function BotRoster({ agents, chats, attentionSessionIds, sessionId, groupId, searching, onOpen, compact = false }: {
   agents: AgentRosterEntry[];
   chats: GroupSummary[];
   attentionSessionIds: ReadonlySet<string>;
@@ -40,8 +40,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   groupId?: string;
   searching: boolean;
   onOpen: (path: string) => void;
-  creatingSection?: boolean;
-  onCloseSection?: () => void;
+  compact?: boolean;
 }) {
   const [organization, setOrganization] = useLocalStorage<Organization>({
     key: "konden.sidebarGroups",
@@ -51,8 +50,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   });
   const [editing, setEditing] = useState<Editing | null>(null);
   const [removing, setRemoving] = useState<RemovalTarget | null>(null);
-  const activeEditing = editing ?? (creatingSection ? { id: null, name: "" } as Editing : null);
-  const closeEditing = () => { setEditing(null); onCloseSection?.(); };
+  const closeEditing = () => setEditing(null);
   const assignedSection = (entry: string) => {
     const id = organization.assignments[entry];
     return organization.sections.some((section) => section.id === id) ? id : null;
@@ -69,12 +67,12 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   }
 
   function save(name: string) {
-    if (activeEditing === null) return;
-    const id = activeEditing.id ?? createClientId();
+    if (editing === null) return;
+    const id = editing.id ?? createClientId();
     setOrganization((current) => ({ ...current,
-      sections: activeEditing.id === null ? [...current.sections, { id, name, collapsed: false }]
+      sections: editing.id === null ? [...current.sections, { id, name, collapsed: false }]
         : current.sections.map((section) => section.id === id ? { ...section, name } : section),
-      assignments: activeEditing.entry === undefined ? current.assignments : { ...current.assignments, [activeEditing.entry]: id },
+      assignments: editing.entry === undefined ? current.assignments : { ...current.assignments, [editing.entry]: id },
     }));
     closeEditing();
   }
@@ -87,7 +85,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   }
 
   function renderRow(entry: string, name: string, active: boolean, path: string, children: ReactNode) {
-    return <RosterRow key={entry} name={name} active={active} onOpen={() => onOpen(path)}
+    return <RosterRow key={entry} name={name} compact={compact} active={active} onOpen={() => onOpen(path)}
       sections={organization.sections} sectionId={assignedSection(entry)} onMove={(id) => move(entry, id)}
       onCreate={() => setEditing({ id: null, name: "", entry })}
       removeLabel={entry.startsWith("agent:") ? "删除 Bot" : "解散群聊"}
@@ -100,7 +98,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
     const count = sectionAgents.length + sectionChats.length;
     if (searching && count === 0) return null;
     const name = section?.name ?? "未分组";
-    const collapsed = !searching && (section?.collapsed ?? organization.ungroupedCollapsed);
+    const collapsed = !compact && !searching && (section?.collapsed ?? organization.ungroupedCollapsed);
     return <section key={section?.id ?? "ungrouped"} className="roster-section" aria-label={`名册的分组 ${name}`}>
       <Group className="roster-section-header" gap={2} wrap="nowrap">
         <UnstyledButton className="roster-section-toggle" aria-label={`分组 ${name}`} aria-expanded={!collapsed}
@@ -119,7 +117,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
         </Menu>}
       </Group>
       <Collapse expanded={!collapsed}><Stack gap={3} className="roster-section-entries">
-        {count === 0 ? <Text c="dimmed" fz={11} px={10} py={8}>{section === null ? "暂无 Bot 或群聊" : "从条目的菜单移入 Bot 或群聊"}</Text> : null}
+        {count === 0 && section !== null && !compact ? <Text c="dimmed" fz={11} px={10} py={8}>从条目的菜单移入 Bot 或群聊</Text> : null}
         {sectionAgents.map((agent) => renderRow(`agent:${agent.session_id}`, agent.name, agent.session_id === sessionId,
           `/sessions/${encodeURIComponent(agent.session_id)}`, <Tooltip label={agent.name} openDelay={700} position="right">
             <Group gap={10} wrap="nowrap">
@@ -131,7 +129,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
             </Group>
           </Tooltip>))}
         {sectionChats.map((chat) => renderRow(`chat:${chat.group_id}`, `群聊 ${chat.name}`, chat.group_id === groupId,
-          `/groups/${encodeURIComponent(chat.group_id)}`, <Group gap={10} wrap="nowrap">
+          `/groups/${encodeURIComponent(chat.group_id)}`, <Group gap={10} wrap="nowrap" title={compact ? chat.name : undefined}>
             <span className="agent-avatar agent-avatar-small"><IconUsersGroup size={16} /></span>
             <Stack className="sidebar-agent-identity" gap={2}><Text className="session-title" fz={13} truncate>{chat.name}</Text><Text c="dimmed" fz={11}>群聊 · {chat.members.length} 位 Bot</Text></Stack>
           </Group>))}
@@ -144,29 +142,30 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
       if (removing.kind === "agent" ? removing.id === sessionId : removing.id === groupId) onOpen("/");
       setRemoving(null);
     }} />}
-    {onCloseSection === undefined ? <Group className="roster-sections-toolbar" justify="space-between" wrap="nowrap">
+    <Group className="roster-sections-toolbar" justify="space-between" wrap="nowrap">
       <Text c="dimmed" fz={10}>分组</Text>
       <Tooltip label="新建分组" openDelay={400}><ActionIcon aria-label="新建分组" size="xs" variant="subtle" color="gray"
         onClick={() => setEditing({ id: null, name: "" })}><IconFolderPlus size={13} /></ActionIcon></Tooltip>
-    </Group> : null}
+    </Group>
     {organization.sections.map(renderSection)}
     {renderSection(null)}
-    {activeEditing === null ? null : <SectionNameModal initialName={activeEditing.name} existing={organization.sections.filter((section) => section.id !== activeEditing.id).map((section) => section.name)}
-      creating={activeEditing.id === null} onSave={save} onClose={closeEditing} />}
+    {editing === null ? null : <SectionNameModal initialName={editing.name} existing={organization.sections.filter((section) => section.id !== editing.id).map((section) => section.name)}
+      creating={editing.id === null} onSave={save} onClose={closeEditing} />}
   </div>;
 }
 
-function RosterRow({ name, active, children, sections, sectionId, onOpen, onMove, onCreate, onRemove, removeLabel }: {
+function RosterRow({ name, active, children, sections, sectionId, onOpen, onMove, onCreate, onRemove, removeLabel, compact }: {
   name: string; active: boolean; children: ReactNode; sections: Section[]; sectionId: string | null;
   onOpen: () => void; onMove: (id: string | null) => void; onCreate: () => void; onRemove: () => void;
   removeLabel: string;
+  compact: boolean;
 }) {
   const [opened, setOpened] = useState(false);
   return <Group className={active ? "session-row is-active" : "session-row"} gap={4} wrap="nowrap"
     onContextMenu={(event) => { event.preventDefault(); setOpened(true); }}>
     <UnstyledButton className="session-row-main" aria-label={name} aria-current={active ? "page" : undefined} onClick={onOpen}>{children}</UnstyledButton>
-    <Menu opened={opened} onChange={setOpened} position="bottom-end" withinPortal>
-      <Menu.Target><ActionIcon className="roster-entry-menu" aria-label={`${name} 操作`} color="gray" variant="subtle" size="xs"><IconDots size={13} /></ActionIcon></Menu.Target>
+    <Menu opened={opened} onChange={setOpened} position={compact ? "right-start" : "bottom-end"} withinPortal>
+      <Menu.Target>{compact ? <span className="roster-menu-anchor" aria-hidden="true" /> : <ActionIcon className="roster-entry-menu" aria-label={`${name} 操作`} color="gray" variant="subtle" size="xs"><IconDots size={13} /></ActionIcon>}</Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>移动到分组</Menu.Label>
         <Menu.Item leftSection={sectionId === null ? <IconCheck size={14} /> : undefined} onClick={() => onMove(null)}>未分组</Menu.Item>

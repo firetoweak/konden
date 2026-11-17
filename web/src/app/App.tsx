@@ -1,7 +1,7 @@
 import { ActionIcon, AppShell } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { IconMenu2 } from "@tabler/icons-react";
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { Route, Routes } from "react-router-dom";
 
 import { useAppDispatch } from "./hooks";
@@ -10,6 +10,7 @@ import { BotAvatars, BotIdentities } from "../features/conversation/ChatPresenta
 import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
+  COMPACT_SIDEBAR_THRESHOLD,
   clampSidebarWidth,
   readSidebarWidth,
   writeSidebarWidth,
@@ -30,6 +31,7 @@ export function App() {
   const [navigationOpened, { close: closeNavigation, toggle: toggleNavigation }] =
     useDisclosure(false);
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const compactSidebar = useMediaQuery("(min-width: 48em)") && sidebarWidth < COMPACT_SIDEBAR_THRESHOLD;
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const sidebarWidthRef = useRef(sidebarWidth);
   const resizingSidebarRef = useRef(false);
@@ -70,6 +72,17 @@ export function App() {
     writeSidebarWidth(sidebarWidthRef.current);
   }
 
+  function resizeSidebarWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    const width = event.key === "Home" ? MIN_SIDEBAR_WIDTH : event.key === "End" ? MAX_SIDEBAR_WIDTH
+      : event.key === "ArrowLeft" ? sidebarWidth - 16 : event.key === "ArrowRight" ? sidebarWidth + 16 : null;
+    if (width === null) return;
+    event.preventDefault();
+    const next = clampSidebarWidth(width);
+    sidebarWidthRef.current = next;
+    setSidebarWidth(next);
+    writeSidebarWidth(next);
+  }
+
   return (
     <BotIdentities value={identities}>
     <BotAvatars value={avatars}>
@@ -83,8 +96,8 @@ export function App() {
       padding={0}
       transitionDuration={resizingSidebar ? 0 : 180}
     >
-      <AppShell.Navbar className="app-navbar" p={0}>
-        <AgentSidebar onNavigate={closeNavigation} />
+      <AppShell.Navbar className="app-navbar" data-compact={compactSidebar} p={0}>
+        <AgentSidebar compact={compactSidebar} onNavigate={closeNavigation} />
         <div
           aria-label="调节侧栏宽度"
           aria-orientation="vertical"
@@ -98,6 +111,8 @@ export function App() {
           onPointerDown={beginSidebarResize}
           onPointerMove={moveSidebarResize}
           onPointerUp={endSidebarResize}
+          onKeyDown={resizeSidebarWithKeyboard}
+          tabIndex={0}
           role="separator"
         />
       </AppShell.Navbar>

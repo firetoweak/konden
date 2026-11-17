@@ -1,6 +1,7 @@
 export const DEFAULT_SIDEBAR_WIDTH = 282;
-export const MIN_SIDEBAR_WIDTH = 220;
+export const MIN_SIDEBAR_WIDTH = 64;
 export const MAX_SIDEBAR_WIDTH = 520;
+export const COMPACT_SIDEBAR_THRESHOLD = 180;
 
 const STORAGE_KEY = "konden.sidebarWidth";
 

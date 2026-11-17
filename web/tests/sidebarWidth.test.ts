@@ -15,7 +15,9 @@ describe("sidebarWidth", () => {
   });
 
   it("把宽度夹在可拖区间里", () => {
-    expect(clampSidebarWidth(80)).toBe(MIN_SIDEBAR_WIDTH);
+    expect(clampSidebarWidth(20)).toBe(MIN_SIDEBAR_WIDTH);
+    expect(clampSidebarWidth(64)).toBe(64);
+    expect(clampSidebarWidth(80)).toBe(80);
     expect(clampSidebarWidth(900)).toBe(MAX_SIDEBAR_WIDTH);
     expect(clampSidebarWidth(320)).toBe(320);
   });
@@ -24,6 +26,8 @@ describe("sidebarWidth", () => {
     expect(readSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH);
     writeSidebarWidth(360);
     expect(readSidebarWidth()).toBe(360);
+    writeSidebarWidth(64);
+    expect(readSidebarWidth()).toBe(64);
 
     window.localStorage.setItem("konden.sidebarWidth", "不是数字");
     expect(readSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH);
