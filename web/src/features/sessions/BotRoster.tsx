@@ -116,7 +116,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
         </Menu>}
       </Group>
       <Collapse expanded={!collapsed}><Stack gap={3} className="roster-section-entries">
-        {count === 0 ? <Text c="dimmed" fz={11} px={10} py={8}>{section === null ? "暂无 Bot 或群聊" : "从条目的菜单移入 Bot 或群聊"}</Text> : null}
+        {count === 0 && section !== null ? <Text c="dimmed" fz={11} px={10} py={8}>从条目的菜单移入 Bot 或群聊</Text> : null}
         {sectionAgents.map((agent) => renderRow(`agent:${agent.session_id}`, agent.name, agent.session_id === sessionId,
           `/sessions/${encodeURIComponent(agent.session_id)}`, <Tooltip label={agent.name} openDelay={700} position="right">
             <Group gap={10} wrap="nowrap">
