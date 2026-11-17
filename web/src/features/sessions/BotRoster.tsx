@@ -32,7 +32,7 @@ function deserializeOrganization(value: string | undefined): Organization {
 }
 
 /** 分组只整理当前浏览器的名册，不改变身份或群成员。 */
-export function BotRoster({ agents, chats, attentionSessionIds, sessionId, groupId, searching, onOpen, creatingSection = false, onCloseSection }: {
+export function BotRoster({ agents, chats, attentionSessionIds, sessionId, groupId, searching, onOpen }: {
   agents: AgentRosterEntry[];
   chats: GroupSummary[];
   attentionSessionIds: ReadonlySet<string>;
@@ -40,8 +40,6 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   groupId?: string;
   searching: boolean;
   onOpen: (path: string) => void;
-  creatingSection?: boolean;
-  onCloseSection?: () => void;
 }) {
   const [organization, setOrganization] = useLocalStorage<Organization>({
     key: "konden.sidebarGroups",
@@ -51,8 +49,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   });
   const [editing, setEditing] = useState<Editing | null>(null);
   const [removing, setRemoving] = useState<RemovalTarget | null>(null);
-  const activeEditing = editing ?? (creatingSection ? { id: null, name: "" } as Editing : null);
-  const closeEditing = () => { setEditing(null); onCloseSection?.(); };
+  const closeEditing = () => setEditing(null);
   const assignedSection = (entry: string) => {
     const id = organization.assignments[entry];
     return organization.sections.some((section) => section.id === id) ? id : null;
@@ -69,12 +66,12 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   }
 
   function save(name: string) {
-    if (activeEditing === null) return;
-    const id = activeEditing.id ?? createClientId();
+    if (editing === null) return;
+    const id = editing.id ?? createClientId();
     setOrganization((current) => ({ ...current,
-      sections: activeEditing.id === null ? [...current.sections, { id, name, collapsed: false }]
+      sections: editing.id === null ? [...current.sections, { id, name, collapsed: false }]
         : current.sections.map((section) => section.id === id ? { ...section, name } : section),
-      assignments: activeEditing.entry === undefined ? current.assignments : { ...current.assignments, [activeEditing.entry]: id },
+      assignments: editing.entry === undefined ? current.assignments : { ...current.assignments, [editing.entry]: id },
     }));
     closeEditing();
   }
@@ -144,15 +141,15 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
       if (removing.kind === "agent" ? removing.id === sessionId : removing.id === groupId) onOpen("/");
       setRemoving(null);
     }} />}
-    {onCloseSection === undefined ? <Group className="roster-sections-toolbar" justify="space-between" wrap="nowrap">
+    <Group className="roster-sections-toolbar" justify="space-between" wrap="nowrap">
       <Text c="dimmed" fz={10}>分组</Text>
       <Tooltip label="新建分组" openDelay={400}><ActionIcon aria-label="新建分组" size="xs" variant="subtle" color="gray"
         onClick={() => setEditing({ id: null, name: "" })}><IconFolderPlus size={13} /></ActionIcon></Tooltip>
-    </Group> : null}
+    </Group>
     {organization.sections.map(renderSection)}
     {renderSection(null)}
-    {activeEditing === null ? null : <SectionNameModal initialName={activeEditing.name} existing={organization.sections.filter((section) => section.id !== activeEditing.id).map((section) => section.name)}
-      creating={activeEditing.id === null} onSave={save} onClose={closeEditing} />}
+    {editing === null ? null : <SectionNameModal initialName={editing.name} existing={organization.sections.filter((section) => section.id !== editing.id).map((section) => section.name)}
+      creating={editing.id === null} onSave={save} onClose={closeEditing} />}
   </div>;
 }
 

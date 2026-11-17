@@ -1,6 +1,6 @@
 # 群聊
 
-侧栏或工作台的 `新建群聊` 选 2 到 6 个 Bot 建群；群直接列在侧栏名册中（`群聊 <群名>`），可与 Bot 一起按本地分组整理，点开是 `/groups/:groupId`。人在群消息正文输入 `@` 或点 `点名成员`，选择成员完成点名，不点名叫全体；Host 按顺序投递回应请求，投递后即继续通知其他成员，各人可以同时工作，不要求先回执。群里没有强制停止；需要中断某位成员时，从右侧成员链接进入其会话，点 `停止`。来源：`web/src/features/groups/`、`AgentSidebar.tsx`、`konden/channels/web/app.py`（`/api/groups*`）、`konden/assistant/host/agent_groups.py`。
+首页的 `新建群聊` 选 2 到 6 个 Bot 建群；群直接列在侧栏名册中（`群聊 <群名>`），可与 Bot 一起按本地分组整理，点开是 `/groups/:groupId`。人在群消息正文输入 `@` 或点 `点名成员`，选择成员完成点名，不点名叫全体；Host 按顺序投递回应请求，投递后即继续通知其他成员，各人可以同时工作，不要求先回执。群里没有强制停止；需要中断某位成员时，从右侧成员链接进入其会话，点 `停止`。来源：`web/src/features/groups/`、`AgentHome.tsx`、`konden/channels/web/app.py`（`/api/groups*`）、`konden/assistant/host/agent_groups.py`。
 
 需求依据：[群聊：成员发言如何接纳、讨论怎样收束、提交恢复与人介入](../../../../docs/架构/多智能体/群聊.md)、[交互与响应](../../../../docs/架构/多智能体/交互与响应.md)。公共记录拥有群事实；发言、回应和验收分开，插话不自动中断已开始的工作。
 
@@ -20,7 +20,7 @@
 
 ## How to get to it (user POV)
 
-- 侧栏或工作台的 `新建群聊`。
+- 点击侧栏 `所有对话` 回到首页，再点 `新建群聊`。
 - 侧栏点 `群聊 <群名>`。
 
 ## Driving it with the browser

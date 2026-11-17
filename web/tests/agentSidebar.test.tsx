@@ -38,7 +38,6 @@ const queries = vi.hoisted(() => ({
   createAgent: vi.fn(() => ({ unwrap: () => Promise.resolve(agent({ session_id: "agent-new", name: "konden" })) })),
   groups: [] as GroupSummary[],
   setAutoAuthorize: vi.fn(),
-  createGroup: vi.fn(() => ({ unwrap: () => Promise.resolve({ group_id: "group-new" }) })),
   deleteAgent: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   deleteExternalSession: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   dissolveGroup: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
@@ -53,7 +52,6 @@ vi.mock("../src/api/kondenApi", () => ({
   useGetExternalSessionsQuery: () => ({ data: queries.externalSessions, isLoading: false }),
   useGetInboxQuery: () => ({ data: queries.inbox, isLoading: false }),
   useGetGroupsQuery: () => ({ data: queries.groups, isLoading: false }),
-  useCreateGroupMutation: () => [queries.createGroup, { isLoading: false, reset: vi.fn() }],
   useGetWorkspacesQuery: () => ({ data: queries.workspaces, isLoading: false }),
   useCreateAgentMutation: () => [queries.createAgent, { isLoading: false, reset: vi.fn() }],
   useCreateWorkspaceMutation: () => [vi.fn(), {}],
@@ -250,7 +248,7 @@ it("Bot 和群聊可混放分组，折叠与归属刷新保留，删除分组不
   expect(screen.queryByRole("button", { name: "分组 开发", exact: true })).not.toBeInTheDocument();
 });
 
-it("名册分组覆盖所有 Bot，搜索展开但不改写折叠偏好", async () => {
+it("搜索按需展开并聚焦，清除或关闭后恢复名册折叠偏好", async () => {
   browserStubs();
   queries.workspaces = [workspace("organize", "项目"), workspace("other", "别处")];
   queries.agents = [agent({ session_id: "ada", name: "Ada", workspace_id: "organize" }), agent({ session_id: "lin", name: "Lin", workspace_id: "other" })];
@@ -259,12 +257,32 @@ it("名册分组覆盖所有 Bot，搜索展开但不改写折叠偏好", async 
   window.localStorage.setItem("konden.sidebarGroups", JSON.stringify(stored));
   renderSidebar("/");
   expect(within(screen.getByRole("region", { name: "名册的分组 未分组" })).getByRole("button", { name: "Lin", exact: true })).toBeInTheDocument();
+  const searchButton = screen.getByRole("button", { name: "搜索对话" });
+  expect(searchButton).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("textbox", { name: "搜索对话" })).not.toBeInTheDocument();
+  fireEvent.click(searchButton);
+  expect(screen.getByRole("textbox", { name: "搜索对话" })).toHaveFocus();
   fireEvent.change(screen.getByRole("textbox", { name: "搜索对话" }), { target: { value: "Ada" } });
   expect(screen.getByRole("button", { name: "分组 研发" })).toHaveAttribute("aria-expanded", "true");
   expect(await screen.findByRole("button", { name: "Ada", exact: true })).toBeInTheDocument();
   expect(JSON.parse(window.localStorage.getItem("konden.sidebarGroups")!).sections[0].collapsed).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "清除搜索" }));
   expect(screen.getByRole("button", { name: "分组 研发" })).toHaveAttribute("aria-expanded", "false");
+  fireEvent.change(screen.getByRole("textbox", { name: "搜索对话" }), { target: { value: "Ada" } });
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "搜索对话" }), { key: "Escape" });
+  expect(screen.queryByRole("textbox", { name: "搜索对话" })).not.toBeInTheDocument();
+  expect(searchButton).toHaveFocus();
+  expect(screen.getByRole("button", { name: "分组 研发" })).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("button", { name: "Lin", exact: true })).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+  expect(screen.getByRole("textbox", { name: "搜索对话" })).toHaveFocus();
+  fireEvent.change(screen.getByRole("textbox", { name: "搜索对话" }), { target: { value: "Ada" } });
+  fireEvent.click(searchButton);
+  expect(screen.queryByRole("textbox", { name: "搜索对话" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Lin", exact: true })).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  expect(screen.getByRole("textbox", { name: "搜索对话" })).toHaveFocus();
+  expect(screen.getByRole("textbox", { name: "搜索对话" })).toHaveValue("");
 });
 
 it("名册用干活、等授权、等人回话和空闲标出状态，运行中的活动盖过空闲", () => {
@@ -344,7 +362,7 @@ it("对话入口返回首页，待处理提示所属 Bot", () => {
   expect(screen.getByTestId("current-path")).toHaveTextContent(/^\/$/);
 });
 
-it("群聊直接列在名册中，成员可选任意 Bot", async () => {
+it("群聊直接列在名册中，点击进入群聊", () => {
   browserStubs();
   queries.workspaces = [workspace("workspace", "工作区"), workspace("other", "别处")];
   queries.agents = [
@@ -357,23 +375,6 @@ it("群聊直接列在名册中，成员可选任意 Bot", async () => {
 
   fireEvent.click(screen.getByLabelText("群聊 开发组"));
   expect(screen.getByTestId("current-path")).toHaveTextContent("/groups/group-1");
-
-  fireEvent.click(screen.getByRole("button", { name: "新建群聊" }));
-  const dialog = screen.getByRole("dialog", { name: "新建群聊" });
-  fireEvent.change(screen.getByLabelText("群名"), { target: { value: "评审组" } });
-  fireEvent.click(screen.getByRole("combobox", { name: "成员" }));
-  expect(screen.getByRole("option", { name: "外人" })).toBeInTheDocument();
-  const create = screen.getByRole("button", { name: "创建" });
-  fireEvent.click(await screen.findByRole("option", { name: "Ada" }));
-  expect(create).toBeDisabled();
-  fireEvent.click(screen.getByRole("combobox", { name: "成员" }));
-  fireEvent.click(await screen.findByRole("option", { name: "Lin" }));
-  fireEvent.click(create);
-  await waitFor(() => expect(queries.createGroup).toHaveBeenCalledWith({
-    connectionId: "connection", name: "评审组", members: ["Ada", "Lin"],
-  }));
-  await waitFor(() => expect(screen.getByTestId("current-path")).toHaveTextContent("/groups/group-new"));
-  expect(dialog).not.toBeInTheDocument();
 });
 
 it("侧栏自动放行提交全局设置，返回首页仍显示开关", async () => {
