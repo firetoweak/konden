@@ -8,6 +8,7 @@ from pathlib import Path
 import threading
 
 from konden.automation.recovery import recover_schedule_attempts
+from konden.assistant.clarification import recover_clarification_attempts
 from konden.automation.routine_tool import recover_routine_attempts
 from konden.assistant.agent_git import identity as git_identity
 from konden.assistant.agent_messages import recover_message_attempts
@@ -210,6 +211,7 @@ async def _run_session(connection, session_id, journal, config_factory, home_roo
 
             await recover_command_attempts(journal, session_id, peer.request)
             await recover_schedule_attempts(journal, session_id, peer.request)
+            await recover_clarification_attempts(journal, session_id, peer.request)
             await recover_routine_attempts(journal, session_id, peer.request)
             await resume_session(
                 assembly.runtime,

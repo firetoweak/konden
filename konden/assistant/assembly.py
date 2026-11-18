@@ -16,7 +16,7 @@ from konden.assistant.attachments import (
 )
 from konden.assistant.compact.core import CompactContext, CompactBoundary, FIND_HISTORY, SUBMIT
 from konden.assistant.content import READ_CONTENT, READ_CONTENT_SCHEMA
-from konden.assistant.clarification import ASK_USER, ASK_USER_SCHEMA
+from konden.assistant.clarification import ASK_USER, Question, TimedQuestion, ask_user_schema, clarification_binding
 from konden.assistant.loop_guard import LoopGuard
 from konden.assistant.work_plan import UPDATE_PLAN, UPDATE_PLAN_SCHEMA, update_plan_binding
 from konden.assistant.agents import project_agent
@@ -227,11 +227,12 @@ async def build_assistant_assembly(
         if isinstance(observed, Awaitable):
             await observed
 
+    question_model = TimedQuestion if session_transport is not None else Question
     surface = ToolSurface(
         providers=(McpToolsetAdapter(mcp, attachments),),
         base_schemas=[
             *builtin_tools.schemas,
-            *([ASK_USER_SCHEMA] if agent is not None else []),
+            *([ask_user_schema(question_model)] if agent is not None else []),
             *colleague_schemas,
             *(SHARED_MEMORY_SCHEMAS if shared_memory is not None else []),
             *(PERSONAL_MEMORY_SCHEMAS if personal_memory is not None else []),
@@ -283,6 +284,7 @@ async def build_assistant_assembly(
         session_transport,
     )
     bindings = {
+        **({ASK_USER: clarification_binding(journal, session_transport)} if agent is not None else {}),
         **bind_executor_tools(
             builtin_tools,
             gateway,
@@ -333,6 +335,7 @@ async def build_assistant_assembly(
         subagents=subagents,
         compact=compact_context,
         exclusive_tool_names=exclusive_tools | {ASK_USER},
+        question_model=question_model,
         loop_guard=LoopGuard(),
         preview=preview,
     )

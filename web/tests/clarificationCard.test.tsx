@@ -61,3 +61,15 @@ it("三个短选项仍然点选即答", () => {
   fireEvent.click(screen.getByRole("button", { name: "线上" }));
   expect(submit).toHaveBeenCalledExactlyOnceWith({ sessionId: "s1", connectionId: "c1", questionId: "q1", text: "线上" });
 });
+
+it("截止后仍显示等待时刻、约定做法，并接纳补答", () => {
+  const deadline = { at: "2026-11-18T07:00:00Z", plan: "先放入附录。", reached: true };
+  render(<MantineProvider env="test"><ClarificationCard question="图表放哪里？"
+    card={{ question_id: "q2", options: ["正文", "附录"], answer: null, deadline }}
+    sessionId="s1" connectionId="c1" deleted={false} /></MantineProvider>);
+  expect(screen.getByText("等待时间已到，仍可回答")).toBeVisible();
+  expect(screen.getByRole("time")).toHaveAttribute("datetime", deadline.at);
+  expect(screen.getByText(deadline.plan)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "正文" }));
+  expect(submit).toHaveBeenCalledExactlyOnceWith({ sessionId: "s1", connectionId: "c1", questionId: "q2", text: "正文" });
+});

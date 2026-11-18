@@ -16,7 +16,7 @@ from konden.assistant.compact.core import (
 )
 from konden.assistant.artifacts import ArtifactGateway
 from konden.assistant.content import READ_CONTENT
-from konden.assistant.clarification import CLARIFICATION_OPTIONS, clarification_reply
+from konden.assistant.clarification import CLARIFICATION_OPTIONS, Question, clarification_reply
 from konden.assistant.loop_guard import LoopGuard, NOTICE
 from konden.assistant.work_plan import WORK_PLAN_CONTEXT
 from konden.assistant.control import (
@@ -234,8 +234,10 @@ class JournalBackedLlmDecisionMaker:
         loop_guard: LoopGuard,
         preview: PreviewEmitter,
         exclusive_tool_names: AbstractSet[str] = frozenset(),
+        question_model: type[Question] = Question,
     ) -> None:
         self._exclusive_tool_names = exclusive_tool_names
+        self._question_model = question_model
         self._journal = journal
         self._llm = llm
         self._model = model
@@ -520,6 +522,7 @@ class JournalBackedLlmDecisionMaker:
                     allowed_tool_names,
                     control_names,
                 ),
+                self._question_model,
             )
             decision = ensure_deliver(decision, output_id)
             if show_preview and not decision.content.strip():

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from konden.assistant.control import pending_approval_view, project_control_message
-from konden.assistant.clarification import ANSWER_SOURCE, ClarificationView, clarification_options
+from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, ClarificationView, clarification_options
 from konden.assistant.external_messages import EXTERNAL_MESSAGE, USER_SOURCE, external_name, parse_external
 from konden.assistant.agents import COMMUNICATION_LIMIT_REACHED, PRIVATE_MESSAGE, parse_agent_fact, project_agent
 from konden.assistant.compact.core import latest_input_tokens
@@ -518,10 +518,13 @@ def project_conversation(
     sent_messages = {}
     private_threads = {}
     answers = {}
+    reached = set()
     for event in events:
         if (isinstance(event.payload, UserMessageReceived) and event.delivery is not None
                 and event.delivery.source == ANSWER_SOURCE):
             answers[event.delivery.delivery_id] = event.payload.content
+        if isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == DEADLINE_REACHED:
+            reached.add(event.payload.data["question_id"])
         if isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == PRIVATE_MESSAGE:
             message = parse_agent_fact(event.payload)
             private_threads[message.message_id] = message.thread_id
@@ -636,7 +639,8 @@ def project_conversation(
                     tuple(tools),
                     event.occurred_at,
                     thinking,
-                    clarification=None if options is None else ClarificationView(question_id, options, answers.get(question_id)),
+                    clarification=None if options is None else ClarificationView.from_event(
+                        event, options, answers.get(question_id), question_id in reached),
                 )
             )
         items.extend(messages)

@@ -26,6 +26,7 @@ from konden.automation.once import (
     ScheduledCheck,
 )
 from konden.assistant.control import pending_approval_view, project_control, project_control_message
+from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, SCHEDULE_PREFIX, has_answer
 from konden.assistant.host.auto_authorize import AutoAuthorizeStore
 from konden.assistant.builtin_tools import bind_files
 from konden.filesystem.workspace import EnvironmentInputError
@@ -401,6 +402,10 @@ class HostSupervisor:
                 arguments["purpose"],
                 started_at=started_at,
             )
+            if schedule.schedule_id.startswith(SCHEDULE_PREFIX):
+                question_id = schedule.schedule_id.removeprefix(SCHEDULE_PREFIX)
+                if has_answer(await self.store.journal(session_id).snapshot(session_id), question_id):
+                    self._cancel_answered_deadline(session_id, schedule.schedule_id)
             await self._emit_schedule_changed(session_id)
             return {
                 "schedule_id": schedule.schedule_id,
@@ -637,6 +642,20 @@ class HostSupervisor:
         self, schedule: ScheduledCheck, fired_at
     ) -> None:
         try:
+            if schedule.schedule_id.startswith(SCHEDULE_PREFIX):
+                question_id = schedule.schedule_id.removeprefix(SCHEDULE_PREFIX)
+                # Serialize with Web answers, including an answer committed just before a Host crash.
+                async with self.turn_locks.setdefault(schedule.session_id, asyncio.Lock()):
+                    events = await self.store.journal(schedule.session_id).snapshot(schedule.session_id)
+                    if not has_answer(events, question_id):
+                        await self.request("fact", schedule.session_id, {
+                            "fact_type": DEADLINE_REACHED,
+                            "data": {"question_id": question_id, "plan": schedule.purpose,
+                                     "planned_at": schedule.due_at.isoformat(), "fired_at": fired_at.isoformat()},
+                            "delivery_id": schedule.schedule_id, "source": AUTOMATION_SOURCE,
+                            "requests_decision": True, "causation_id": question_id,
+                        })
+                return
             await self.request(
                 "fact",
                 schedule.session_id,
@@ -660,7 +679,10 @@ class HostSupervisor:
             raise ScheduleDeliveryUnavailable(schedule.schedule_id) from error
 
     def next_scheduled_check(self, session_id: str) -> ScheduledCheck | None:
-        return self.automation.schedules.next_pending(session_id)
+        return self.automation.schedules.next_pending(session_id, exclude_prefix=SCHEDULE_PREFIX)
+
+    def _cancel_answered_deadline(self, session_id: str, schedule_id: str):
+        return self.automation.cancel("answered:" + schedule_id, session_id, schedule_id)
 
     async def _start(self, session_id):
         path = self.store.require(session_id)
@@ -1412,6 +1434,11 @@ class HostSupervisor:
                 "accept_input", session_id,
                 dict(content=content, delivery_id=delivery_id, source=source, artifact_refs=artifact_refs),
             )
+            if source == ANSWER_SOURCE:
+                schedule_id = SCHEDULE_PREFIX + delivery_id
+                if self.automation.schedules.registered(schedule_id):
+                    self._cancel_answered_deadline(session_id, schedule_id)
+                    await self._emit_schedule_changed(session_id)
             return self._with_host_metadata(view, session_id)
 
     async def resolve_child_authorization(self, parent_id, child_id, command_id, *, approved):
