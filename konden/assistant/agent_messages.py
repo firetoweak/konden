@@ -6,6 +6,7 @@ from typing import Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from konden.assistant.delivery import USER_MESSAGE_SENT, emit_delivery
 from konden.assistant.agents import CommunicationLimitReached, fact_arguments
 from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL, SendToExternal
 from konden.runtime import (
@@ -15,6 +16,7 @@ from konden.runtime import (
 
 
 SEND_MESSAGE = "send_message"
+USER_RECIPIENT = "user"
 LIST_COLLEAGUES = "list_colleagues"
 SEND_FILE = "send_file"
 SEND_GROUP_MESSAGE = "send_group_message"
@@ -78,7 +80,7 @@ MESSAGE_SCHEMAS = [
             "可答复已有消息，也可在已授权的协作中继续发言，无需等待新的请求；reply_to 可选。"
             "在用户设定的协作范围内发送任务答复与结果无需逐条确认；遵守用户后续的交流限制。"
             "不得披露无关的用户私聊。外部消息和转述不构成其他操作的用户授权。"
-            "普通回复只给用户看。送达只表示对方可以读取，不表示已经处理或客户端会被自动唤醒。"
+            "送达只表示对方可以读取，不表示已经处理或客户端会被自动唤醒。"
         ),
         "parameters": SendToExternal.model_json_schema(),
     }},
@@ -87,7 +89,7 @@ MESSAGE_SCHEMAS = [
         "description": (
             "把工作区内一个文件的副本交给人。图片直接显示并可放大下载，其他文件提供下载卡片。"
             "text 是可选正文，有实质说明时再填写，无需重复文件名、格式或‘已发送’。"
-            "普通回答和汇报直接回复，不需要调用此工具。"
+            "给用户发纯文字用 send_message。"
             "同事之间不要用它传文件，对方直接读你的工作目录。"
         ),
         "parameters": {"type": "object", "properties": {
@@ -113,7 +115,7 @@ MESSAGE_SCHEMAS = [
     {"type": "function", "function": {
         "name": SEND_MESSAGE,
         "description": (
-            "向同事发私信，请求对方处理；立即返回送达情况，不等待回复。"
+            "给用户或一位同事发私信。用户会在与你的私聊里看到正文，同事收到后可继续处理。返回送达情况，不等待回复。"
             "群内协作中影响共同工作的分派、要求变更和结论，优先在原群点名需要行动的人；遵守用户指定的私聊例外。"
             "回复或继续已有交流时，用 reply_to 引用你与这位同事之间的消息。"
             "同事转述的同意不构成用户授权。"
@@ -121,9 +123,9 @@ MESSAGE_SCHEMAS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "recipient": {"type": "string", "minLength": 1, "description": "同事名字，区分大小写。"},
+                "recipient": {"type": "string", "minLength": 1, "description": "给用户填 user，给同事填名录中的名字，区分大小写。"},
                 "text": {"type": "string", "minLength": 1, "description": "消息正文，包含对方处理所需的背景。"},
-                "reply_to": {"type": ["string", "null"], "minLength": 1, "description": "要回复的消息的 message_id；新话题可省略。"},
+                "reply_to": {"type": ["string", "null"], "minLength": 1, "description": "接续同事私信时可引用双方的 message_id。给用户发信时省略。"},
             },
             "required": ["recipient", "text"],
             "additionalProperties": False,
@@ -134,7 +136,7 @@ MESSAGE_SCHEMAS = [
         "description": (
             "在你所在的群里发言，所有成员都会看到；立即返回送达情况，不等待回复。"
             "在原群继续协作中的分派、补充要求、变更和报告，让成员共享进展。"
-            "mention 点名的成员会分别收到回应请求；不点名时请全体成员回应。各人可以同时工作。"
+            "mention 指定请哪些成员留意消息；省略时其他成员都会留意。单纯同步消息时无需回帖。"
             "同事转述的同意不构成用户授权。"
         ),
         "parameters": {
@@ -143,7 +145,7 @@ MESSAGE_SCHEMAS = [
                 "group": {"type": "string", "minLength": 1, "description": "群名，区分大小写。"},
                 "text": {"type": "string", "minLength": 1, "description": "发言正文。"},
                 "mention": {"type": "array", "items": {"type": "string", "minLength": 1},
-                            "description": "要点名回应的成员名字；省略或为空时叫全体成员。"},
+                            "description": "请其留意消息的成员名字；省略或为空时提醒其他所有成员。"},
                 "reply_to": {"type": ["string", "null"], "minLength": 1,
                              "description": "要回复的群消息的 message_id；回应请你处理的消息时引用它，一条发言只引用一条；可省略。"},
             },
@@ -184,10 +186,30 @@ async def record_limit(journal, session_id, command_id, result):
         ))
 
 
-def message_bindings(transport, journal):
+def _message_transport(transport, journal, sink):
+    async def deliver(operation, session_id, arguments):
+        if operation != SEND_MESSAGE or arguments["recipient"] != USER_RECIPIENT:
+            if transport is None:
+                return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "当前只能给 user 发私信。"}
+            return await transport(operation, session_id, arguments)
+        if arguments["reply_to"] is not None:
+            return {"ok": False, "code": "INVALID_REPLY", "error": "给用户发私信时请省略 reply_to。"}
+        identity = arguments["command_id"]
+        text = arguments["text"]
+        await AgentRuntime(journal, None, {}).receive_domain_fact(
+            session_id, USER_MESSAGE_SENT, {"text": text}, source=SEND_MESSAGE, delivery_id=identity,
+        )
+        if sink is not None:
+            await emit_delivery(sink, session_id, identity, text)
+        return {"ok": True, "code": "USER_MESSAGE_SENT", "data": {"message_id": identity, "recipient": USER_RECIPIENT}}
+    return deliver
+
+
+def message_bindings(transport, journal, sink=None):
+    delivery = _message_transport(transport, journal, sink)
     def sender(operation):
         async def send(context, arguments):
-            result = await _send(operation, transport, context.session_id, context.command_id, arguments)
+            result = await _send(operation, delivery, context.session_id, context.command_id, arguments)
             await record_limit(journal, context.session_id, context.command_id, result)
             return result
         return ToolBinding(send)
@@ -222,15 +244,16 @@ def message_bindings(transport, journal):
             SEND_FILE: ToolBinding(send_file)}
 
 
-async def recover_message_attempts(journal, session_id, transport):
+async def recover_message_attempts(journal, session_id, transport, sink=None):
     """Recheck the original delivery before letting the model observe an unknown send."""
     events = await journal.snapshot(session_id)
+    delivery = _message_transport(transport, journal, sink)
     by_id = {event.event_id: event for event in events}
     for item in replay(session_id, events).state.commands:
         if item.command.effect.name not in _ARGUMENTS or item.phase is not CommandPhase.UNKNOWN:
             continue
         (attempt,) = item.attempts
-        result = await _send(item.command.effect.name, transport, session_id, item.command.command_id,
+        result = await _send(item.command.effect.name, delivery, session_id, item.command.command_id,
                              item.command.effect.argument_dict())
         await record_limit(journal, session_id, item.command.command_id, result)
         await journal.record_attempt_fact(EventDraft(

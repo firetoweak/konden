@@ -230,6 +230,31 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(matching), 1)
             self.assertEqual(command.outcome.value["data"]["message_id"], matching[0].message_id)
 
+    async def test_lost_user_receipt_preserves_one_visible_message(self):
+        journal = self.journal("Ada")
+        delivered = asyncio.Event()
+
+        async def interrupted_sink(*_):
+            delivered.set()
+            await asyncio.Event().wait()
+
+        runtime = AgentRuntime(journal, ScriptedDecisionMaker((lambda _: ModelDecision(
+            content="工作记录", command_requests=(InvokeTool(SEND_MESSAGE, (("recipient", "user"), ("text", "报价已到"))),)),)),
+            message_bindings(self.transport, journal, interrupted_sink))
+        await runtime.advance("Ada")
+        await runtime.dispatcher.start_pending("Ada")
+        await asyncio.wait_for(delivered.wait(), 3)
+        await runtime.dispatcher.close()
+        await journal.prepare_recovery("Ada")
+        await recover_message_attempts(journal, "Ada", self.transport)
+        events = await journal.snapshot("Ada")
+        state = replay("Ada", events).state
+        command, = state.commands
+        assert command.outcome.value["code"] == "USER_MESSAGE_SENT"
+        view = project_conversation("Ada", events, state.steps, session=session_view(state))
+        assert [(i.output_id, i.text) for i in view.items if i.kind == "step" and i.text] == [
+            (command.command.command_id, "报价已到")]
+
     async def test_one_origin_bounds_new_chains_and_the_replies_it_drives(self):
         async def decide(session_id, *decisions):
             runtime = AgentRuntime(self.journal(session_id), ScriptedDecisionMaker(decisions),

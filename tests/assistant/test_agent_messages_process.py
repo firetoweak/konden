@@ -144,7 +144,7 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sum(isinstance(e.payload, StepCommitted) for e in events), steps[agent.session_id])
         self.assertTrue(self.host.failures.empty())
 
-    async def test_plain_user_and_routine_replies_reach_person_without_waking_colleague(self):
+    async def test_plain_user_and_routine_work_records_stay_private_without_waking_colleague(self):
         outputs = []
         self.host.sink = lambda *args: outputs.append(args)
         before = await self.events(self.lin)
@@ -155,8 +155,7 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
             fire_id="routine-fire", routine_id="routine", session_id=self.ada.session_id,
             name="检查", intent="报告状态", planned_at=now, fired_at=now))
         await self.settled(self.ada)
-        self.assertEqual([args[2] for args in outputs], ["done", "done"])
-        self.assertTrue(all(args[0] == self.ada.session_id for args in outputs))
+        self.assertEqual(outputs, [])
         self.assertEqual(await self.events(self.lin), before)
         self.assertNotIn(self.lin.session_id, self.host.workers)
         self.assertTrue(self.host.failures.empty())
@@ -253,8 +252,12 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
         async def chat(messages, model, *, tools=None, **kwargs):
             names = {tool["function"]["name"] for tool in tools or ()}
             if names != {UPDATE_PERSONAL_MEMORY, UPDATE_SHARED_MEMORY}:
+                if messages[-1]["role"] == "tool":
+                    return LLMCallResult(LLMResponse(content="已交付"), LLMUsage(10, 5))
                 foreground.append(messages)
-                return LLMCallResult(LLMResponse(content="done"), LLMUsage(10, 5))
+                return LLMCallResult(LLMResponse(calls=(ToolCall(
+                    "reply", SEND_MESSAGE, '{"recipient":"user","text":"done"}',
+                ),)), LLMUsage(10, 5))
             material = json.loads(messages[-1]["content"])
             reviews.append(material)
             if len(reviews) == 1:
@@ -362,7 +365,7 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
         # Every speech without a mention calls the other member, until the round limit.
         self.assertEqual(speakers[0], None)
         self.assertEqual(sorted(speakers[1:]), ["Ada"] * 3 + ["Lin"] * 3)
-        self.assertTrue(any(args[2] == "done" for args in outputs))
+        self.assertEqual(outputs, [])
         for agent in (self.ada, self.lin):
             attentions = [e for e in await self.events(agent) if isinstance(e.payload, DomainFactCommitted)
                           and e.payload.fact_type == GROUP_ATTENTION]
@@ -435,7 +438,7 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(messages[0].sender.name, "Ada")
         self.assertTrue(any(isinstance(e.payload, StepCommitted) for e in await self.events(self.lin)))
         self.assertTrue(any("请核对接口" in json.dumps(r["messages"], ensure_ascii=False) for r in self.llm.requests))
-        self.assertTrue(any(args[0] == self.lin.session_id and args[2] == "done" for args in outputs))
+        self.assertEqual(outputs, [])
         self.assertFalse(any(isinstance(e.payload, DomainFactCommitted) and e.payload.fact_type == PRIVATE_MESSAGE
                              for e in await self.events(self.ada)))
         self.assertTrue(self.host.failures.empty())

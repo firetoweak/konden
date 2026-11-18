@@ -37,6 +37,7 @@ describe("runtimeSlice", () => {
     );
     expect(state.sessions.s1.activePreview).toBeNull();
     expect(state.sessions.s1.committed.out).toBe("你好");
+    state = reducer(state, outputFinal({ sessionId: "s1", outputId: "out", text: "你好" }));
     expect(state.sessions.s1.unread).toBe(1);
   });
 

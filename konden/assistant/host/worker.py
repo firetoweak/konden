@@ -223,7 +223,7 @@ async def _run_session(connection, session_id, journal, config_factory, home_roo
             # Accept facts while peers recover each other's sends, but do not
             # let either model advance until its unknown sends are resolved.
             ready.set()
-            await recover_message_attempts(journal, session_id, peer.request)
+            await recover_message_attempts(journal, session_id, peer.request, sink)
             await assembly.subagents.recover_messages(session_id)
             await record_interrupted_return(journal, session_id)
             await assembly.sessions.recover_control(session_id)

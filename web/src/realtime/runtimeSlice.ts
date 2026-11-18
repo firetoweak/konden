@@ -200,11 +200,12 @@ const runtimeSlice = createSlice({
       action: PayloadAction<{ sessionId: string; outputId: string; text: string }>,
     ) {
       const session = runtimeOf(state, action.payload.sessionId);
+      const firstDelivery = !(action.payload.outputId in session.committed);
       session.committed[action.payload.outputId] = action.payload.text;
       if (session.activePreview?.outputId === action.payload.outputId) {
         session.activePreview = null;
       }
-      if (state.viewingSessionId !== action.payload.sessionId) {
+      if (firstDelivery && state.viewingSessionId !== action.payload.sessionId) {
         session.unread += 1;
       }
     },

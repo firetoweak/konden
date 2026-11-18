@@ -1,7 +1,7 @@
 from __future__ import annotations
 from bisect import bisect_right
 
-from konden.assistant.external_messages import EXTERNAL_MESSAGE, parse_external
+from konden.assistant.external_messages import EXTERNAL_MESSAGE, USER_SOURCE, parse_external
 from konden.assistant.context.memory import MEMORY_FACTS, memory_message
 
 from konden.runtime.json_values import thaw_value
@@ -18,7 +18,7 @@ from konden.automation.routines import ROUTINE_DUE
 from konden.automation.once import TIME_REACHED
 from konden.assistant.commands import COMMAND_FINISHED
 from konden.assistant.agents import (
-    AGENT_FACT_TYPES, GROUP_MESSAGE, PRIVATE_MESSAGE, agent_fact_for_model,
+    AGENT_CREATED, AGENT_FACT_TYPES, GROUP_MESSAGE, PRIVATE_MESSAGE, agent_fact_for_model,
 )
 from konden.assistant.workspaces import SESSION_WORKSPACE_FACT, SESSION_DIRECTORY_FACT
 from konden.assistant.artifacts import (
@@ -28,7 +28,7 @@ from konden.assistant.artifacts import (
 )
 from konden.assistant.attachments import AttachmentGateway, AttachmentStore
 from konden.assistant.file_attachments import is_file_attachment_id
-from konden.assistant.delivery import DELIVER_TOOL_NAME
+from konden.assistant.delivery import DELIVER_TOOL_NAME, USER_MESSAGE_SENT
 from konden.assistant.control import (
     CONTROL_PROPOSED, CONTROL_EXECUTION_STARTED, CONTROL_SUCCEEDED, CONTROL_FAILED,
 )
@@ -53,7 +53,7 @@ from konden.runtime.model import (
 )
 
 
-PROJECTOR_VERSION = 27
+PROJECTOR_VERSION = 28
 MESSAGE_EXTENSIONS = "message_extensions"
 DEFAULT_SIZE_EXTERNALIZE_CHARS = 32_000
 DEFAULT_PREVIEW_CHARS = 2_000
@@ -63,7 +63,7 @@ _INTERNAL_FACT_TYPES = frozenset({
     SESSION_WORKSPACE_FACT,
     SESSION_DIRECTORY_FACT,
     "compact.task", "compact.handoff_created", "compact.window_rolled_over",
-    "bot.memory_review",
+    "bot.memory_review", USER_MESSAGE_SENT,
 })
 _IMAGE_EVICTED_HINT = "\n这张图片已不再内嵌显示；用 read_image 和上面的 id 可以再次查看。"
 _USER_ATTACHMENT_HINT = "\n（图片附件 id：{ids}；用 read_image 可以再次查看。）"
@@ -247,6 +247,7 @@ def _translate_visible_events(
             f"\n这个对话附带的文件位于 {attachments.files.materials}。"
             "它们是只读的；编辑前先把文件复制到你的工作目录。"
         )
+    bot = any(isinstance(e.payload, DomainFactCommitted) and e.payload.fact_type == AGENT_CREATED for e in events)
     visible = set(state.visible_event_ids)
     questions = questions_by_id(events)
     steps = {step.committed_event_id: step for step in state.steps}
@@ -290,7 +291,8 @@ def _translate_visible_events(
                 question = questions[event.delivery.delivery_id]
                 asked = question_text(question.step.decision.content, clarification_options(question.decision_metadata))
                 text = f"针对你的提问：\n{asked}\n\n我的回答：\n{text}"
-            items.append(_received_at(event))
+            direct = bot and (event.delivery is None or event.delivery.source not in {USER_SOURCE, ANSWER_SOURCE})
+            items.append(_received_at(event, direct=direct))
             items.append(
                 _Projected(
                     {
@@ -329,7 +331,7 @@ def _translate_visible_events(
                 shown_data = {key: shown_data[key] for key in ("routine_id", "name", "intent", "planned_at", "fired_at")}
                 shown_data["notice"] = (
                     "现在执行这个例行任务保存的意图。报告有用的结果或阻碍；"
-                    "没有变化时，结束回复只用一句简短的事实陈述。")
+                    "仅有例行状态且没有需要通知的变化时，直接结束。")
             elif payload.fact_type == COMMAND_FINISHED:
                 shown_data["notice"] = "你的后台命令已结束。用 read_command 查看完整输出。"
             elif payload.fact_type == TASK_FACT:
@@ -381,7 +383,7 @@ def _translate_visible_events(
     return _hoist_tool_images(items)
 
 
-def _received_at(event) -> _Projected:
+def _received_at(event, *, direct: bool = False) -> _Projected:
     """Messages from people and colleagues carry when they arrived; timelines span days."""
     return _Projected(
         {
@@ -390,6 +392,7 @@ def _received_at(event) -> _Projected:
                 "<message_received_at>"
                 f"{event.occurred_at.astimezone().isoformat(timespec='minutes')}"
                 "</message_received_at>"
+                + ("\n用户私聊。回复地址为 user，答复请用 send_message 发送。" if direct else "")
             ),
         },
         "message_received_at",

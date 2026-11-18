@@ -40,14 +40,16 @@ async def clarification_round_trip(root):
     llm.chat.side_effect = [LLMCallResult(response, LLMUsage(input_tokens=1, output_tokens=1)) for response in (
         LLMResponse(content="你好。"),
         LLMResponse(calls=(ToolCall("bad", "ask_user", '{"question":" "}'),)),
-        LLMResponse(calls=(ToolCall("ask", "ask_user", '{"question":"保留附录吗？","options":["yes","no"]}'),)),
-        LLMResponse(content="周报正文已经整理好了。"),
+        LLMResponse(content="私有工作笔记", calls=(ToolCall("ask", "ask_user", '{"question":"保留附录吗？","options":["yes","no"]}'),)),
+        LLMResponse(content="私有工作笔记", calls=(ToolCall("report", "send_message", '{"recipient":"user","text":"周报正文已经整理好了。"}'),)),
+        LLMResponse(content="结束工作"),
         LLMResponse(calls=(ToolCall("write", "write_file", '{"path":"note.txt","content":"unapproved"}'),)),
         LLMResponse(content="会保留附录。"),
     )]
+    emitted = []
     assembly = await build_assistant_assembly(
         AssistantConfig(model_name="test", compact_threshold_tokens=200000, llm=llm),
-        lambda *_args: None, store.journal(sid), session_id=sid, workspace=workspace_record(directory),
+        lambda *args: emitted.append(args[2]), store.journal(sid), session_id=sid, workspace=workspace_record(directory),
         home=home, scheduler_factory=SettlingScheduler)
     sessions = assembly.sessions
 
@@ -64,7 +66,8 @@ async def clarification_round_trip(root):
         card = next(item.clarification for item in asked.items if getattr(item, "clarification", None))
         assert card.options == ("yes", "no") and card.answer is None
         assert card.deadline is None
-        assert any(item.text == "周报正文已经整理好了。" for item in asked.items if item.kind == "step")
+        assert emitted == ["保留附录吗？", "周报正文已经整理好了。"]
+        assert [i.text for i in asked.items if i.kind == "step" and i.text] == emitted
         await sessions.accept_input(sid, "另外写一个文件", delivery_id="write")
         pending = (await conversation()).session.pending_authorization_ids
         assert pending

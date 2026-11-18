@@ -72,12 +72,8 @@ def clarification_reply(decision: ModelDecision, model: type[Question]) -> tuple
             error="；".join(errors), hint="修正问题和选项后重新提问。",
         )
         return ModelDecision(decision.content, (InvokeTool(ASK_USER, rejected),)), None
-    preamble = decision.content.strip()
-    text = question.question
-    if preamble and preamble != text:
-        text = f"{preamble}\n\n{text}"
     call = InvokeTool(ASK_USER, tuple(question.model_dump(exclude_none=True).items()))
-    return ModelDecision(text, (call,)), question.options
+    return ModelDecision(question.question, (call,)), question.options
 
 
 def questions_by_id(events: tuple[Event, ...]) -> dict[str, StepCommitted]:
@@ -115,7 +111,7 @@ def has_answer(events, question_id: str) -> bool:
 
 async def _acknowledge(event: Event | None, transport):
     deadline = deadline_for(event.payload.step) if event is not None else None
-    result = {"message": "问题已发出。可以继续处理不依赖答案的工作。"}
+    result = {"message": "问题已发出。继续处理不依赖答案的工作。只剩待答事项时，在普通正文记下等待的决定即可结束本轮。"}
     if deadline is not None:
         registered = await transport("schedule_once", event.session_id, {
             "schedule_id": SCHEDULE_PREFIX + event.payload.step.step_id, "delay_seconds": deadline["after_seconds"],

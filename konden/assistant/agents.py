@@ -337,7 +337,7 @@ def agent_fact_for_model(payload: DomainFactCommitted) -> dict:
         return {"name": fact.name, "notice": (
             f'Your agent name is "{fact.name}". If the user asks for your name, answer with "{fact.name}". '
             "You just joined the user's team and no one has messaged you yet, so skip the opening acknowledgement: "
-            "load the builtin:konden-guide Skill, then greet the user and briefly say what you can help with.")}
+            "load the builtin:konden-guide Skill, then use send_message with recipient=user to greet the user and briefly say what you can help with.")}
     if isinstance(fact, ProjectLinked):
         return {"project": fact.name, "directory": fact.worktree, "notice": PROJECT_LINKED_NOTICE}
     if isinstance(fact, ProjectUnlinked):
@@ -346,9 +346,9 @@ def agent_fact_for_model(payload: DomainFactCommitted) -> dict:
         return {"colleague": fact.name}
     if isinstance(fact, GroupAttention):
         return {"group": fact.group, "message_id": fact.message_id, "notice": (
-            "请回应这条群消息。如果你有值得补充的内容，就用 send_group_message 发送，"
-            "并用 reply_to 引用这条消息；如果没有新内容，就不要发群消息。"
-            "只分享已获授权的协作所需信息，不转发无关或未获授权的私聊内容。")}
+            "阅读群消息。归档通知、仅供知悉的消息和已得到完整回答的问题，读完即可结束，不必确认或复述。仍有问题问你时回答，有分派给你的工作就处理。"
+            "回答问题或有新的结果、纠正或阻塞需要让群成员知道时，用 send_group_message 并用 reply_to 引用原消息。"
+            "只分享已获授权的协作所需信息。只在私聊中得知的决定，须有用户允许向本群转达的依据；话题相关本身不构成同意。")}
     if isinstance(fact, GroupCreated):
         return {"group": fact.group, "members": fact.members, "notice": (
             "你是这个群聊的成员。用 send_group_message 发言，群里所有人都能看到。")}

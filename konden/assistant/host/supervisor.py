@@ -49,7 +49,7 @@ from konden.assistant.host.agent_groups import AgentGroups
 from konden.assistant.host.external_messages import ExternalMessages
 from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL
 from konden.assistant.agent_messages import (
-    LIST_COLLEAGUES, SEND_FILE, SEND_GROUP_MESSAGE, SEND_MESSAGE,
+    LIST_COLLEAGUES, SEND_FILE, SEND_GROUP_MESSAGE, SEND_MESSAGE, USER_RECIPIENT,
 )
 from konden.assistant.sessions import session_view
 from konden.assistant.subagent.subagent import (
@@ -1224,6 +1224,8 @@ class HostSupervisor:
             self.models.require_default_ready()
         session_id = f"agent-{uuid4().hex}"
         directory = self.home.agent_directories_root / hashlib.sha256(session_id.encode()).hexdigest()[:20]
+        if name == USER_RECIPIENT:
+            raise AgentNameTaken("user 是用户的私信地址，请换一个 Bot 名字。")
         identity = AgentCreated(name=name, directory=str(directory))
         async with self._agent_creation_lock:
             for entry in await self.agents.list(include_deleted=True):
@@ -1290,6 +1292,8 @@ class HostSupervisor:
         agent = await self.agents.by_session(session_id)
         if agent is None or agent.deleted:
             raise AgentNotFound(session_id)
+        if name == USER_RECIPIENT:
+            raise AgentNameTaken("user 是用户的私信地址，请换一个 Bot 名字。")
         fact = AgentRenamed(session_id=session_id, old_name=agent.name, name=name)
         if any(name in entry.names and entry.session_id != session_id
                for entry in await self.agents.list(include_deleted=True)):
