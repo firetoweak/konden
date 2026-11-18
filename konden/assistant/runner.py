@@ -71,12 +71,15 @@ class SessionScheduler:
         self._session_failed = session_failed
         self._preview = PreviewEmitter() if preview is None else preview
         self.before_advance = None
+        self.background_work: Callable[[], Awaitable[None]] | None = None
         self.auto_authorize = None
         self.authorization_required = None
         self.command_interrupts: CommandInterrupts | None = None
         self.propagate_failures = False
         self._task: asyncio.Task[bool] | None = None
+        self._background_task: asyncio.Task[None] | None = None
         self._pending_wake = False
+        self._closed = False
         self._failure: BaseException | None = None
         self._failure_event = asyncio.Event()
         self.changed = asyncio.Event()
@@ -84,7 +87,12 @@ class SessionScheduler:
 
     async def wake(self, session_id: str) -> None:
         assert session_id == self._session_id
+        if self._closed:
+            return
+        await self._cancel_background()
         self.changed.set()
+        if self._closed:
+            return
         if self._failure is not None:
             raise self._failure
         task = self._task
@@ -234,8 +242,35 @@ class SessionScheduler:
         error = task.exception()
         if error is not None:
             self._record_failure(error)
-        elif self._failure is None and (task.result() or pending_wake):
-            self._start()
+        elif not self._closed and self._failure is None:
+            if task.result() or pending_wake:
+                self._start()
+            elif self.background_work is not None and self._runtime.dispatcher.active_count == 0:
+                # A pending wake takes precedence. Starting this in _quiesced
+                # could race with _task_done's direct foreground continuation.
+                background = asyncio.create_task(
+                    self.background_work(),
+                    name=f"agent-background:{self._session_id}",
+                )
+                self._background_task = background
+                background.add_done_callback(self._background_done)
+
+    def _background_done(self, task: asyncio.Task[None]) -> None:
+        if self._background_task is task:
+            self._background_task = None
+        self.changed.set()
+        if not task.cancelled():
+            error = task.exception()
+            if error is not None:
+                self._record_failure(error)
+
+    async def _cancel_background(self) -> None:
+        task = self._background_task
+        if task is not None:
+            # Concurrent foreground wakes must not interrupt cancellation cleanup.
+            if not task.done() and not task.cancelling():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     def _record_failure(self, error: BaseException) -> None:
         self.changed.set()
@@ -250,10 +285,12 @@ class SessionScheduler:
 
     @property
     def idle(self) -> bool:
-        return self._task is None and self._runtime.dispatcher.active_count == 0
+        return (self._task is None and self._background_task is None
+                and self._runtime.dispatcher.active_count == 0)
 
     async def cancel_turn(self, session_id: str) -> None:
         assert session_id == self._session_id
+        await self._cancel_background()
         interrupts = self.command_interrupts
         await self._runtime.cancel_turn(session_id)
         if interrupts is not None:
@@ -287,6 +324,8 @@ class SessionScheduler:
         )
 
     async def close(self) -> None:
+        self._closed = True
+        await self._cancel_background()
         await self._runtime.dispatcher.close()
         task = self._task
         if task is not None:

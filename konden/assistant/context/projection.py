@@ -62,6 +62,7 @@ _INTERNAL_FACT_TYPES = frozenset({
     SESSION_WORKSPACE_FACT,
     SESSION_DIRECTORY_FACT,
     "compact.task", "compact.handoff_created", "compact.window_rolled_over",
+    "bot.memory_review",
 })
 _IMAGE_EVICTED_HINT = "\n这张图片已不再内嵌显示；用 read_image 和上面的 id 可以再次查看。"
 _USER_ATTACHMENT_HINT = "\n（图片附件 id：{ids}；用 read_image 可以再次查看。）"
