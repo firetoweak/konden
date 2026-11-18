@@ -37,6 +37,7 @@ import {
   viewing,
 } from "../../realtime/runtimeSlice";
 import { Composer } from "./Composer";
+import { ClarificationCard } from "./ClarificationCard";
 import { createClientId } from "./clientId";
 import { attachmentUrl } from "./AttachmentTile";
 import { FileAttachmentTile } from "./FileAttachmentTile";
@@ -310,7 +311,9 @@ export function Conversation({ agentName, agentNames = [], ref }: {
                         <AssistantAvatar name={agentName} />
                         <MessageMenu id={reply.key} author={agentName ?? "konden"} text={reply.text}>
                         <Stack className="assistant-reply" gap={6} tabIndex={0}>
-                          {reply.text.trim() === "" ? null : <MarkdownMessage
+                          {reply.clarification != null ? <ClarificationCard question={reply.text}
+                            card={reply.clarification} sessionId={sessionId} connectionId={connectionId}
+                            deleted={conversation.deleted} /> : reply.text.trim() === "" ? null : <MarkdownMessage
                             content={reply.text}
                             streaming={reply.streaming}
                           />}

@@ -224,6 +224,10 @@ class RoutineStateRequest(ConnectionRequest):
     state: Literal["active", "paused_by_user", "deleted"]
 
 
+class ClarificationAnswer(ConnectionRequest):
+    text: str
+
+
 class InputRequest(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -906,6 +910,10 @@ def create_web_app(
             tuple(body.artifact_refs),
             interrupt=body.interrupt,
         )
+
+    @app.put("/api/sessions/{session_id}/clarifications/{question_id}/answer")
+    async def answer_clarification(session_id: str, question_id: str, body: ClarificationAnswer, request: Request):
+        return await _channel(request).answer_clarification(body.connection_id, session_id, question_id, body.text)
 
     @app.post("/api/sessions/{session_id}/control")
     async def resolve_control(

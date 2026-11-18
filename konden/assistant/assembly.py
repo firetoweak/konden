@@ -16,6 +16,7 @@ from konden.assistant.attachments import (
 )
 from konden.assistant.compact.core import CompactContext, CompactBoundary, FIND_HISTORY, SUBMIT
 from konden.assistant.content import READ_CONTENT, READ_CONTENT_SCHEMA
+from konden.assistant.clarification import ASK_USER, ASK_USER_SCHEMA
 from konden.assistant.loop_guard import LoopGuard
 from konden.assistant.work_plan import UPDATE_PLAN, UPDATE_PLAN_SCHEMA, update_plan_binding
 from konden.assistant.agents import project_agent
@@ -75,6 +76,7 @@ from konden.assistant.personal_memory import (
     PERSONAL_MEMORY_SCHEMAS, personal_memory_store, personal_memory_bindings,
 )
 from konden.assistant.context.memory import MemoryContext
+from konden.assistant.memory_review import MemoryReview
 from konden.config import AssistantConfig
 from konden.paths import KondenHome, runtime_data_root
 from konden.cli.composition import CliAssembly, build_cli
@@ -158,6 +160,10 @@ async def build_assistant_assembly(
     shared_memory = SharedMemoryStore(home.state_root / "shared_memory.sqlite") if agent is not None else None
     personal_memory = personal_memory_store(home, agent) if agent is not None else None
     memory = MemoryContext(shared_memory, personal_memory) if agent is not None else None
+    memory_tools = {
+        **(shared_memory_bindings(shared_memory, agent.name) if shared_memory is not None else {}),
+        **(personal_memory_bindings(personal_memory, agent.name) if personal_memory is not None else {}),
+    }
     mcp = build_mcp(home, task_root=workspace.task_root)
     skills = build_skills(
         home,
@@ -225,6 +231,7 @@ async def build_assistant_assembly(
         providers=(McpToolsetAdapter(mcp, attachments),),
         base_schemas=[
             *builtin_tools.schemas,
+            *([ASK_USER_SCHEMA] if agent is not None else []),
             *colleague_schemas,
             *(SHARED_MEMORY_SCHEMAS if shared_memory is not None else []),
             *(PERSONAL_MEMORY_SCHEMAS if personal_memory is not None else []),
@@ -250,6 +257,7 @@ async def build_assistant_assembly(
             READ_CONTENT,
             "read_image",
             UPDATE_PLAN,
+            ASK_USER,
             DELIVER_TOOL_NAME,
             *subagents.bindings(),
             FIND_HISTORY,
@@ -281,8 +289,7 @@ async def build_assistant_assembly(
             settings,
         ),
         **colleague_bindings,
-        **(shared_memory_bindings(shared_memory, agent.name) if shared_memory is not None else {}),
-        **(personal_memory_bindings(personal_memory, agent.name) if personal_memory is not None else {}),
+        **memory_tools,
         **(routine_bindings(session_transport) if colleague_schemas else {}),
         **(agent_git_bindings(session_transport) if agent_git else {}),
         **(
@@ -325,7 +332,7 @@ async def build_assistant_assembly(
         context_usage_sink=context_usage_sink,
         subagents=subagents,
         compact=compact_context,
-        exclusive_tool_names=exclusive_tools,
+        exclusive_tool_names=exclusive_tools | {ASK_USER},
         loop_guard=LoopGuard(),
         preview=preview,
     )
@@ -375,6 +382,15 @@ async def build_assistant_assembly(
 
     scheduler.auto_authorize = sessions.is_auto_authorized
     scheduler.authorization_required = authorization_required_sink
+    if memory is not None and task is None and not compact_context.is_reader:
+        review = MemoryReview(
+            runtime=runtime, session_id=session_id, bot_name=agent.name, llm=config.llm,
+            model=lambda: decision.model, reasoning_effort=lambda: decision.reasoning_effort,
+            memory=memory, bindings=memory_tools, gateway=gateway,
+            authorized=lambda: sessions.is_auto_authorized(session_id),
+        )
+        await review.initialize()
+        scheduler.background_work = review.run_if_due
     return AssistantAssembly(
         runtime=runtime,
         scheduler=scheduler,

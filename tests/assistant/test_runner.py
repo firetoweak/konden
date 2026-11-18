@@ -166,6 +166,151 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
                 finally:
                     await scheduler.close()
 
+    async def test_foreground_waits_for_background_cancellation_cleanup(self):
+        # A new request must not overlap the old review or cut off its cleanup;
+        # both foreground wakes can arrive before that cleanup has finished.
+        background_started = asyncio.Event()
+        cancellation_started = asyncio.Event()
+        release_cleanup = asyncio.Event()
+        foreground_started = asyncio.Event()
+        background_runs = []
+
+        async def foreground(_frame):
+            foreground_started.set()
+            return ModelDecision(content="second")
+
+        async def background():
+            background_runs.append(len(model.frames))
+            if len(background_runs) > 1:
+                return
+            background_started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancellation_started.set()
+                await release_cleanup.wait()
+                raise
+
+        model = ScriptedDecisionMaker((lambda _frame: ModelDecision(content="first"), foreground))
+        runtime = AgentRuntime(MemoryJournal(), model, {})
+        scheduler = SettlingScheduler(runtime, "session")
+        scheduler.background_work = background
+        await runtime.receive_user_message("session", "first", delivery_id="first")
+        wakes = []
+        try:
+            await scheduler.wake("session")
+            await asyncio.wait_for(background_started.wait(), timeout=1)
+            self.assertFalse(scheduler.idle)
+
+            await runtime.receive_user_message("session", "second", delivery_id="second")
+            wakes.append(asyncio.create_task(scheduler.wake("session")))
+            await asyncio.wait_for(cancellation_started.wait(), timeout=1)
+            wakes.append(asyncio.create_task(scheduler.wake("session")))
+            await asyncio.sleep(0)
+            self.assertFalse(foreground_started.is_set())
+            self.assertFalse(scheduler.idle)
+
+            release_cleanup.set()
+            await asyncio.wait_for(asyncio.gather(*wakes), timeout=1)
+            await asyncio.wait_for(scheduler.join(), timeout=1)
+            self.assertTrue(foreground_started.is_set())
+            self.assertEqual(background_runs, [1, 2])
+            self.assertTrue(scheduler.idle)
+        finally:
+            release_cleanup.set()
+            await scheduler.close()
+            await asyncio.gather(*wakes, return_exceptions=True)
+
+    async def test_background_waits_until_commands_and_foreground_finish(self):
+        # WAITING can mean a tool is still executing; maintenance must not race it.
+        command_started = asyncio.Event()
+        release_command = asyncio.Event()
+        command_finished = asyncio.Event()
+        background_observations = []
+
+        async def handler(_context, _arguments):
+            command_started.set()
+            await release_command.wait()
+            command_finished.set()
+            return "done"
+
+        async def background():
+            background_observations.append((len(model.frames), command_finished.is_set()))
+
+        model = ScriptedDecisionMaker((
+            lambda _frame: ModelDecision(command_requests=(InvokeTool("work", ()),)),
+            lambda _frame: ModelDecision(content="finished"),
+        ))
+        runtime = AgentRuntime(MemoryJournal(), model, {"work": ToolBinding(handler)})
+        scheduler = SettlingScheduler(runtime, "session")
+        scheduler.background_work = background
+        await runtime.receive_user_message("session", "run", delivery_id="run")
+        try:
+            await scheduler.wake("session")
+            await asyncio.wait_for(command_started.wait(), timeout=1)
+            self.assertEqual(background_observations, [])
+            release_command.set()
+            await asyncio.wait_for(scheduler.join(), timeout=1)
+            self.assertEqual(background_observations, [(2, True)])
+            self.assertTrue(scheduler.idle)
+        finally:
+            release_command.set()
+            await scheduler.close()
+
+    async def test_background_cancel_and_close_release_the_session(self):
+        # An idle-looking session must retain its Worker while maintenance runs,
+        # and closing that Worker must never start another maintenance task.
+        for operation in ("cancel_turn", "close"):
+            with self.subTest(operation=operation):
+                started = asyncio.Event()
+                stopped = asyncio.Event()
+                runs = []
+
+                async def background():
+                    runs.append("started")
+                    started.set()
+                    try:
+                        await asyncio.Event().wait()
+                    finally:
+                        stopped.set()
+
+                runtime = AgentRuntime(MemoryJournal(), ScriptedDecisionMaker(()), {})
+                scheduler = SettlingScheduler(runtime, "session")
+                scheduler.background_work = background
+                await runtime.create_session("session")
+                try:
+                    await scheduler.wake("session")
+                    await asyncio.wait_for(started.wait(), timeout=1)
+                    self.assertFalse(scheduler.idle)
+                    if operation == "cancel_turn":
+                        await scheduler.cancel_turn("session")
+                    else:
+                        await scheduler.close()
+                        await scheduler.wake("session")
+                    await asyncio.wait_for(scheduler.join(), timeout=1)
+                    self.assertTrue(stopped.is_set())
+                    self.assertTrue(scheduler.idle)
+                    self.assertEqual(runs, ["started"])
+                finally:
+                    await scheduler.close()
+
+    async def test_unexpected_background_failure_is_observable(self):
+        failure = ValueError("background bug")
+
+        async def background():
+            raise failure
+
+        runtime = AgentRuntime(MemoryJournal(), ScriptedDecisionMaker(()), {})
+        scheduler = SessionScheduler(runtime, "session", control=AssistantControlPlane(()))
+        scheduler.background_work = background
+        await runtime.create_session("session")
+        try:
+            await scheduler.wake("session")
+            self.assertIs(await asyncio.wait_for(scheduler.wait_failure(), timeout=1), failure)
+            self.assertTrue(scheduler.idle)
+        finally:
+            await scheduler.close()
+
     def test_decision_from_llm_maps_text_and_tool_calls(self):
         decision = decision_from_llm(
             LLMResponse(
@@ -387,6 +532,7 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
         calls = 0
         active = 0
         maximum_active = 0
+        background_calls = []
 
         async def tracked_advance(session_id, **kwargs):
             nonlocal calls, active, maximum_active
@@ -405,7 +551,11 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
                     second_finished.set()
 
         runtime.advance = tracked_advance
-        scheduler = SessionScheduler(runtime, "session", control=AssistantControlPlane(()))
+        async def background():
+            background_calls.append(calls)
+
+        scheduler = SettlingScheduler(runtime, "session")
+        scheduler.background_work = background
         await runtime.create_session("session")
         await runtime.receive_user_message("session", "hello", delivery_id="user-1")
 
@@ -419,8 +569,10 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
 
             release_first.set()
             await asyncio.wait_for(second_finished.wait(), timeout=1)
+            await asyncio.wait_for(scheduler.join(), timeout=1)
             self.assertEqual(calls, 2)
             self.assertEqual(maximum_active, 1)
+            self.assertEqual(background_calls, [2])
         finally:
             release_first.set()
             await scheduler.close()

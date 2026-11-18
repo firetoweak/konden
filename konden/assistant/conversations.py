@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from konden.assistant.control import pending_approval_view, project_control_message
+from konden.assistant.clarification import ANSWER_SOURCE, ClarificationView, clarification_options
 from konden.assistant.external_messages import EXTERNAL_MESSAGE, USER_SOURCE, external_name, parse_external
 from konden.assistant.agents import COMMUNICATION_LIMIT_REACHED, PRIVATE_MESSAGE, parse_agent_fact, project_agent
 from konden.assistant.compact.core import latest_input_tokens
@@ -143,6 +144,7 @@ class StepItem:
     occurred_at: datetime
     thinking: str | None = None
     files: tuple[FileAttachment, ...] = ()
+    clarification: ClarificationView | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -515,7 +517,11 @@ def project_conversation(
     by_event = {step.committed_event_id: step for step in steps}
     sent_messages = {}
     private_threads = {}
+    answers = {}
     for event in events:
+        if (isinstance(event.payload, UserMessageReceived) and event.delivery is not None
+                and event.delivery.source == ANSWER_SOURCE):
+            answers[event.delivery.delivery_id] = event.payload.content
         if isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == PRIVATE_MESSAGE:
             message = parse_agent_fact(event.payload)
             private_threads[message.message_id] = message.thread_id
@@ -619,6 +625,8 @@ def project_conversation(
                 )
             )
         if text or tools or thinking:
+            options = clarification_options(step.decision_metadata)
+            question_id = step.step.step_id
             items.append(
                 StepItem(
                     "step",
@@ -628,6 +636,7 @@ def project_conversation(
                     tuple(tools),
                     event.occurred_at,
                     thinking,
+                    clarification=None if options is None else ClarificationView(question_id, options, answers.get(question_id)),
                 )
             )
         items.extend(messages)
