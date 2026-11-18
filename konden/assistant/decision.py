@@ -263,6 +263,10 @@ class JournalBackedLlmDecisionMaker:
     def model(self) -> str:
         return self._model
 
+    @property
+    def reasoning_effort(self) -> str | None:
+        return self._reasoning_effort
+
     def schemas_for(
         self, state, events
     ) -> tuple[list[dict[str, object]], frozenset[str]]:

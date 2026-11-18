@@ -28,11 +28,12 @@ class SettlingScheduler(SessionScheduler):
                 raise self._failure
             tasks = (
                 *((self._task,) if self._task is not None else ()),
+                *((self._background_task,) if self._background_task is not None else ()),
                 *self._runtime.dispatcher._tasks.values(),
             )
             if not tasks:
                 await asyncio.sleep(0)
-                if self._task is None and not self._runtime.dispatcher._tasks:
+                if self.idle:
                     return
                 continue
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
