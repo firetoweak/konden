@@ -16,6 +16,7 @@ from konden.assistant.compact.core import (
 )
 from konden.assistant.artifacts import ArtifactGateway
 from konden.assistant.content import READ_CONTENT
+from konden.assistant.clarification import CLARIFICATION_OPTIONS, clarification_reply
 from konden.assistant.loop_guard import LoopGuard, NOTICE
 from konden.assistant.work_plan import WORK_PLAN_CONTEXT
 from konden.assistant.control import (
@@ -490,6 +491,7 @@ class JournalBackedLlmDecisionMaker:
                 usage.input_tokens,
                 self._compact_threshold_tokens,
             )
+        clarification_options = None
         if self._compact is not None and self._compact.is_reader:
             calls = result.response.calls
             if calls:
@@ -511,15 +513,15 @@ class JournalBackedLlmDecisionMaker:
                     ),
                 )
         else:
-            decision = ensure_deliver(
+            decision, clarification_options = clarification_reply(
                 self._decision_from_response(
                     frame,
                     result.response,
                     allowed_tool_names,
                     control_names,
                 ),
-                output_id,
             )
+            decision = ensure_deliver(decision, output_id)
             if show_preview and not decision.content.strip():
                 await self._preview.abort(frame.state.session_id)
         manifest = {
@@ -559,6 +561,8 @@ class JournalBackedLlmDecisionMaker:
             json.dumps(manifest, ensure_ascii=False, sort_keys=True)
         )
         metadata = {MODEL_USAGE: {"window": window, **manifest["usage"]}}
+        if clarification_options is not None:
+            metadata[CLARIFICATION_OPTIONS] = clarification_options
         control_request = self._control.take_staged_metadata(frame)
         if control_request is not None:
             metadata[CONTROL_REQUEST_METADATA] = control_request

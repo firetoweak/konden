@@ -121,7 +121,7 @@ export function turnIsSettled(
 export function turnReplies(
   turn: TimelineTurn,
   settled: boolean,
-): { key: string; text: string; streaming: boolean; files: VisibleStep["files"] }[] {
+): { key: string; text: string; streaming: boolean; files: VisibleStep["files"]; clarification?: VisibleStep["clarification"] }[] {
   return [...turn.process, turn.active, turn.final]
     .filter((step): step is VisibleStep => step !== null
       && ((step.text ?? "").trim() !== "" || (step.files ?? []).length > 0))
@@ -130,6 +130,7 @@ export function turnReplies(
       text: step.text ?? "",
       files: step.files ?? [],
       streaming: !settled && step.pending,
+      clarification: step.clarification,
     }));
 }
 

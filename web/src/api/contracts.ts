@@ -343,6 +343,11 @@ export const conversationViewSchema = z
             kind: z.literal("step"),
             step_id: z.string().min(1),
             output_id: z.string().min(1),
+            clarification: z.object({
+              question_id: z.string().min(1),
+              options: z.array(z.string().min(1)),
+              answer: z.string().min(1).nullable(),
+            }).strict().nullish(),
             text: z.string().min(1).nullable(),
             thinking: z.string().min(1).nullable(),
             tools: z.array(toolItemSchema),

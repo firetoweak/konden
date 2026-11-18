@@ -630,6 +630,20 @@ export const kondenApi = createApi({
         putConversation(dispatch, arg.sessionId, data);
       },
     }),
+    answerClarification: build.mutation<ConversationView, SelectSession & { questionId: string; text: string }>({
+      query: ({ sessionId, questionId, connectionId, text }) => ({
+        url: `/sessions/${encodeURIComponent(sessionId)}/clarifications/${encodeURIComponent(questionId)}/answer`,
+        method: "PUT",
+        body: { connection_id: connectionId, text },
+      }),
+      transformResponse: (value: unknown) => conversationViewSchema.parse(value),
+      onQueryStarted({ sessionId }, { dispatch, queryFulfilled }) {
+        return queryFulfilled.then(
+          ({ data }) => putConversation(dispatch, sessionId, data),
+          () => { dispatch(kondenApi.util.invalidateTags([{ type: "Conversation", id: sessionId }])); },
+        );
+      },
+    }),
     uploadAttachment: build.mutation<AttachmentRef, UploadAttachment>({
       query: ({ connectionId, sessionId, file }) => {
         const body = new FormData();
@@ -771,6 +785,7 @@ export const {
   useObserveSubagentQuery,
   useSelectSessionMutation,
   useSendInputMutation,
+  useAnswerClarificationMutation,
   useUploadAttachmentMutation,
   useCancelTurnMutation,
   useAuthorizeCommandMutation,
