@@ -13,7 +13,7 @@ from konden.assistant.compact.core import latest_input_tokens
 from konden.assistant.attachments import AttachmentGateway, AttachmentStore
 from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
 from konden.assistant.agent_messages import SEND_FILE, SEND_MESSAGE
-from konden.assistant.delivery import DELIVER_TOOL_NAME
+from konden.assistant.delivery import DELIVER_TOOL_NAME, USER_MESSAGE_SENT
 from konden.runtime.json_values import thaw_value
 from konden.assistant.work_plan import WorkPlanUpdate, project_work_plan, project_work_plan_updates
 from konden.assistant.host.session_store import SessionStore
@@ -514,6 +514,7 @@ def project_conversation(
     session: SessionView,
     attachments: AttachmentStore | None = None,
 ) -> ConversationView:
+    agent = project_agent(events)
     by_event = {step.committed_event_id: step for step in steps}
     sent_messages = {}
     private_threads = {}
@@ -551,6 +552,10 @@ def project_conversation(
     items: list[ConversationItem] = []
     for event in events:
         payload = event.payload
+        if isinstance(payload, DomainFactCommitted) and payload.fact_type == USER_MESSAGE_SENT:
+            identity = event.delivery.delivery_id
+            items.append(StepItem("step", identity, identity, payload.data["text"], (), event.occurred_at))
+            continue
         if isinstance(payload, DomainFactCommitted) and payload.fact_type == EXTERNAL_MESSAGE:
             message = parse_external(payload)
             if message.sender == "user":
@@ -594,7 +599,8 @@ def project_conversation(
         if not isinstance(payload, StepCommitted):
             continue
         step = by_event[event.event_id]
-        text = step.step.decision.content.strip()
+        options = clarification_options(step.decision_metadata)
+        text = step.step.decision.content.strip() if agent is None or options is not None else ""
         for notice in communication_notices.get(event.event_id, ()):
             text = "\n\n".join(filter(None, (text,
                 f"与 {notice.recipient} 的交流已达上限，需要你判断是否继续。")))
@@ -628,7 +634,6 @@ def project_conversation(
                 )
             )
         if text or tools or thinking:
-            options = clarification_options(step.decision_metadata)
             question_id = step.step.step_id
             items.append(
                 StepItem(
@@ -644,7 +649,6 @@ def project_conversation(
                 )
             )
         items.extend(messages)
-    agent = project_agent(events)
     return ConversationView(
         session_id=session_id,
         workspace_id=bound_workspace_id(events),

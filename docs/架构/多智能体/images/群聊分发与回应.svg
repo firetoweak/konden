@@ -44,5 +44,5 @@
   <text x="320.0" y="829.0" font-size="18" text-anchor="middle" font-weight="400" fill="#556779" data-bound="52,758,536,92">模型决定是否发言；引用不表示任务完成</text>
   <text x="680" y="774" font-size="19" text-anchor="start" font-weight="400" fill="#60758b">回应写回群记录，继续分发</text>
   <text x="680" y="813" font-size="19" text-anchor="start" font-weight="400" fill="#60758b">不点名时：叫除发言者外的成员</text>
-  <text x="40" y="911" font-size="18" text-anchor="start" font-weight="400" fill="#60758b">发言送达、回应请求、模型发言是三件事；普通回复仍给人，群消息须显式发送。</text>
+  <text x="40" y="911" font-size="18" text-anchor="start" font-weight="400" fill="#60758b">发言送达、回应请求、模型发言是三件事；模型按约定显式通知用户或在群里发言。</text>
 </svg>

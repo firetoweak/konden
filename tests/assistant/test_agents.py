@@ -227,6 +227,10 @@ class AgentRosterTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(notices[0].requests_decision)
         with self.assertRaises(AgentNameTaken):
             await self.host.rename_agent(colleague.session_id, "Ada")
+        with self.assertRaises(AgentNameTaken):
+            await self.host.rename_agent(colleague.session_id, "user")
+        with self.assertRaises(AgentNameTaken):
+            await self.host.create_agent(name="user")
 
     async def test_lost_rename_ack_updates_roster_and_retry_delivers_one_notice(self):
         agent, colleague = await self.create("Ada"), await self.create("Lin")

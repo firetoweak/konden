@@ -12,6 +12,7 @@ from konden.runtime.model import (
 )
 
 
+USER_MESSAGE_SENT = "bot.user_message_sent"
 DELIVER_TOOL_NAME = "deliver"
 
 
@@ -45,7 +46,7 @@ class PreviewEmitter:
 
     @property
     def enabled(self) -> bool:
-        return self.sink is not None
+        return self.sink is not None or self.thinking_sink is not None
 
     async def start(self, session_id: str, output_id: str) -> None:
         if self.sink is None:
@@ -182,7 +183,7 @@ async def emit_delivery(
     output_id: str,
     text: str,
 ) -> None:
-    """把助手正文交给 Channel。`output_id` 必须是该 Step 的 trigger event id。"""
+    """把助手正文交给 Channel，实时投递与会话历史共用同一输出标识。"""
     emitted = sink(session_id, output_id, text)
     if isawaitable(emitted):
         await emitted

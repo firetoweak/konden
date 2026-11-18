@@ -84,7 +84,7 @@ class DeliverFileTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(picture.text)
         self.assertEqual(picture.files[0].name, "picture.png")
         self.assertEqual([item.text for item in view.items if item.kind == "step" and item.text],
-                         ["蓝色背景突出中央主体。"])
+                         [])
 
     async def test_file_tool_preserves_download_in_history_and_requires_a_file(self):
         agent = await self.host.create_agent(name="Ada")
@@ -107,4 +107,4 @@ class DeliverFileTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(files[0].text, "证据在这")
         self.assertEqual(files[0].files[0].name, "evidence.txt")
         self.assertEqual([item.text for item in view.items if item.kind == "step" and item.text],
-                         ["证据在这", "交付完成"])
+                         ["证据在这"])

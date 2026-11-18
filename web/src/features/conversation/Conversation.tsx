@@ -336,7 +336,7 @@ export function Conversation({ agentName, agentNames = [], ref }: {
                   ))}
                   {turnNeedsThinkingHint(turn, { latest, running, settled }) ? (
                     <RunningHint label="思考中" agentName={agentName} />
-                  ) : turnNeedsSilentEnd(turn, settled) &&
+                  ) : conversation.agent_name === null && turnNeedsSilentEnd(turn, settled) &&
                     !(latest && notice !== null) ? (
                     <SilentEndHint />
                   ) : null}

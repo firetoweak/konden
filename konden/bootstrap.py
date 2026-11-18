@@ -73,7 +73,7 @@ async def bootstrap_assistant(
     command_environment: dict[str, str] | None = None,
     fresh_sessions: bool = False,
 ) -> AsyncIterator[BootstrappedAssistant]:
-    """Host 将普通回复与实时预览交给 Channel，不根据唤醒来源向同事或群转发。
+    """Host 将各会话已交付的输出和可用的预览交给 Channel。
 
     ``fresh_sessions``：每次启动都是全新会话的入口，先丢弃上次运行留下的会话与状态。
 

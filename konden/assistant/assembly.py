@@ -20,7 +20,7 @@ from konden.assistant.clarification import ASK_USER, Question, TimedQuestion, as
 from konden.assistant.loop_guard import LoopGuard
 from konden.assistant.work_plan import UPDATE_PLAN, UPDATE_PLAN_SCHEMA, update_plan_binding
 from konden.assistant.agents import project_agent
-from konden.assistant.agent_messages import MESSAGE_SCHEMAS, message_bindings
+from konden.assistant.agent_messages import MESSAGE_SCHEMAS, SEND_MESSAGE, message_bindings
 from konden.automation.routine_tool import ROUTINE_SCHEMAS, ROUTINE_TOOLS, routine_bindings
 from konden.assistant.delivery import (
     DELIVER_TOOL_NAME,
@@ -133,8 +133,11 @@ async def build_assistant_assembly(
         parent_events = await SessionStore(sessions_root).journal(task.parent_session_id).snapshot(task.parent_session_id)
         file_owner = project_agent(parent_events)
         shared_root = bound_workspace(task.parent_session_id, parent_events, WorkspaceRegistry.load(home.workspaces_path)).task_root
-    colleague_schemas = MESSAGE_SCHEMAS if agent is not None and session_transport is not None else []
-    colleague_bindings = (message_bindings(session_transport, journal) if colleague_schemas else {})
+    connected_agent = agent is not None and session_transport is not None
+    colleague_bindings = message_bindings(session_transport, journal, sink) if agent is not None else {}
+    if agent is not None and not connected_agent:
+        colleague_bindings = {SEND_MESSAGE: colleague_bindings[SEND_MESSAGE]}
+    colleague_schemas = [s for s in MESSAGE_SCHEMAS if s["function"]["name"] in colleague_bindings]
     attachment_gateway = AttachmentGateway(sessions_root)
     attachments = attachment_gateway.for_session(session_id)
     builtin_tools = await build_builtin_tools(
@@ -147,8 +150,7 @@ async def build_assistant_assembly(
     )
     command_interrupts = builtin_tools.command_interrupts
 
-    agent_git = agent is not None and session_transport is not None
-    exclusive_tools = EXCLUSIVE_PROJECT_TOOLS if agent_git else frozenset()
+    exclusive_tools = EXCLUSIVE_PROJECT_TOOLS if connected_agent else frozenset()
     settings = ModelContextSettings()
     gateway = FileArtifactGateway(sessions_root)
     projector = ModelContextProjector(
@@ -218,7 +220,7 @@ async def build_assistant_assembly(
     subagents = SubAgentHost(subagent_activity_sink)
     if task is not None:
         subagents._parents[session_id] = task.parent_session_id
-    preview = PreviewEmitter(preview_sink, thinking_sink)
+    preview = PreviewEmitter(preview_sink if agent is None else None, thinking_sink)
 
     async def report_session_failed(session_id: str, text: str) -> None:
         if subagents.is_subagent(session_id) or session_failed_sink is None:
@@ -236,8 +238,8 @@ async def build_assistant_assembly(
             *colleague_schemas,
             *(SHARED_MEMORY_SCHEMAS if shared_memory is not None else []),
             *(PERSONAL_MEMORY_SCHEMAS if personal_memory is not None else []),
-            *(ROUTINE_SCHEMAS if colleague_schemas else []),
-            *(AGENT_GIT_SCHEMAS if agent_git else []),
+            *(ROUTINE_SCHEMAS if connected_agent else []),
+            *(AGENT_GIT_SCHEMAS if connected_agent else []),
             *(
                 [SCHEDULE_ONCE_SCHEMA, CANCEL_SCHEDULE_SCHEMA]
                 if session_transport is not None else []
@@ -292,8 +294,8 @@ async def build_assistant_assembly(
         ),
         **colleague_bindings,
         **memory_tools,
-        **(routine_bindings(session_transport) if colleague_schemas else {}),
-        **(agent_git_bindings(session_transport) if agent_git else {}),
+        **(routine_bindings(session_transport) if connected_agent else {}),
+        **(agent_git_bindings(session_transport) if connected_agent else {}),
         **(
             {
                 SCHEDULE_ONCE: schedule_once_binding(session_transport),
@@ -336,6 +338,7 @@ async def build_assistant_assembly(
         compact=compact_context,
         exclusive_tool_names=exclusive_tools | {ASK_USER},
         question_model=question_model,
+        explicit_messages=agent is not None,
         loop_guard=LoopGuard(),
         preview=preview,
     )

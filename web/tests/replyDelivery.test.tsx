@@ -11,7 +11,7 @@ import { kondenApi } from "../src/api/kondenApi";
 import { Conversation } from "../src/features/conversation/Conversation";
 import type { ConversationTimeline } from "../src/features/conversation/ConversationTimeline";
 import runtimeReducer, {
-  connected, outputFinal, previewDelta, previewStarted, sessionActivity, viewing,
+  connected, outputFinal, sessionActivity, viewing,
 } from "../src/realtime/runtimeSlice";
 
 // Markdown rendering, the editor and virtualization are outside the reply delivery contract.
@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("同事和例行任务触发的普通回复直接可见，流式与历史一致并计入未读", async () => {
+it("同事私信留在原线程，显式发给用户的消息可见并计入未读", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   const NativeRequest = Request;
@@ -50,19 +50,17 @@ it("同事和例行任务触发的普通回复直接可见，流式与历史一�
     },
     items: [
       { kind: "user", message_id: "hi", text: "你好", occurred_at: "2026-10-19T00:00:00Z", images: [], files: [] },
-      { kind: "step", step_id: "s1", output_id: "hi", text: "回给人", thinking: null,
+      { kind: "step", step_id: "s1", output_id: "send-hi", text: "回给人", thinking: null,
         occurred_at: "2026-10-19T00:00:01Z", tools: [] },
       { kind: "private_message", message_id: "received-lin", direction: "received", peer: "Lin",
         text: "请检查文件", thread_id: "lin-thread", reply_to: null,
         occurred_at: "2026-10-19T00:01:00Z" },
-      { kind: "step", step_id: "s2", output_id: "colleague", text: "先看看 Lin 说的文件", thinking: null,
+      { kind: "step", step_id: "s2", output_id: "colleague", text: null, thinking: null,
         occurred_at: "2026-10-19T00:01:00Z", tools: [{ command_id: "read", name: "read_file", status: "succeeded",
           error: null, arguments: { path: "a.md" } }] },
       { kind: "private_message", message_id: "sent-lin", direction: "sent", peer: "Lin",
         text: "文件没问题", thread_id: "lin-thread", reply_to: "received-lin",
         occurred_at: "2026-10-19T00:01:04Z" },
-      { kind: "step", step_id: "s3", output_id: "read", text: "已回复 Lin\n\n细节：文件没问题", thinking: null,
-        occurred_at: "2026-10-19T00:01:05Z", tools: [] },
       { kind: "step", step_id: "s3:tell", output_id: "tell", text: "结论给你", thinking: null,
         occurred_at: "2026-10-19T00:01:05Z", tools: [] },
     ],
@@ -90,7 +88,7 @@ it("同事和例行任务触发的普通回复直接可见，流式与历史一�
 
   expect(await screen.findByText("回给人")).toBeInTheDocument();
   expect(screen.getByText("结论给你")).toBeInTheDocument();
-  expect(screen.getByText(/细节：文件没问题/)).toBeVisible();
+  expect(screen.queryByText("这一轮没有文字回复")).not.toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "打开 Lin 的对话" })).not.toBeInTheDocument();
   expect(screen.queryByText("请检查文件")).not.toBeInTheDocument();
@@ -125,19 +123,16 @@ it("同事和例行任务触发的普通回复直接可见，流式与历史一�
   expect(screen.queryByText("以下是未读消息")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /工作记录/ })).toBeNull();
 
-  // A routine reply uses the same visible output and unread contract.
   act(() => {
     store.dispatch(viewing(null));
     store.dispatch(sessionActivity({ sessionId: "agent", activity: "running" }));
-    store.dispatch(previewStarted({ sessionId: "agent", outputId: "routine" }));
-    store.dispatch(previewDelta({ sessionId: "agent", outputId: "routine", text: "例行检查中\n\n正文还在写" }));
   });
-  expect(screen.getByText(/正文还在写/)).toBeVisible();
+  expect(store.getState().runtime.sessions.agent.unread).toBe(0);
   act(() => {
-    store.dispatch(outputFinal({ sessionId: "agent", outputId: "routine", text: "例行检查中\n\n正文写完了" }));
+    store.dispatch(outputFinal({ sessionId: "agent", outputId: "send-report", text: "例行检查发现一个待确认的差额" }));
   });
   expect(store.getState().runtime.sessions.agent.unread).toBe(1);
-  expect(screen.getByText(/正文写完了/)).toBeVisible();
+  expect(screen.getByText("例行检查发现一个待确认的差额")).toBeVisible();
   cleanup();
   store.dispatch(kondenApi.util.resetApiState());
 });

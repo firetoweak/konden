@@ -41,7 +41,7 @@
   <text x="1060.0" y="422.0" font-size="18" text-anchor="middle" font-weight="400" fill="#556779" data-bound="914,356,292,82">保留自己的长期上下文</text>
   <rect x="902" y="504" width="316" height="94" rx="16" fill="#eff8f3" stroke="#8cbca2" stroke-width="1.5"/>
   <text x="1060.0" y="546.0" font-size="23" text-anchor="middle" font-weight="700" fill="#20354a" data-bound="914,510,292,82">显式发给外部聊天</text>
-  <text x="1060.0" y="576.0" font-size="18" text-anchor="middle" font-weight="400" fill="#556779" data-bound="914,510,292,82">普通回复仍然给人</text>
+  <text x="1060.0" y="576.0" font-size="18" text-anchor="middle" font-weight="400" fill="#556779" data-bound="914,510,292,82">用户私聊另行显式发送</text>
   <rect x="482" y="504" width="316" height="94" rx="16" fill="#f1f6fc" stroke="#9db8d8" stroke-width="1.5"/>
   <text x="640.0" y="546.0" font-size="23" text-anchor="middle" font-weight="700" fill="#20354a" data-bound="494,510,292,82">保存待收消息</text>
   <text x="640.0" y="576.0" font-size="18" text-anchor="middle" font-weight="400" fill="#556779" data-bound="494,510,292,82">沿用 Bot 时间线事实</text>

@@ -235,9 +235,11 @@ class JournalBackedLlmDecisionMaker:
         preview: PreviewEmitter,
         exclusive_tool_names: AbstractSet[str] = frozenset(),
         question_model: type[Question] = Question,
+        explicit_messages: bool = False,
     ) -> None:
         self._exclusive_tool_names = exclusive_tool_names
         self._question_model = question_model
+        self._explicit_messages = explicit_messages
         self._journal = journal
         self._llm = llm
         self._model = model
@@ -524,7 +526,8 @@ class JournalBackedLlmDecisionMaker:
                 ),
                 self._question_model,
             )
-            decision = ensure_deliver(decision, output_id)
+            if not self._explicit_messages or clarification_options is not None:
+                decision = ensure_deliver(decision, output_id)
             if show_preview and not decision.content.strip():
                 await self._preview.abort(frame.state.session_id)
         manifest = {

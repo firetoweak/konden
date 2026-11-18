@@ -62,7 +62,9 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
             }, ensure_ascii=False)),))
 
         requests = []
-        replies = iter([ask("图表放哪里？", "放附录"), LLMResponse(content="已完成正文"),
+        replies = iter([ask("图表放哪里？", "放附录"),
+                        LLMResponse(calls=(ToolCall("report", "send_message", '{"recipient":"user","text":"已完成正文"}'),)),
+                        LLMResponse(content="等待答复"),
                         ask("周报用哪种格式？", "使用 Markdown"), LLMResponse(content="已整理材料"),
                         LLMResponse(content="收到图表位置"), LLMResponse(content="已记下格式偏好"),
                         LLMResponse(content="已按聊天中补充的要求调整格式"),
