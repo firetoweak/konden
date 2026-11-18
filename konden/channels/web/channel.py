@@ -12,6 +12,7 @@ from konden.assistant.attachments import (
     is_valid_attachment_id,
 )
 from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
+from konden.assistant.clarification import ANSWER_SOURCE
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
 from konden.assistant.personal_memory import personal_memory_store
 from konden.automation.once import SOURCE as AUTOMATION_SOURCE
@@ -327,6 +328,13 @@ class WebChannel:
             source="web",
             interrupt=interrupt,
             **({"artifact_refs": refs} if refs else {}),
+        )
+        return await self._queries.conversation(session_id, view=view)
+
+    async def answer_clarification(self, connection_id: str, session_id: str, question_id: str, text: str):
+        self._require_connection(connection_id)
+        view = await self._sessions.accept_input(
+            session_id, self._require_text(text), delivery_id=question_id, source=ANSWER_SOURCE,
         )
         return await self._queries.conversation(session_id, view=view)
 

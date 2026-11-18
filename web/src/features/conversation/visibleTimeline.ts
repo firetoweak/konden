@@ -1,4 +1,4 @@
-import type { ConversationView, ToolStatus } from "../../api/contracts";
+import type { ConversationItem, ConversationView, ToolStatus } from "../../api/contracts";
 import type {
   ActivePreview,
   LiveTool,
@@ -23,6 +23,7 @@ export type VisibleTool = {
 };
 
 export type VisibleStep = {
+  clarification?: Extract<ConversationItem, { kind: "step" }>["clarification"];
   key: string;
   kind: "step";
   outputId: string;
@@ -112,6 +113,7 @@ export function visibleTimeline(
       stepId: item.step_id,
       text: item.text,
       pending: false,
+      clarification: item.clarification,
       files: item.files ?? [],
       tools: item.tools.map((tool) => {
         const live = tools[tool.command_id];

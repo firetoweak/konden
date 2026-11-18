@@ -13,6 +13,7 @@ from datetime import datetime
 import json
 
 from konden.assistant.content import READ_CONTENT, CONTENT_HINT
+from konden.assistant.clarification import ANSWER_SOURCE, clarification_options, question_text, questions_by_id
 from konden.automation.routines import ROUTINE_DUE
 from konden.automation.once import TIME_REACHED
 from konden.assistant.commands import COMMAND_FINISHED
@@ -246,6 +247,7 @@ def _translate_visible_events(
             "它们是只读的；编辑前先把文件复制到你的工作目录。"
         )
     visible = set(state.visible_event_ids)
+    questions = questions_by_id(events)
     steps = {step.committed_event_id: step for step in state.steps}
     items: list[_Projected] = [
         _Projected(
@@ -282,13 +284,18 @@ def _translate_visible_events(
             continue
         payload = event.payload
         if isinstance(payload, UserMessageReceived):
+            text = payload.content
+            if event.delivery is not None and event.delivery.source == ANSWER_SOURCE:
+                question = questions[event.delivery.delivery_id]
+                asked = question_text(question.step.decision.content, clarification_options(question.decision_metadata))
+                text = f"针对你的提问：\n{asked}\n\n我的回答：\n{text}"
             items.append(_received_at(event))
             items.append(
                 _Projected(
                     {
                         "role": "user",
                         "content": _user_content(
-                            event, payload.content, attachments
+                            event, text, attachments
                         ),
                     },
                     "user",
@@ -427,7 +434,7 @@ def _project_step(step: StepState, sequences: Mapping[str, int]) -> list[_Projec
         for state in step.commands
         if (effect := _shown_tool(state)) is not None
     ]
-    content = step.step.decision.content
+    content = question_text(step.step.decision.content, clarification_options(metadata))
     if not content and not shown:
         return items
     message: dict[str, object] = (

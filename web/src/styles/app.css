@@ -585,6 +585,9 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
 
 .assistant-turn { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .message-progress .assistant-reply { background: transparent; }
+.assistant-reply:has(.clarification-form) { width: 26rem; }
+.clarification-option { max-width: 100%; height: auto; min-height: 30px; padding-block: 4px; }
+.clarification-option .mantine-Button-label { white-space: normal; overflow-wrap: anywhere; }
 .private-message-notice { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; color: var(--mantine-color-dimmed); font-size: 12px; line-height: 1.6; }
 .private-message-direction { display: inline-flex; align-items: center; flex-shrink: 0; }
 .private-message-trigger { font: inherit; }

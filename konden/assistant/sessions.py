@@ -9,6 +9,7 @@ from konden.assistant.authorization import (
     AuthorizationTargetNotFound,
 )
 from konden.assistant.inputs import InputConflict
+from konden.assistant.clarification import ANSWER_SOURCE, questions_by_id
 from konden.assistant.control import (
     CONTROL_SOURCE,
     AssistantControlPlane,
@@ -286,6 +287,8 @@ class AssistantSessions:
                 artifact_refs=tuple(artifact_refs),
             )
         except DeliveryConflictError as error:
+            if source == ANSWER_SOURCE:
+                raise InputConflict("这个问题已有其他回答。") from error
             raise InputConflict("该消息编号已用于不同内容，请重新发送消息。") from error
         await self._scheduler.wake(session_id)
 
@@ -298,6 +301,11 @@ class AssistantSessions:
         source: str = "user",
         artifact_refs: tuple[str, ...] = (),
     ) -> SessionView:
+        if source == ANSWER_SOURCE:
+            if delivery_id not in questions_by_id(await self._runtime.snapshot(session_id)):
+                raise InputConflict("当前会话没有这个澄清问题。")
+            await self.receive_user_message(session_id, content, delivery_id=delivery_id, source=source)
+            return await self.view(session_id)
         view = await self.view(session_id)
         answer = content.strip().lower()
         if view.control_approval is not None and answer in {"yes", "y", "no", "n"}:
