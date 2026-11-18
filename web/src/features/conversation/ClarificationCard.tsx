@@ -2,6 +2,7 @@ import { Button, Group, Stack, Text, Textarea } from "@mantine/core";
 import { useId, useState } from "react";
 import { apiErrorDetail, useAnswerClarificationMutation } from "../../api/kondenApi";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { formatMessageTime } from "./messageTime";
 import type { VisibleStep } from "./visibleTimeline";
 
 const previewCount = 3;
@@ -42,9 +43,14 @@ export function ClarificationCard({ question, card, sessionId, connectionId, del
       void submit({ sessionId, connectionId, questionId: card.question_id, text: text.trim() });
     }
   }
-  return <Stack gap="xs" component="section" aria-label="澄清问题">
-    <Text fw={600} size="xs" c="dimmed">{card.answer !== null ? "已回答" : deleted ? "未回答" : "待你回答"}</Text>
+  return <Stack gap="xs" component="section" className="clarification-card" aria-label="澄清问题">
+    <Text fw={600} size="xs" c="dimmed">{card.answer !== null ? "已回答" : deleted ? "未回答"
+      : card.deadline?.reached ? "等待时间已到，仍可回答" : "待你回答"}</Text>
     <MarkdownMessage content={question} streaming={false} />
+    {card.deadline && <Stack gap={2}>
+      <Text size="xs" c="dimmed">等待至 <time dateTime={card.deadline.at}>{formatMessageTime(card.deadline.at).full}</time></Text>
+      <Text size="sm" className="pre-wrap">{card.deadline.plan}</Text>
+    </Stack>}
     {card.answer !== null ? <Text className="pre-wrap" size="sm">你的回答 · {card.answer}</Text> : deleted ? null : <>
       {!list && options.length > 0 && <Group gap="xs">
         {options.map((option) => <Button className="clarification-option" key={option}

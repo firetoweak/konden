@@ -106,7 +106,7 @@ class OneShotSchedules:
             raise ValueError("schedule_id already belongs to another request")
         return schedule
 
-    def next_pending(self, session_id: str | None = None) -> ScheduledCheck | None:
+    def next_pending(self, session_id: str | None = None, *, exclude_prefix: str | None = None) -> ScheduledCheck | None:
         sql = """SELECT * FROM schedules WHERE delivered_at IS NULL
             AND NOT EXISTS (
                 SELECT 1 FROM schedule_cancellations AS cancellation
@@ -117,11 +117,18 @@ class OneShotSchedules:
         if session_id is not None:
             sql += " AND session_id = ?"
             values = (session_id,)
+        if exclude_prefix is not None:
+            sql += " AND instr(schedule_id, ?) != 1"
+            values += (exclude_prefix,)
         sql += " ORDER BY due_at, schedule_id LIMIT 1"
         with closing(sqlite3.connect(self.path)) as connection:
             connection.row_factory = sqlite3.Row
             row = connection.execute(sql, values).fetchone()
         return None if row is None else self._from_row(row)
+
+    def registered(self, schedule_id: str) -> bool:
+        with closing(sqlite3.connect(self.path)) as connection:
+            return connection.execute("SELECT 1 FROM schedules WHERE schedule_id = ?", (schedule_id,)).fetchone() is not None
 
     def cancel(self, command_id: str, session_id: str, schedule_id: str) -> str:
         with closing(sqlite3.connect(self.path)) as connection:

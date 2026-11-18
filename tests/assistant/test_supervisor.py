@@ -51,6 +51,65 @@ async def until(predicate, timeout=30):
 
 
 class SupervisorTest(unittest.IsolatedAsyncioTestCase):
+    async def test_clarification_deadlines_survive_restart_and_only_wake_unanswered_questions(self):
+        from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, questions_by_id
+        from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
+        from konden.runtime import DomainFactCommitted
+
+        def ask(question, plan):
+            return LLMResponse(calls=(ToolCall("ask", "ask_user", json.dumps({
+                "question": question, "deadline": {"after_seconds": 60, "plan": plan},
+            }, ensure_ascii=False)),))
+
+        requests = []
+        replies = iter([ask("图表放哪里？", "放附录"), LLMResponse(content="已完成正文"),
+                        ask("周报用哪种格式？", "使用 Markdown"), LLMResponse(content="已整理材料"),
+                        LLMResponse(content="收到图表位置"), LLMResponse(content="已记下格式偏好"),
+                        LLMResponse(content="已按聊天中补充的要求调整格式"),
+                        LLMResponse(content="收到补答，改为纯文本")])
+
+        class Model(ProcessLlm):
+            async def chat(client, messages, model, **kwargs):
+                requests.append(messages)
+                return LLMCallResult(next(replies), LLMUsage(input_tokens=10, output_tokens=5))
+
+        await self.host.set_auto_authorize(False)
+        sid = (await self.host.create_agent(name="周报助手")).session_id
+        await self.host.wait_quiescent(sid)
+        self.host.llm = Model(self.root)
+        for text in ("定图表", "定格式"):
+            await self.host.accept_input(sid, text, delivery_id=text)
+            await self.host.wait_quiescent(sid)
+        self.assertIn((sid, "已完成正文"), self.output)
+        self.assertIsNone(self.host.next_scheduled_check(sid))
+        events = await self.store.journal(sid).snapshot(sid)
+        first_id, second_id = questions_by_id(events)
+        first = self.host.automation.schedules.next_pending(sid)
+        await self.host.accept_input(sid, "放正文", delivery_id=first_id, source=ANSWER_SOURCE)
+        await self.host.wait_quiescent(sid)
+        await self.host.accept_input(sid, "偏好邮件能直接阅读的格式", delivery_id="chat-note")
+        await self.host.wait_quiescent(sid)
+        # A previously claimed reminder can race with the already committed answer.
+        await self.host._deliver_scheduled(first, first.due_at)
+        await self.host.close()
+        self.host = self.new_host()
+        self.host.llm = Model(self.root)
+        second = self.host.automation.schedules.next_pending(sid)
+        self.assertEqual(second.purpose, "使用 Markdown")
+        await self.host._deliver_scheduled(second, second.due_at)
+        await self.host._deliver_scheduled(second, second.due_at)
+        await self.host.wait_quiescent(sid)
+        notice = next(m["content"] for m in requests[-1] if DEADLINE_REACHED in (m["content"] or ""))
+        self.assertIn("周报用哪种格式？", notice)
+        self.assertIn("使用 Markdown", notice)
+        self.assertTrue(any(m["role"] == "user" and "偏好邮件能直接阅读的格式" in m["content"] for m in requests[-1]))
+        await self.host.accept_input(sid, "用纯文本", delivery_id=second_id, source=ANSWER_SOURCE)
+        await self.host.wait_quiescent(sid)
+        events = await self.store.journal(sid).snapshot(sid)
+        self.assertEqual([e.payload.data["question_id"] for e in events if isinstance(e.payload, DomainFactCommitted)
+                          and e.payload.fact_type == DEADLINE_REACHED], [second_id])
+        self.assertTrue(any(m["role"] == "user" and m["content"].endswith("用纯文本") for m in requests[-1]))
+
     async def test_bot_writes_external_files_and_uses_external_command_cwd_by_default(self):
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
         from tests.execution.test_host_process_process import shell

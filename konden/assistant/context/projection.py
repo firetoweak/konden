@@ -13,7 +13,7 @@ from datetime import datetime
 import json
 
 from konden.assistant.content import READ_CONTENT, CONTENT_HINT
-from konden.assistant.clarification import ANSWER_SOURCE, clarification_options, question_text, questions_by_id
+from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, clarification_options, question_text, questions_by_id
 from konden.automation.routines import ROUTINE_DUE
 from konden.automation.once import TIME_REACHED
 from konden.assistant.commands import COMMAND_FINISHED
@@ -309,11 +309,15 @@ def _translate_visible_events(
                 continue
             # Protocol has four roles; identify application facts explicitly.
             shown_data = thaw_value(payload.data)
-            if payload.fact_type in {TIME_REACHED, ROUTINE_DUE}:
+            if payload.fact_type in {TIME_REACHED, ROUTINE_DUE, DEADLINE_REACHED}:
                 for key in ("planned_at", "fired_at"):
                     shown_data[key] = datetime.fromisoformat(shown_data[key]).astimezone().isoformat()
             if payload.fact_type == "assistant.catalog":
                 shown_data = catalog_for_model(shown_data)
+            elif payload.fact_type == DEADLINE_REACHED:
+                question = questions[shown_data.pop("question_id")]
+                shown_data["question"] = question_text(question.step.decision.content, clarification_options(question.decision_metadata))
+                shown_data["notice"] = "该卡片的等待时间已到，用户仍可补答。结合最新对话与卡片上说明的打算决定下一步。"
             elif payload.fact_type in AGENT_FACT_TYPES:
                 shown_data = agent_fact_for_model(payload)
             elif payload.fact_type == EXTERNAL_MESSAGE:

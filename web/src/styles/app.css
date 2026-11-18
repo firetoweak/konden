@@ -584,7 +584,7 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
 }
 
 .assistant-turn { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.message-progress .assistant-reply { background: transparent; }
+.message-progress .assistant-reply:not(:has(.clarification-card)) { background: transparent; }
 .assistant-reply:has(.clarification-form) { width: 26rem; }
 .assistant-reply:has(.clarification-list) { width: 32rem; }
 .clarification-option { max-width: 100%; height: auto; min-height: 30px; padding-block: 4px; }

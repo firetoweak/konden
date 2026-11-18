@@ -347,6 +347,11 @@ export const conversationViewSchema = z
               question_id: z.string().min(1),
               options: z.array(z.string().min(1)),
               answer: z.string().min(1).nullable(),
+              deadline: z.object({
+                at: z.string().datetime({ offset: true }),
+                plan: z.string().min(1),
+                reached: z.boolean(),
+              }).strict().nullish(),
             }).strict().nullish(),
             text: z.string().min(1).nullable(),
             thinking: z.string().min(1).nullable(),
