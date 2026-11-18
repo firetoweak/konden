@@ -21,7 +21,9 @@ Nonblank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)
 class Question(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     question: Nonblank = Field(description="用户可以直接回答的一个具体问题，带上必要背景。")
-    options: list[Nonblank] = Field(default_factory=list, description="可直接选择的简短答复。开放式问题可省略。")
+    options: list[Nonblank] = Field(
+        default_factory=list, description="可选择的答复。需要说明时，首行写短标题，换行写完整说明。开放式问题可省略。",
+    )
 
     @field_validator("options")
     @classmethod
