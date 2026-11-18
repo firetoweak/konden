@@ -71,11 +71,19 @@ class CompactTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_memory_observations_keep_order_and_prefix_after_rollover(self):
+        def request_for(user_text):
+            lines = (self.root / "requests.jsonl").read_text(encoding="utf-8").splitlines()
+            return next(messages for messages in map(json.loads, reversed(lines))
+                        if any(m["role"] == "user" and m["content"] == user_text for m in messages))
+
         memory = SharedMemoryStore(self.home.state_root / "shared_memory.sqlite")
         memory.update(UpdateSharedMemory(version=0, content="旧的团队约定"),
                       author="Lin", source="bot:lin", operation_id="before")
         ada = await self.host.create_agent(name="Ada")
-        await until(lambda: (self.root / "compact_started").exists() and len(self.outputs) == 1)
+        await self.host.wait_quiescent(ada.session_id)
+        # The next turn checks the context usage recorded by the silent first turn.
+        await self.host.receive_user_message(ada.session_id, "核对团队约定。", delivery_id="before-rollover")
+        await until(lambda: (self.root / "compact_started").exists())
         personal_memory_store(self.home, ada).update(
             UpdatePersonalMemory(version=0, content="先给判断，再解释取舍。"),
             author="用户", source="user", operation_id="personal-during",
@@ -83,13 +91,13 @@ class CompactTest(unittest.IsolatedAsyncioTestCase):
         memory.update(UpdateSharedMemory(version=1, content="最新团队约定：共享资源先协调。"),
                       author="Lin", source="bot:lin", operation_id="during")
         await self.host.receive_user_message(ada.session_id, "TAIL_KEEP", delivery_id="tail")
-        await until(lambda: len(self.outputs) == 2)
+        await self.host.wait_quiescent(ada.session_id)
         (self.root / "release_compact").touch()
         await until(lambda: self.host.conversation_status(ada.session_id).compact_count == 1)
         await self.host.receive_user_message(ada.session_id, "压缩后继续。", delivery_id="after")
         await self.host.wait_quiescent(ada.session_id)
-        requests = [json.loads(line) for line in (self.root / "requests.jsonl").read_text(encoding="utf-8").splitlines()]
-        shown = json.dumps(requests[-1], ensure_ascii=False)
+        first_after = request_for("压缩后继续。")
+        shown = json.dumps(first_after, ensure_ascii=False)
         self.assertIn("最新团队约定：共享资源先协调。", shown)
         self.assertIn("<working_memory>", shown)
         self.assertIn("先给判断，再解释取舍。", shown)
@@ -98,21 +106,19 @@ class CompactTest(unittest.IsolatedAsyncioTestCase):
         self.assertLess(shown.index("旧的团队约定"), shown.index("最新团队约定：共享资源先协调。"))
         self.assertEqual(shown.count("最新团队约定：共享资源先协调。"), 1)
         self.assertEqual(shown.count("先给判断，再解释取舍。"), 1)
-        first_after = requests[-1]
         await self.host.receive_user_message(ada.session_id, "换窗后第二轮。", delivery_id="after-second")
         await self.host.wait_quiescent(ada.session_id)
-        requests = [json.loads(line) for line in (self.root / "requests.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(requests[-1][:len(first_after)], first_after)
-        second_after = requests[-1]
+        second_after = request_for("换窗后第二轮。")
+        self.assertEqual(second_after[:len(first_after)], first_after)
         personal_memory_store(self.home, ada).update(
             UpdatePersonalMemory(version=1, content=""),
             author="用户", source="user", operation_id="clear-after",
         )
         await self.host.receive_user_message(ada.session_id, "清空后继续。", delivery_id="after-clear")
         await self.host.wait_quiescent(ada.session_id)
-        requests = [json.loads(line) for line in (self.root / "requests.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(requests[-1][:len(second_after)], second_after)
-        latest = requests[-1][-1]["content"]
+        after_clear = request_for("清空后继续。")
+        self.assertEqual(after_clear[:len(second_after)], second_after)
+        latest = after_clear[-1]["content"]
         self.assertIn('"content": ""', latest)
         snapshot = await self.host.request("compact_snapshot", ada.session_id, {})
         inherited = FileArtifactGateway(self.store.root).for_session(ada.session_id).read(snapshot["inherited"], 0, 1000000).content
