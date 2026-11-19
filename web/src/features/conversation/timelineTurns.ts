@@ -32,7 +32,9 @@ export function timelineTurns(items: VisibleItem[]): TimelineTurn[] {
       turns.push(current);
     }
     if (item.kind === "private_message") {
-      current.communications.push(item);
+      if (item.threadId === null || item.threadId !== current.communications.at(-1)?.threadId) {
+        current.communications.push(item);
+      }
       if (item.threadId !== null) {
         const thread = privateThreads.get(item.threadId) ?? [];
         thread.push(item);
