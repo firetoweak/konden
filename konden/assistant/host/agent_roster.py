@@ -42,9 +42,10 @@ class AgentRoster:
                     agent = project_agent(events)
                     if agent is None:
                         continue
-                    if names.intersection(agent.names):
-                        raise ValueError("duplicate Agent name in persisted roster")
-                    names.update(agent.names)
+                    if not agent.deleted:
+                        if names.intersection(agent.names):
+                            raise ValueError("duplicate active Agent name in persisted roster")
+                        names.update(agent.names)
                     entries[session_id] = agent
                 self._entries = entries
             return self._entries
@@ -61,12 +62,18 @@ class AgentRoster:
         (await self._index())[session_id] = agent
         return agent
 
-    async def resolve_recorded(self, name: str) -> AgentRecord:
-        """Resolve names in existing facts; new addresses use resolve instead."""
-        for entry in await self.list(include_deleted=True):
-            if name in entry.names:
-                return entry
-        raise AgentNotFound(name)
+    async def original_owner(self, name: str) -> AgentRecord:
+        """Read a name-only fact written when each name had one permanent owner."""
+        owners = [entry for entry in (await self._index()).values() if entry.originally_owned(name)]
+        if not owners:
+            raise AgentNotFound(name)
+        owner, = owners
+        return owner
+
+    async def sender_session(self, message) -> str | None:
+        if message.sender.kind == "user" or message.sender_session_id is not None:
+            return message.sender_session_id
+        return (await self.original_owner(message.sender.name)).session_id
 
     async def set_projects(self, session_id: str, projects) -> None:
         """Called once the Bot's own link or unlink fact is durable."""

@@ -192,12 +192,15 @@ _ARGUMENTS = {CREATE_GROUP: CreateGroupArguments, SEND_MESSAGE: MessageArguments
               SEND_GROUP_MESSAGE: GroupMessageArguments, SEND_EXTERNAL: SendToExternal}
 
 
-async def _send(operation, transport, session_id, command_id, arguments: Mapping[str, object]):
+async def _send(operation, transport, session_id, command_id, arguments: Mapping[str, object], *, recovering=False):
     try:
         parsed = _ARGUMENTS[operation].model_validate(dict(arguments))
     except ValidationError as error:
         return {"ok": False, "code": "INVALID_ARGUMENT", "error": str(error)}
-    return await transport(operation, session_id, {"command_id": command_id, **parsed.model_dump()})
+    request = {"command_id": command_id, **parsed.model_dump()}
+    if recovering and operation == SEND_MESSAGE and parsed.recipient != USER_RECIPIENT:
+        request["recovering"] = True
+    return await transport(operation, session_id, request)
 
 
 async def send_message(transport, session_id, command_id, arguments: Mapping[str, object]):
@@ -287,7 +290,7 @@ async def recover_message_attempts(journal, session_id, transport, sink=None):
             continue
         (attempt,) = item.attempts
         result = await _send(item.command.effect.name, delivery, session_id, item.command.command_id,
-                             item.command.effect.argument_dict())
+                             item.command.effect.argument_dict(), recovering=True)
         await record_limit(journal, session_id, item.command.command_id, result)
         await journal.record_attempt_fact(EventDraft(
             event_id=f"message-recovered:{item.command.command_id}", session_id=session_id,

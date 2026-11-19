@@ -9,6 +9,11 @@ from konden.assistant.subagent.subagent import project_delegate_intents
 from konden.runtime import AgentRuntime, SqliteJournal
 
 
+def _deletion(agent):
+    return AgentDeleted(session_id=agent.session_id, name=agent.name,
+                        reused_name=not agent.originally_owned(agent.name))
+
+
 class AgentLifecycle:
     def __init__(self, host):
         self.host = host
@@ -59,7 +64,7 @@ class AgentLifecycle:
             await self._stop(session_id)
             try:
                 await AgentRuntime(SqliteJournal(self.host.store.require(session_id)), None, {}).receive_domain_fact(
-                    session_id, **fact_arguments(AgentDeleted(session_id=session_id, name=agent.name), delivery_id="deleted"))
+                    session_id, **fact_arguments(_deletion(agent), delivery_id="deleted"))
             finally:
                 recorded = await self.host.agents.refresh(session_id)
                 if not recorded.deleted:
@@ -74,9 +79,9 @@ class AgentLifecycle:
 
     async def notify(self, session_id: str) -> None:
         agent = await self.host.agents.by_session(session_id)
-        await self.host.agent_messages._broadcast(agent, AgentDeleted(session_id=session_id, name=agent.name),
+        await self.host.agent_messages._broadcast(agent, _deletion(agent),
                                                 f"deleted:{session_id}")
         for group in await self.host.agent_groups.list():
-            if any(member in agent.names for member in group.members):
+            if session_id in group.member_sessions.values():
                 self.host.agent_groups._changed(group.group_id)
         await self.host._emit_session_activity(session_id, "idle")

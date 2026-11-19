@@ -29,7 +29,7 @@ function group(partial: Partial<GroupView>): GroupView {
   return {
     group_id: "group-1", name: "开发组", members: ["Ada", "Lin"],
     favorite: false, last_activity: "2026-10-18T10:00:00Z",
-    dissolved: false, calling: [], messages: [], ...partial,
+    dissolved: false, member_sessions: { Ada: "agent-ada", Lin: "agent-lin" }, calling: [], messages: [], ...partial,
   };
 }
 
@@ -62,15 +62,15 @@ it("群记录区分人和 Agent，显示点名与正在通知的成员", () => {
   api.group = group({
     calling: ["Lin"],
     messages: [
-      { message_id: "m1", sender: null, text: "大家同步一下", mentioned_agents: [], reply_to: null,
+      { message_id: "m1", sender: null, sender_session_id: null, text: "大家同步一下", mentioned_agents: [], reply_to: null,
         occurred_at: "2026-10-18T10:00:00+00:00" },
-      { message_id: "m2", sender: "Ada", text: "接口改好了", mentioned_agents: ["Lin"], reply_to: null,
+      { message_id: "m2", sender: "Ada", sender_session_id: "original-ada", text: "接口改好了", mentioned_agents: ["Lin"], reply_to: null,
         occurred_at: "2026-10-18T10:01:00+00:00" },
     ],
   });
   renderPage();
   expect(within(screen.getByRole("article", { name: "你的群消息" })).getAllByText("你").length).toBeGreaterThan(0);
-  expect(screen.getByRole("link", { name: "Ada" })).toHaveAttribute("href", "/sessions/agent-ada");
+  expect(screen.getByRole("link", { name: "Ada" })).toHaveAttribute("href", "/sessions/original-ada");
   expect(screen.queryByRole("complementary", { name: "群资料" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "显示群资料" }));
   const details = within(screen.getByRole("complementary", { name: "群资料" }));
@@ -84,7 +84,7 @@ it("群记录区分人和 Agent，显示点名与正在通知的成员", () => {
 });
 
 it("解散的群保留消息，只读查看", () => {
-  api.group = group({ dissolved: true, messages: [{ message_id: "history", sender: "Ada", text: "已完成的成果",
+  api.group = group({ dissolved: true, messages: [{ message_id: "history", sender: "Ada", sender_session_id: "original-ada", text: "已完成的成果",
     mentioned_agents: [], reply_to: null, occurred_at: "2026-10-18T10:00:00Z" }] });
   renderPage();
   expect(screen.getByText("已完成的成果")).toBeInTheDocument();
@@ -151,7 +151,7 @@ it("完整名字决定收件人，支持中文、带空格和符号的名字，�
 });
 
 it("整条引用保留来源但不把预览中的点名当作通知", async () => {
-  api.group = group({ messages: [{ message_id: "source", sender: "Ada", text: "@all @Lin 看看这份完整报告", mentioned_agents: ["Lin"], reply_to: null, occurred_at: "2026-10-18T10:00:00Z" }] });
+  api.group = group({ messages: [{ message_id: "source", sender: "Ada", sender_session_id: "original-ada", text: "@all @Lin 看看这份完整报告", mentioned_agents: ["Lin"], reply_to: null, occurred_at: "2026-10-18T10:00:00Z" }] });
   renderPage();
   fireEvent.contextMenu(screen.getByRole("article", { name: "Ada的群消息" }).querySelector(".group-message-bubble")!, { clientX: 100, clientY: 100 });
   fireEvent.click(await screen.findByRole("menuitem", { name: "引用 Ada 的消息" }));
@@ -192,7 +192,7 @@ it.each([
 });
 
 it("切换对话分别保留群草稿和引用，发送后清除", async () => {
-  api.group = group({ messages: [{ message_id: "source", sender: "Ada", text: "长报告", mentioned_agents: [], reply_to: null, occurred_at: "2026-10-18T10:00:00Z" }] });
+  api.group = group({ messages: [{ message_id: "source", sender: "Ada", sender_session_id: "original-ada", text: "长报告", mentioned_agents: [], reply_to: null, occurred_at: "2026-10-18T10:00:00Z" }] });
   const first = renderPage();
   fireEvent.contextMenu(screen.getByRole("article", { name: "Ada的群消息" }).querySelector(".group-message-bubble")!, { clientX: 100, clientY: 100 });
   fireEvent.click(await screen.findByRole("menuitem", { name: "引用 Ada 的消息" }));
@@ -213,7 +213,7 @@ it("切换对话分别保留群草稿和引用，发送后清除", async () => {
 });
 
 it("正文点名高亮，代码和邮箱保持原文", () => {
-  api.group = group({ messages: [{ message_id: "source", sender: "Lin", text: "请 @Ada 阅读，邮箱 dev@Ada。\n\n`@Ada`\n\n```txt\n@Ada\n```", mentioned_agents: ["Ada"], reply_to: null, occurred_at: "2026-10-18T10:00:00Z" }] });
+  api.group = group({ messages: [{ message_id: "source", sender: "Lin", sender_session_id: "agent-lin", text: "请 @Ada 阅读，邮箱 dev@Ada。\n\n`@Ada`\n\n```txt\n@Ada\n```", mentioned_agents: ["Ada"], reply_to: null, occurred_at: "2026-10-18T10:00:00Z" }] });
   const { container } = renderPage();
   expect(container.querySelectorAll(".message-mention")).toHaveLength(1);
   expect(container.querySelector(".message-mention")).toHaveTextContent("@Ada");

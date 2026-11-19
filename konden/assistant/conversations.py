@@ -157,6 +157,7 @@ class PrivateMessageItem:
     text: str
     reply_to: str | None
     occurred_at: datetime
+    peer_session_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,14 +364,21 @@ class AssistantQueries:
                            last_error=self._sessions.current_failure(session_id))
         status = self._sessions.conversation_status(session_id)
         scheduled = self._sessions.next_scheduled_check(session_id)
+        conversation = project_conversation(session_id, events, state.steps, session=view,
+            attachments=AttachmentGateway(self._store.root).for_session(session_id))
+        items = []
+        for item in conversation.items:
+            if isinstance(item, PrivateMessageItem) and item.peer_session_id is None:
+                if item.direction == "sent":
+                    peer_id = await self._sessions.agent_messages.origins.recipient(item.message_id)
+                    if peer_id is None:
+                        raise ValueError("sent private message has no delivery")
+                else:
+                    peer_id = (await self._sessions.agents.original_owner(item.peer)).session_id
+                item = replace(item, peer_session_id=peer_id)
+            items.append(item)
         return replace(
-            project_conversation(
-                session_id,
-                events,
-                state.steps,
-                session=view,
-                attachments=AttachmentGateway(self._store.root).for_session(session_id),
-            ),
+            conversation, items=tuple(items),
             compact_count=status.compact_count,
             compact_phase=status.compact_phase,
             waiting_until=None if scheduled is None else scheduled.due_at,
@@ -577,7 +585,7 @@ def project_conversation(
             if message.sender.kind == "agent":
                 items.append(PrivateMessageItem("private_message", message.message_id, message.thread_id,
                                                "received", message.sender.name, message.text,
-                                               message.reply_to, event.occurred_at))
+                                               message.reply_to, event.occurred_at, message.sender_session_id))
             continue
         if isinstance(payload, UserMessageReceived):
             if event.delivery is not None and event.delivery.source == USER_SOURCE:

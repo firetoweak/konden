@@ -23,8 +23,8 @@ function identityColor(seed: string): string {
 export function useIdentityColor() {
   const identities = useContext(BotIdentities);
   const avatars = useContext(BotAvatars);
-  return (name: string) => {
-    const id = identities.get(name) ?? name;
+  return (name: string, sessionId?: string) => {
+    const id = sessionId ?? identities.get(name) ?? name;
     const avatar = avatars[id];
     return identityColor(avatar?.kind === "generated" ? avatar.seed : id);
   };

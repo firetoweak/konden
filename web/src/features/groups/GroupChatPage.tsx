@@ -23,16 +23,15 @@ import { BotAvatar, ChatPresentation, useIdentityColor, messageReference, Messag
 import { useMessageReading } from "../conversation/useMessageReading";
 import { createClientId } from "../conversation/clientId";
 
-function GroupMessageRow({ message, source, groupId, groupName, sessionOf }: {
+function GroupMessageRow({ message, source, groupId, groupName }: {
   message: GroupMessage;
   source?: GroupMessage;
   groupId: string;
   groupName: string;
-  sessionOf: (name: string) => string | undefined;
 }) {
   const time = formatMessageTime(message.occurred_at);
   const identityColor = useIdentityColor();
-  const session = message.sender === null ? undefined : sessionOf(message.sender);
+  const session = message.sender_session_id ?? undefined;
   return (
     <article data-message-id={message.message_id} className={message.sender === null ? "group-message is-human" : "group-message"}
       aria-label={`${message.sender ?? "你"}的群消息`}>
@@ -50,9 +49,9 @@ function GroupMessageRow({ message, source, groupId, groupName, sessionOf }: {
       </div>
       <div className="turn-details group-message-meta">
         {message.sender === null ? null : session === undefined ? (
-          <Text data-identity={identityColor(message.sender)} fw={600} fz={12}>{message.sender}</Text>
+          <Text data-identity={identityColor(message.sender, session)} fw={600} fz={12}>{message.sender}</Text>
         ) : (
-          <Text component={Link} data-identity={identityColor(message.sender)} fw={600} fz={12} to={`/sessions/${encodeURIComponent(session)}`} state={{ fromGroup: { id: groupId, name: groupName } }}>
+          <Text component={Link} data-identity={identityColor(message.sender, session)} fw={600} fz={12} to={`/sessions/${encodeURIComponent(session)}`} state={{ fromGroup: { id: groupId, name: groupName } }}>
             {message.sender}
           </Text>
         )}
@@ -86,12 +85,6 @@ function GroupConversation({ groupId }: { groupId: string; }) {
   if (group === undefined) {
     return <div className="conversation-loading"><Loader size="sm" /><Text c="dimmed" size="sm">正在打开群聊…</Text></div>;
   }
-  const memberOf = (name: string) => agents.find(
-    (agent) => agent.name === name,
-  );
-  const sessionOf = (name: string) => memberOf(name)?.session_id;
-
-
   async function send(text: string, mention: string[]) {
     if (connectionId === null || posting.isLoading) {
       return false;
@@ -133,15 +126,16 @@ function GroupConversation({ groupId }: { groupId: string; }) {
         <div className="agent-details-section">
           <Text className="agent-details-label" size="xs" c="dimmed">群成员</Text>
           <div className="group-member-list">{group.members.map((name) => {
-            const agent = memberOf(name);
+            const session = group.member_sessions[name];
+            const agent = agents.find((entry) => entry.session_id === session);
             const identity = <>
-              <BotAvatar name={name} sessionId={sessionOf(name)} />
+              <BotAvatar name={name} sessionId={session} />
               <div className="group-member-identity"><Text fz={13} fw={500} truncate>{name}</Text></div>
               {agent === undefined ? null : <AgentStatus agent={agent} />}
             </>;
-            return agent === undefined ? <div className="group-member" key={name}>{identity}</div> : (
+            return (
               <Link className="group-member" key={name} aria-label={`查看 ${name} 的会话`}
-                to={`/sessions/${encodeURIComponent(agent.session_id)}`} state={{ fromGroup: { id: groupId, name: group.name } }}>{identity}</Link>
+                to={`/sessions/${encodeURIComponent(session)}`} state={{ fromGroup: { id: groupId, name: group.name } }}>{identity}</Link>
             );
           })}</div>
         </div>
@@ -158,7 +152,7 @@ function GroupConversation({ groupId }: { groupId: string; }) {
               <Text c="dimmed" fz={11}>{group.members.length} 位 Bot · {group.messages.length} 条消息</Text>
             </div>
           </Group>
-          <div className="group-header-members" aria-label="群成员">{group.members.map((name) => <BotAvatar key={name} name={name} />)}</div>
+          <div className="group-header-members" aria-label="群成员">{group.members.map((name) => <BotAvatar key={name} name={name} sessionId={group.member_sessions[name]} />)}</div>
           <Tooltip label={detailsOpened ? "收起群资料" : "显示群资料"}>
             <ActionIcon className="agent-details-toggle" aria-label={detailsOpened ? "收起群资料" : "显示群资料"}
               aria-expanded={detailsOpened} onClick={() => setDetailsOpened((opened) => !opened)} variant="subtle" color="gray">
@@ -177,7 +171,7 @@ function GroupConversation({ groupId }: { groupId: string; }) {
               </div>
             ) : group.messages.map((message, index) => <div className="group-message-slot" key={message.message_id}>
               {index > 0 && group.messages[index - 1].message_id === reading.unreadAfter ? <div className="unread-divider" role="separator">以下是未读消息</div> : null}
-              <GroupMessageRow message={message} source={group.messages.find((item) => item.message_id === message.reply_to)} groupId={groupId} groupName={group.name} sessionOf={sessionOf} />
+              <GroupMessageRow message={message} source={group.messages.find((item) => item.message_id === message.reply_to)} groupId={groupId} groupName={group.name} />
             </div>)}
           </div>
         </ScrollArea>

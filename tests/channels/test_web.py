@@ -902,7 +902,7 @@ class WebFirstSliceTest(unittest.TestCase):
 
     def test_group_endpoints_check_human_input_and_map_known_failures(self):
         activity = datetime.now(timezone.utc)
-        record = GroupRecord("group-1", GroupCreated(group="开发组", members=["Ada", "Lin"]), activity, False)
+        record = GroupRecord("group-1", GroupCreated(group="开发组", members=["Ada", "Lin"]), {"Ada": "a", "Lin": "b"}, activity, False)
 
         async def create(*, name, members, favorite):
             if name == "taken":

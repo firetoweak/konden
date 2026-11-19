@@ -26,7 +26,7 @@ def message_identity(session_id, command_id):
 
 
 class OriginUsage:
-    """Which Agent messages each origin has driven, indexed once and kept current.
+    """Index message origins and private delivery destinations from their journals.
 
     Message ids make recording idempotent, so redelivery during recovery never
     counts twice.
@@ -35,31 +35,44 @@ class OriginUsage:
     def __init__(self, host):
         self.host = host
         self._used: dict[str, set[str]] | None = None
+        self._recipients: dict[str, str] = {}
         self._loading = asyncio.Lock()
 
     async def _index(self):
         async with self._loading:
             if self._used is None:
                 used: dict[str, set[str]] = {}
+                recipients = {}
                 for entry in await self.host.agents.list(include_deleted=True):
                     events = await SqliteJournal(self.host.store.require(entry.session_id)).snapshot(
                         entry.session_id)
                     for event in events:
                         if isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == PRIVATE_MESSAGE:
                             fact = parse_agent_fact(event.payload)
+                            recipients[fact.message_id] = entry.session_id
                             used.setdefault(fact.origin, set()).add(fact.message_id)
                 for group in await self.host.agent_groups.list(include_dissolved=True):
                     for message in await self.host.agent_groups.messages(group.group_id):
                         if message.origin is not None:
                             used.setdefault(message.origin, set()).add(message.message_id)
+                self._recipients = recipients
                 self._used = used
             return self._used
 
     async def count(self, origin: str) -> int:
         return len((await self._index()).get(origin, ()))
 
-    async def record(self, origin: str, message_id: str) -> None:
+    async def recipient(self, message_id: str) -> str | None:
+        await self._index()
+        return self._recipients.get(message_id)
+
+    def invalidate(self):
+        self._used = None
+
+    async def record(self, origin: str, message_id: str, recipient: str | None = None) -> None:
         (await self._index()).setdefault(origin, set()).add(message_id)
+        if recipient is not None:
+            self._recipients[message_id] = recipient
 
 
 class AgentMessages:
@@ -106,11 +119,6 @@ class AgentMessages:
             await self._notify(session_id, fact_arguments(
                 ColleagueJoined(name=agent.name), delivery_id=f"joined:{agent.session_id}"))
 
-    async def _messages(self, session_id):
-        events = await SqliteJournal(self.host.store.require(session_id)).snapshot(session_id)
-        return [(event, parse_agent_fact(event.payload)) for event in events
-                if isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == PRIVATE_MESSAGE]
-
     async def _origin(self, session_id, command_id):
         events = await SqliteJournal(self.host.store.require(session_id)).snapshot(session_id)
         return message_origin(events, command_id)
@@ -147,37 +155,34 @@ class AgentMessages:
 
     async def _send(self, sender, session_id, arguments):
         name = arguments["recipient"]
-        if name == sender.name:
-            return {"ok": False, "code": "SELF_MESSAGE", "error": "不能给自己发私信。"}
-        try:
-            recipient = await self.host.agents.resolve_recorded(name)
-        except AgentNotFound:
-            return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "没有这位同事。"}
         identity = message_identity(session_id, arguments["command_id"])
-        received = await self._messages(recipient.session_id)
-        existing = next(((event, fact) for event, fact in received if fact.message_id == identity), None)
-        if existing is not None:
-            event, fact = existing
-            if (fact.sender.name not in sender.names or fact.recipient not in recipient.names
+        delivered_to = await self.origins.recipient(identity)
+        if delivered_to is not None:
+            recipient = await self.host.agents.by_session(delivered_to)
+            event, fact = await self._received(delivered_to, identity)
+            if (await self.host.agents.sender_session(fact) != session_id or name not in recipient.names
                     or fact.text != arguments["text"] or fact.reply_to != arguments["reply_to"]
                     or event.delivery.source != "coding_bot" or event.delivery.delivery_id != identity):
                 raise ValueError("persisted message conflicts with its sending Command")
-            await self.origins.record(fact.origin, identity)
             return self._delivered(recipient, identity)
-        if name != recipient.name:
-            return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "这位同事已改名，请用 list_colleagues 查看当前名字。"}
-        if recipient.deleted:
-            return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "用户已删除这位 Bot，它不能再接收私信。"}
-        if recipient.session_id == sender.session_id:
+        try:
+            recipient = await self.host.agents.resolve(name)
+        except AgentNotFound:
+            return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "没有这位同事，请用 list_colleagues 查看当前名字。"}
+        if arguments.get("recovering") and not recipient.originally_owned(name):
+            return {"ok": False, "code": "RECIPIENT_UNCONFIRMED",
+                    "error": "这个名字已被复用，无法确认原收件人。请核对当前同事后再发送。"}
+        if recipient.session_id == session_id:
             return {"ok": False, "code": "SELF_MESSAGE", "error": "不能给自己发私信。"}
         reply_to = arguments["reply_to"]
         previous = None
         if reply_to is not None:
-            messages = [*received, *await self._messages(session_id)]
-            previous = next((fact for _, fact in messages if fact.message_id == reply_to
-                and fact.sender.kind == "agent"
-                and ((fact.sender.name in sender.names and fact.recipient in recipient.names)
-                     or (fact.sender.name in recipient.names and fact.recipient in sender.names))), None)
+            received_by = await self.origins.recipient(reply_to)
+            if received_by in (session_id, recipient.session_id):
+                _, quoted = await self._received(received_by, reply_to)
+                other = recipient.session_id if received_by == session_id else session_id
+                if quoted.sender.kind == "agent" and await self.host.agents.sender_session(quoted) == other:
+                    previous = quoted
             if previous is None:
                 return {"ok": False, "code": "INVALID_REPLY", "error": "引用的消息必须是你与这位同事之间的私信。"}
         hop = 0 if previous is None else previous.hop + 1
@@ -188,14 +193,24 @@ class AgentMessages:
         if refused is not None:
             return refused
         message = PrivateMessage(message_id=identity, sender=Speaker(kind="agent", name=sender.name),
-            recipient=name, text=arguments["text"], reply_to=reply_to,
+            sender_session_id=session_id, recipient=name, text=arguments["text"], reply_to=reply_to,
             thread_id=identity if previous is None else previous.thread_id, hop=hop, origin=origin)
         try:
             await self.host.request("fact", recipient.session_id, fact_arguments(message, delivery_id=identity))
         except AgentDeletedError:
             return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "用户已删除这位 Bot，它不能再接收私信。"}
-        await self.origins.record(origin, identity)
+        except BaseException:
+            # The recipient may have committed before the acknowledgement was lost.
+            self.origins.invalidate()
+            raise
+        await self.origins.record(origin, identity, recipient.session_id)
         return self._delivered(recipient, identity)
+
+    async def _received(self, session_id, message_id):
+        events = await self.host.store.journal(session_id).snapshot(session_id)
+        event, = (event for event in events if isinstance(event.payload, DomainFactCommitted)
+                  and event.payload.fact_type == PRIVATE_MESSAGE and event.payload.data["message_id"] == message_id)
+        return event, parse_agent_fact(event.payload)
 
     def _delivered(self, recipient, identity):
         return {"ok": True, "code": "DELIVERED", "data": {"message_id": identity,

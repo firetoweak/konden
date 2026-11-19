@@ -248,7 +248,7 @@ describe("visibleTimeline", () => {
 describe("timelineTurns", () => {
   it("keeps individual notices in the timeline while each opens its complete private conversation", () => {
     const incoming = { kind: "private_message" as const, message_id: "in", direction: "received" as const,
-      peer: "Nova", thread_id: "nova-thread", reply_to: "out", text: "请检查文件", occurred_at: "2026-10-21T00:00:00Z" };
+      peer: "Nova", peer_session_id: "nova", thread_id: "nova-thread", reply_to: "out", text: "请检查文件", occurred_at: "2026-10-21T00:00:00Z" };
     const sent = { ...incoming, message_id: "out", direction: "sent" as const, reply_to: null };
     const anotherPeer = { ...sent, message_id: "other", peer: "Lin", thread_id: "lin-thread" };
     const newTopic = { ...sent, message_id: "new", thread_id: "nova-new-topic" };
