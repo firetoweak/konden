@@ -4,8 +4,9 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from collections.abc import Awaitable
-from dataclasses import asdict, dataclass, field
-from uuid import uuid4
+from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from konden.assistant.agent_messages import (
     MAX_GROUP_REPLIES, MAX_GROUP_ROUNDS,
@@ -15,12 +16,13 @@ from konden.assistant.agents import (
     fact_arguments, parse_agent_fact,
 )
 from konden.assistant.host.session_store import SessionStore
-from konden.assistant.host.agent_roster import AgentDeletedError
+from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
 from konden.assistant.runner import SessionNotFoundError
 from konden.runtime import AgentRuntime, DomainFactCommitted
 from konden.runtime.json_values import thaw_value
 
 _DRIVE = "group.drive"
+_FAVORITE = "group.favorite"
 
 
 class GroupNameTaken(ValueError):
@@ -40,6 +42,8 @@ class GroupRecord:
     group_id: str
     created: GroupCreated
     member_sessions: dict[str, str]
+    last_activity: datetime
+    favorite: bool
     dissolved: bool = False
 
     @property
@@ -50,6 +54,10 @@ class GroupRecord:
     def members(self) -> list[str]:
         """Names at creation remain the keys of already accepted group turns."""
         return self.created.members
+
+    def summary(self, current_members: list[str]) -> dict:
+        return {"group_id": self.group_id, "name": self.name, "members": current_members,
+                "favorite": self.favorite, "last_activity": self.last_activity.isoformat()}
 
 
 def _targets(group: GroupRecord, speaker: str | None, mentioned: list[str]) -> list[str]:
@@ -150,12 +158,7 @@ class AgentGroups:
         await self.prepare_recovery()
         for group in await self.list(include_dissolved=True):
             async with self._group_locks.setdefault(group.group_id, asyncio.Lock()):
-                for session_id in group.member_sessions.values():
-                    agent = await self.host.agents.by_session(session_id)
-                    if not agent.deleted:
-                        fact = GroupDissolved(group=group.name) if group.dissolved else group.created
-                        await self._deliver_member(agent.session_id, fact_arguments(
-                            fact, delivery_id=f"dissolved:{group.group_id}" if group.dissolved else f"joined:{group.group_id}"))
+                await self._notify_membership(group)
                 if group.dissolved:
                     continue
                 drive = self._drives[group.group_id]
@@ -178,16 +181,19 @@ class AgentGroups:
 
     async def _record(self, group_id):
         events = await self._journal(group_id).snapshot(group_id)
-        created, = (parse_agent_fact(event.payload) for event in events
-                    if isinstance(event.payload, DomainFactCommitted)
-                    and event.payload.fact_type == GROUP_CREATED)
-        dissolved = [parse_agent_fact(event.payload) for event in events
-                     if isinstance(event.payload, DomainFactCommitted)
-                     and event.payload.fact_type == GROUP_DISSOLVED]
+        facts = [event for event in events if isinstance(event.payload, DomainFactCommitted)]
+        creation, = (event for event in facts if event.payload.fact_type == GROUP_CREATED)
+        created = parse_agent_fact(creation.payload)
+        # Groups predating temporary discussions keep their existing sidebar entry.
+        favorite = next((event.payload.data["favorite"] for event in reversed(facts)
+                         if event.payload.fact_type == _FAVORITE), True)
+        activity = next(event.occurred_at for event in reversed(facts)
+                        if event.payload.fact_type in (GROUP_CREATED, GROUP_MESSAGE))
+        dissolved = any(parse_agent_fact(event.payload) for event in facts if event.payload.fact_type == GROUP_DISSOLVED)
         sessions = created.member_sessions
         if sessions is None:
             sessions = {name: (await self.host.agents.original_owner(name)).session_id for name in created.members}
-        return GroupRecord(group_id, created, sessions, bool(dissolved)), events
+        return GroupRecord(group_id, created, sessions, activity, favorite, dissolved), events
 
     async def list(self, *, include_dissolved=False) -> tuple[GroupRecord, ...]:
         groups = []
@@ -207,9 +213,8 @@ class AgentGroups:
         drive = self._drives.get(group_id)
         active = await self._active_members(group)
         return {
-            "group_id": group.group_id, "name": group.name,
+            **group.summary(list(active)),
             "dissolved": group.dissolved,
-            "members": list(active),
             "member_sessions": {name: group.member_sessions[key] for name, key in active.items()},
             "calling": [(await self.host.agents.by_session(group.member_sessions[drive.active])).name]
                        if drive is not None and drive.running and drive.active is not None and not group.dissolved else [],
@@ -239,21 +244,64 @@ class AgentGroups:
     async def member_names(self, group: GroupRecord) -> list[str]:
         return list(await self._active_members(group))
 
-    async def create(self, *, name: str, members: list[str]) -> GroupRecord:
-        sessions = {member: (await self.host.agents.resolve(member)).session_id for member in members}
-        created = GroupCreated(group=name, members=members, member_sessions=sessions)
+    async def create(self, *, name: str, members: list[str], favorite: bool = False) -> GroupRecord:
         group_id = f"group-{uuid4().hex}"
+        return await self._create(group_id, GroupCreated(group=name, members=members, group_path=f"/groups/{group_id}"), favorite)
+
+    async def create_from_bot(self, session_id: str, arguments: dict) -> dict:
+        sender = await self.host.agents.by_session(session_id)
+        if sender is None:
+            raise ValueError("group creation requires a Bot identity")
+        colleagues = arguments["colleagues"]
+        if sender.name in colleagues:
+            return {"ok": False, "code": "INVALID_ARGUMENT", "error": "你自动入群，只填写要邀请的同事。"}
+        identity = uuid5(NAMESPACE_URL, f"konden:group:{session_id}\0{arguments['command_id']}")
+        group_id = f"group-{identity.hex}"
+        created = GroupCreated(group=arguments["name"], members=[sender.name, *colleagues],
+                               started_by=sender.name, group_path=f"/groups/{group_id}")
+        try:
+            group = await self._create(group_id, created, arguments["favorite"], starter=sender)
+        except GroupNameTaken as error:
+            return {"ok": False, "code": "GROUP_NAME_TAKEN", "error": str(error)}
+        except AgentNotFound as error:
+            return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": f"没有这位同事：{error.args[0]}。请查看 list_colleagues。"}
+        return {"ok": True, "code": "GROUP_CREATED", "data": {"group": group.name,
+                "group_path": f"/groups/{group.group_id}", "members": await self.member_names(group),
+                "dissolved": group.dissolved}}
+
+    async def _create(self, group_id: str, created: GroupCreated, favorite: bool, *, starter=None) -> GroupRecord:
         async with self._creation_lock:
-            if any(group.name == name for group in await self.list(include_dissolved=True)):
-                raise GroupNameTaken(f"已有群：{name}")
-            await self.store.create(group_id,
-                                    initial_fact=fact_arguments(created, delivery_id="created"))
-        await asyncio.gather(*(
-            self._deliver_member(session_id, fact_arguments(created, delivery_id=f"joined:{group_id}"))
-            for session_id in sessions.values()))
-        # Other pages list groups too; a new group is a change they must hear about.
+            existing = next((g for g in await self.list(include_dissolved=True)
+                             if g.group_id == group_id or g.name == created.group), None)
+            if existing is None:
+                sessions = {starter.name: starter.session_id} if starter is not None else {}
+                for name in created.members:
+                    if name not in sessions:
+                        sessions[name] = (await self.host.agents.resolve(name)).session_id
+                created = created.model_copy(update={"member_sessions": sessions})
+                await self.store.create(group_id, initial_fact=fact_arguments(created, delivery_id="created"),
+                    additional_facts=(dict(fact_type=_FAVORITE, data={"favorite": favorite}, source="group",
+                                           delivery_id="initial", requests_decision=False),))
+            elif existing.group_id != group_id:
+                raise GroupNameTaken(f"已有群：{created.group}")
+            elif existing.name != created.group or existing.members[1:] != created.members[1:]:
+                raise ValueError("group creation identity conflicts with its content")
+        async with self._group_locks.setdefault(group_id, asyncio.Lock()):
+            group = await self.get(group_id)
+            if not group.dissolved:
+                await self._notify_membership(group)
         self._changed(group_id)
-        return GroupRecord(group_id, created, sessions)
+        return group
+
+    async def set_favorite(self, group_id: str, favorite: bool) -> None:
+        async with self._group_locks.setdefault(group_id, asyncio.Lock()):
+            group = await self.get(group_id)
+            if group.dissolved:
+                raise GroupDissolvedError(group_id)
+            if group.favorite != favorite:
+                await AgentRuntime(self._journal(group_id), None, {}).receive_domain_fact(
+                    group_id, _FAVORITE, {"favorite": favorite}, source="group", delivery_id=uuid4().hex)
+                self._changed(group_id)
 
     async def _publish(self, group: GroupRecord, message: GroupMessage) -> None:
         """The group record is the source; member timelines receive copies without deciding."""
@@ -272,6 +320,14 @@ class AgentGroups:
             # The person may delete a member while this accepted message is being copied.
             return
 
+    async def _notify_membership(self, group: GroupRecord) -> None:
+        fact = GroupDissolved(group=group.name) if group.dissolved else group.created
+        action = "dissolved" if group.dissolved else "joined"
+        arguments = fact_arguments(fact, delivery_id=f"{action}:{group.group_id}")
+        members = [await self.host.agents.by_session(session_id) for session_id in group.member_sessions.values()]
+        await asyncio.gather(*(self._deliver_member(member.session_id, arguments)
+                               for member in members if not member.deleted))
+
     async def dissolve(self, group_id: str) -> None:
         async with self._group_locks.setdefault(group_id, asyncio.Lock()):
             group = await self.get(group_id)
@@ -281,11 +337,7 @@ class AgentGroups:
                 await AgentRuntime(self._journal(group_id), None, {}).receive_domain_fact(group_id,
                     **fact_arguments(GroupDissolved(group=group.name), delivery_id="dissolved"))
                 drive.replaced.set()
-            for session_id in group.member_sessions.values():
-                agent = await self.host.agents.by_session(session_id)
-                if not agent.deleted:
-                    await self._deliver_member(agent.session_id, fact_arguments(
-                        GroupDissolved(group=group.name), delivery_id=f"dissolved:{group_id}"))
+            await self._notify_membership(replace(group, dissolved=True))
             self._changed(group_id)
 
     def _changed(self, group_id: str) -> None:
@@ -450,4 +502,4 @@ class AgentGroups:
         notice = ("已送达。" if calls is None else "已送达；已请相关成员分别处理，不等待回复。" if calls else
                   "已送达；这次群讨论已达轮数上限，不会再叫成员回应；需要某位同事接着处理时可以私信他。")
         return {"ok": True, "code": "DELIVERED", "data": {"message_id": identity, "group": group.name,
-                "notice": notice}}
+                "group_path": f"/groups/{group.group_id}", "notice": notice}}

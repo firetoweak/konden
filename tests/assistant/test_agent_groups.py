@@ -79,6 +79,46 @@ class AgentGroupsTest(unittest.IsolatedAsyncioTestCase):
     def journal(self, session_id):
         return SqliteJournal(self.store.require(session_id))
 
+    async def test_existing_group_keeps_its_sidebar_entry_and_original_invitations_on_recovery(self):
+        groups = self.host.agent_groups
+        invitation = dict(fact_type="bot.group_created", data={"group": "旧组", "members": ["Ada", "Lin"]},
+                          source="coding_bot", requests_decision=False)
+        await groups.store.create("old-group", initial_fact={**invitation, "delivery_id": "created"})
+        for name in invitation["data"]["members"]:
+            await AgentRuntime(self.journal(name), None, {}).receive_domain_fact(
+                name, **invitation, delivery_id="joined:old-group")
+        await groups.recover()
+        self.assertTrue((await groups.view("old-group"))["favorite"])
+        self.assertEqual(len(await self.facts("Ada", "bot.group_created")), 1)
+
+    async def test_bot_creation_replay_keeps_the_same_group_members_and_favorite(self):
+        args = {"name": "对照实验", "colleagues": ["Lin"], "command_id": "start", "favorite": False}
+        groups = self.host.agent_groups
+        result = await self.host._route("create_group", "Ada", args)
+        group, = await groups.list()
+        self.assertEqual(result["data"]["group_path"], f"/groups/{group.group_id}")
+        self.assertEqual(group.members, ["Ada", "Lin"])
+        self.assertFalse(group.favorite)
+        await groups.set_favorite(group.group_id, True)
+        self.host.agent_groups = AgentGroups(self.host)
+        self.assertEqual(await self.host._route("create_group", "Ada", args), result)
+        restored, = await self.host.agent_groups.list()
+        self.assertTrue(restored.favorite)
+        self.assertEqual(restored.last_activity, group.last_activity)
+        self.assertEqual(len(await self.facts("Lin", "bot.group_created")), 1)
+        for updates, code in [({"command_id": "another"}, "GROUP_NAME_TAKEN"),
+                              ({"name": "另一组", "colleagues": ["Nobody"], "command_id": "bad"}, "RECIPIENT_NOT_FOUND"),
+                              ({"colleagues": ["Ada"]}, "INVALID_ARGUMENT")]:
+            rejected = await self.host._route("create_group", "Ada", {**args, **updates})
+            self.assertEqual(rejected["code"], code)
+
+        await self.host.delete_agent("Lin")
+        replacement = await self.host.create_agent(name="Lin")
+        retried = await self.host._route("create_group", "Ada", args)
+        self.assertEqual(retried["data"]["group_path"], result["data"]["group_path"])
+        self.assertEqual(retried["data"]["members"], ["Ada"])
+        self.assertEqual(await self.facts(replacement.session_id, GROUP_CREATED), [])
+
     async def test_opening_one_group_reads_its_journal_once_without_reading_other_groups(self):
         groups = [await self.group(name=f"开发组-{index}") for index in range(3)]
         selected = groups[1]
@@ -146,7 +186,8 @@ class AgentGroupsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.facts(new.session_id, GROUP_MESSAGE), [])
         shown = identity_for_model(await self.journal("Lin").snapshot("Lin"))
         self.assertEqual(shown["groups"], [{"group": "原群", "members": ["Lin"]},
-                                           {"group": "新群", "members": ["旧名", "Lin"]}])
+                                           {"group": "新群", "members": ["旧名", "Lin"],
+                                            "group_path": f"/groups/{later.group_id}"}])
 
     async def facts(self, session_id, fact_type):
         return [event.payload for event in await self.journal(session_id).snapshot(session_id)

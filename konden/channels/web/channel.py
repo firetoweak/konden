@@ -167,17 +167,20 @@ class WebChannel:
         await self._sessions.answer_absence(session_id, action)
 
     async def list_groups(self):
-        return [{"group_id": group.group_id,
-                 "name": group.name, "members": await self._sessions.agent_groups.member_names(group)}
-                for group in await self._sessions.agent_groups.list()]
+        groups = self._sessions.agent_groups
+        return [group.summary(await groups.member_names(group)) for group in await groups.list()]
 
     async def group(self, group_id: str):
         return await self._sessions.agent_groups.view(group_id)
 
-    async def create_group(self, connection_id: str, name: str, members: list[str]):
+    async def create_group(self, connection_id: str, name: str, members: list[str], favorite: bool):
         self._require_connection(connection_id)
-        group = await self._sessions.agent_groups.create(name=name, members=members)
+        group = await self._sessions.agent_groups.create(name=name, members=members, favorite=favorite)
         return await self._sessions.agent_groups.view(group.group_id)
+
+    async def set_group_favorite(self, connection_id: str, group_id: str, favorite: bool):
+        self._require_connection(connection_id)
+        await self._sessions.agent_groups.set_favorite(group_id, favorite)
 
     async def post_group_message(self, connection_id: str, group_id: str, text: str, mention: list[str], *, delivery_id: str):
         self._require_connection(connection_id)

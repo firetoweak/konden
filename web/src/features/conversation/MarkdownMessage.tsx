@@ -1,5 +1,6 @@
 import { createRemendPreprocessor } from "@ai-markdown/react";
 import MantineAIMarkdown from "@ai-markdown/react-mantine";
+import { Link } from "react-router-dom";
 import { Children, cloneElement, isValidElement, memo, useContext, type ComponentProps, type ReactNode } from "react";
 import { ChatPresentation, useIdentityColor, MessageQuote, splitMessageQuote } from "./ChatPresentation";
 import { AttachmentTile } from "./AttachmentTile";
@@ -43,6 +44,9 @@ function MessageImage({src, alt}: ComponentProps<"img">) {
   return typeof src === "string" ? <AttachmentTile src={src} name={alt || "图片"} large downloadHref={src} /> : null;
 }
 function MessageLink({href, node: _node, ...props}: ComponentProps<"a"> & {node?: unknown}) {
+  if (href && /^\/groups\/[\w-]+$/.test(href)) {
+    return <Link {...props} to={href} />;
+  }
   return <a {...props} href={href} target={href?.startsWith("#") ? undefined : "_blank"} rel="noopener noreferrer"
     onContextMenu={(event) => event.stopPropagation()}
     onTouchStart={(event) => event.stopPropagation()} />;

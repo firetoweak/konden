@@ -22,11 +22,13 @@ vi.mock("../src/api/kondenApi", () => ({
     session_id: "agent-ada", workspace_id: "workspace", name: "Ada", activity: "idle", status: "idle",
   }] }),
   usePostGroupMessageMutation: () => [api.post, { isLoading: false }],
+  useSetGroupFavoriteMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 function group(partial: Partial<GroupView>): GroupView {
   return {
     group_id: "group-1", name: "开发组", members: ["Ada", "Lin"],
+    favorite: false, last_activity: "2026-10-18T10:00:00Z",
     dissolved: false, member_sessions: { Ada: "agent-ada", Lin: "agent-lin" }, calling: [], messages: [], ...partial,
   };
 }

@@ -901,9 +901,10 @@ class WebFirstSliceTest(unittest.TestCase):
         self.sessions.dissolve_group.assert_awaited_once_with("team")
 
     def test_group_endpoints_check_human_input_and_map_known_failures(self):
-        record = GroupRecord("group-1", GroupCreated(group="开发组", members=["Ada", "Lin"]), {"Ada": "a", "Lin": "b"})
+        activity = datetime.now(timezone.utc)
+        record = GroupRecord("group-1", GroupCreated(group="开发组", members=["Ada", "Lin"]), {"Ada": "a", "Lin": "b"}, activity, False)
 
-        async def create(*, name, members):
+        async def create(*, name, members, favorite):
             if name == "taken":
                 raise GroupNameTaken(f"项目内已有群：{name}")
             if "Nobody" in members:
@@ -922,7 +923,8 @@ class WebFirstSliceTest(unittest.TestCase):
             view=AsyncMock(return_value={"group_id": "group-1", "messages": []}))
         connection = self.connection.connection_id
         self.assertEqual(self.client.get("/api/groups").json(), [{
-            "group_id": "group-1", "name": "开发组", "members": ["Ada", "Lin"]}])
+            "group_id": "group-1", "name": "开发组", "members": ["Ada", "Lin"],
+            "last_activity": activity.isoformat(), "favorite": False}])
         create_body = {"connection_id": connection, "name": "开发组"}
         self.assertEqual(self.client.post("/api/groups", json={**create_body, "members": ["Ada", "Lin"]}).status_code, 201)
         for members in (["Ada"], ["Ada", "Ada"], [f"m{index}" for index in range(7)]):

@@ -1,7 +1,7 @@
 import { ActionIcon, Button, Collapse, Group, Menu, Modal, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
 import { useLocalStorage } from "@mantine/hooks";
 import { IconCheck, IconChevronDown, IconChevronRight, IconDots, IconFolderPlus, IconPencil, IconTrash, IconUsersGroup } from "@tabler/icons-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { z } from "zod";
 
 import type { AgentRosterEntry, GroupSummary } from "../../api/contracts";
@@ -20,6 +20,7 @@ type Organization = z.infer<typeof organizationSchema>;
 type Section = Organization["sections"][number];
 type Editing = { id: string | null; name: string; entry?: string };
 const EMPTY_ORGANIZATION: Organization = { sections: [], assignments: {}, ungroupedCollapsed: false };
+const RECENT_GROUP_MS = 7 * 24 * 60 * 60 * 1000;
 
 function deserializeOrganization(value: string | undefined): Organization {
   try {
@@ -50,6 +51,18 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
   });
   const [editing, setEditing] = useState<Editing | null>(null);
   const [removing, setRemoving] = useState<RemovalTarget | null>(null);
+  const [, refreshRecents] = useState(0);
+  const now = Date.now();
+  const visibleChats = chats.filter((chat) => searching || chat.favorite || chat.group_id === groupId
+    || Date.parse(chat.last_activity) + RECENT_GROUP_MS > now)
+    .sort((a, b) => Number(b.favorite) - Number(a.favorite) || Date.parse(b.last_activity) - Date.parse(a.last_activity));
+  const nextExpiry = Math.min(...visibleChats.filter((chat) => !chat.favorite && chat.group_id !== groupId)
+    .map((chat) => Date.parse(chat.last_activity) + RECENT_GROUP_MS).filter((expiry) => expiry > now));
+  useEffect(() => {
+    if (searching || !Number.isFinite(nextExpiry)) return;
+    const timer = window.setTimeout(() => refreshRecents((n) => n + 1), Math.max(0, nextExpiry - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [nextExpiry, searching]);
   const closeEditing = () => setEditing(null);
   const assignedSection = (entry: string) => {
     const id = organization.assignments[entry];
@@ -94,7 +107,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
 
   function renderSection(section: Section | null) {
     const sectionAgents = agents.filter((agent) => assignedSection(`agent:${agent.session_id}`) === (section?.id ?? null));
-    const sectionChats = chats.filter((chat) => assignedSection(`chat:${chat.group_id}`) === (section?.id ?? null));
+    const sectionChats = visibleChats.filter((chat) => assignedSection(`chat:${chat.group_id}`) === (section?.id ?? null));
     const count = sectionAgents.length + sectionChats.length;
     if (searching && count === 0) return null;
     const name = section?.name ?? "未分组";
@@ -131,7 +144,7 @@ export function BotRoster({ agents, chats, attentionSessionIds, sessionId, group
         {sectionChats.map((chat) => renderRow(`chat:${chat.group_id}`, `群聊 ${chat.name}`, chat.group_id === groupId,
           `/groups/${encodeURIComponent(chat.group_id)}`, <Group gap={10} wrap="nowrap" title={compact ? chat.name : undefined}>
             <span className="agent-avatar agent-avatar-small"><IconUsersGroup size={16} /></span>
-            <Stack className="sidebar-agent-identity" gap={2}><Text className="session-title" fz={13} truncate>{chat.name}</Text><Text c="dimmed" fz={11}>群聊 · {chat.members.length} 位 Bot</Text></Stack>
+            <Stack className="sidebar-agent-identity" gap={2}><Text className="session-title" fz={13} truncate>{chat.name}</Text><Text c="dimmed" fz={11}>{chat.favorite ? "常用" : "临时"} · {chat.members.length} 位 Bot</Text></Stack>
           </Group>))}
       </Stack></Collapse>
     </section>;

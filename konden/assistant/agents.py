@@ -157,6 +157,11 @@ class GroupCreated(_Fact):
     group: Text
     members: Annotated[list[Text], Field(min_length=2, max_length=6)]
     member_sessions: dict[Text, Text] | None = None
+    group_path: Text | None = None
+    started_by: Text | None = None
+
+    def for_model(self) -> dict:
+        return self.model_dump(include={"group", "members", "group_path", "started_by"}, exclude_none=True)
 
     @model_validator(mode="after")
     def bound_members(self):
@@ -214,6 +219,7 @@ def fact_arguments(fact: _Fact, *, delivery_id: str) -> dict:
         for kind, (model, requests_decision) in _FACTS.items()
         if type(fact) is model
     )
+    # Existing group invitations must retain their original payload on redelivery.
     return dict(fact_type=kind, data=fact.model_dump(exclude_defaults=True), source=SOURCE,
                 delivery_id=delivery_id, requests_decision=requests_decision)
 
@@ -331,8 +337,11 @@ def identity_for_model(events) -> dict | None:
     shown["groups"] = []
     for group in groups.values():
         owners = group.member_sessions if group.member_sessions is not None else original_owners
-        shown["groups"].append({"group": group.group, "members": [
-            names.get(owners.get(name), name) for name in group.members if owners.get(name) not in deleted]})
+        info = group.for_model()
+        info["members"] = [names.get(owners.get(name), name) for name in group.members if owners.get(name) not in deleted]
+        if group.started_by is not None:
+            info["started_by"] = names.get(owners.get(group.started_by), group.started_by)
+        shown["groups"].append(info)
     shown["projects"] = [{"project": item.name, "directory": item.worktree} for item in agent.projects]
     shown["notice"] = (
         "你当前的 Agent 资料：名字、所在的群，以及已关联的项目。")
@@ -373,9 +382,10 @@ def agent_fact_for_model(payload: DomainFactCommitted) -> dict:
         return {"group": fact.group, "message_id": fact.message_id, "notice": (
             "阅读群消息。归档通知、仅供知悉的消息和已得到完整回答的问题，读完即可结束，不必确认或复述。仍有问题问你时回答，有分派给你的工作就处理。"
             "回答问题或有新的结果、纠正或阻塞需要让群成员知道时，用 send_group_message 并用 reply_to 引用原消息。"
+            "如果你正在协调用户从私聊交办的工作，收到足够结果后，用 send_message 给 user 发最终结论，附上本群的 Markdown 链接。"
             "只分享已获授权的协作所需信息。只在私聊中得知的决定，须有用户允许向本群转达的依据；话题相关本身不构成同意。")}
     if isinstance(fact, GroupCreated):
-        return {"group": fact.group, "members": fact.members, "notice": (
+        return {**fact.for_model(), "notice": (
             "你是这个群聊的成员。用 send_group_message 发言，群里所有人都能看到。")}
     if isinstance(fact, CommunicationLimitReached):
         return {"recipient": fact.recipient, "text": fact.text}

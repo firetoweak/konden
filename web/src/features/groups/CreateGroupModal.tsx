@@ -1,4 +1,4 @@
-import { Alert, Button, Modal, MultiSelect, Stack, TextInput } from "@mantine/core";
+import { Alert, Button, Checkbox, Modal, MultiSelect, Stack, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 
 import type { AgentRosterEntry } from "../../api/contracts";
@@ -18,6 +18,7 @@ export function CreateGroupModal({
 }) {
   const [name, setName] = useState("");
   const [members, setMembers] = useState<string[]>([]);
+  const [favorite, setFavorite] = useState(false);
   const [createGroup, { isLoading, reset }] = useCreateGroupMutation();
   const [error, setError] = useState<string | null>(null);
   const candidates = agents;
@@ -30,6 +31,7 @@ export function CreateGroupModal({
     }
     setName("");
     setMembers([]);
+    setFavorite(false);
     setError(null);
   }, [opened]);
 
@@ -44,7 +46,7 @@ export function CreateGroupModal({
     }
     setError(null);
     try {
-      const group = await createGroup({ connectionId, name, members }).unwrap();
+      const group = await createGroup({ connectionId, name, members, favorite }).unwrap();
       onCreated(group.group_id);
     } catch (cause) {
       setError(typeof cause === "string" ? cause : "创建群聊失败");
@@ -70,6 +72,8 @@ export function CreateGroupModal({
           nothingFoundMessage="还没有 Agent"
           searchable
         />
+        <Checkbox label="设为常用讨论组" description="常用组固定在侧栏。临时组连续七天没有发言后，可从搜索或首页找回。"
+          checked={favorite} onChange={(event) => setFavorite(event.currentTarget.checked)} />
         {error === null ? null : (
           <Alert color="red" title="无法创建">
             {error}

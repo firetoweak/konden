@@ -12,6 +12,7 @@ import {
   useGetAgentsQuery,
   useGetGroupQuery,
   usePostGroupMessageMutation,
+  useSetGroupFavoriteMutation,
 } from "../../api/kondenApi";
 import { useAppSelector } from "../../app/hooks";
 import { MarkdownMessage } from "../conversation/MarkdownMessage";
@@ -70,6 +71,7 @@ function GroupConversation({ groupId }: { groupId: string; }) {
   const { data: group, error: loadError } = useGetGroupQuery(groupId);
   const { data: agents = [] } = useGetAgentsQuery();
   const [postMessage, posting] = usePostGroupMessageMutation();
+  const [setFavorite, savingFavorite] = useSetGroupFavoriteMutation();
   const [failure, setFailure] = useState<string | null>(null);
   const [detailsOpened, setDetailsOpened] = useState(false);
   const [quote, setQuote] = useState<MessageReference | null>(null);
@@ -109,7 +111,17 @@ function GroupConversation({ groupId }: { groupId: string; }) {
         <div className="agent-details-profile">
           <span className="agent-avatar agent-details-avatar"><IconUsersGroup size={30} /></span>
           <Text fw={600} size="md">{group.name}</Text>
-          <Text c="dimmed" fz={12}>{group.members.length} 位成员</Text>
+          <Text c="dimmed" fz={12}>{group.favorite ? "常用讨论组" : "临时讨论组"} · {group.members.length} 位成员</Text>
+          {!group.dissolved && <Button size="compact-xs" variant="subtle" disabled={!connectionId} loading={savingFavorite.isLoading}
+            onClick={async () => {
+              if (!connectionId) return;
+              setFailure(null);
+              try {
+                await setFavorite({ connectionId, groupId, favorite: !group.favorite }).unwrap();
+              } catch (cause) {
+                setFailure(typeof cause === "string" ? cause : "更改讨论组类型失败");
+              }
+            }}>{group.favorite ? "改为临时讨论组" : "设为常用讨论组"}</Button>}
         </div>
         <div className="agent-details-section">
           <Text className="agent-details-label" size="xs" c="dimmed">群成员</Text>

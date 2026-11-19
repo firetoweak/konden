@@ -91,7 +91,7 @@ it("首页仍可创建群聊，成员可选不同项目的 Bot", async () => {
   fireEvent.click(screen.getByRole("option", { name: "Lin" }));
   fireEvent.click(create);
   await waitFor(() => expect(queries.createGroup).toHaveBeenCalledWith({
-    connectionId: "connection", name: "评审组", members: ["Ada", "Lin"],
+    connectionId: "connection", name: "评审组", members: ["Ada", "Lin"], favorite: false,
   }));
   expect(await screen.findByText("新群聊")).toBeInTheDocument();
 });

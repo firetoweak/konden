@@ -268,6 +268,7 @@ it.each(["success", "failure"])("切换 Bot 和群之后，旧 Bot 请求%s不�
   const selections: string[] = [];
   const group: GroupView = {
     group_id: "team", name: "测试群", members: ["Ada", "Lin"], dissolved: false, member_sessions: { Ada: "agent-ada", Lin: "agent-lin" }, calling: [],
+    favorite: false, last_activity: "2026-10-23T00:00:00Z",
     messages: [{ message_id: "group-message", sender: "Lin", sender_session_id: "agent-lin", text: "群里的消息", mentioned_agents: [], reply_to: null, occurred_at: "2026-10-23T00:00:00Z" }],
   };
   vi.stubGlobal("fetch", vi.fn((request: Request) => {
@@ -323,6 +324,7 @@ it.each(["success", "failure"])("切换群后，旧群请求%s不覆盖新群的
   const oldResponse = deferred();
   const group = (id: string): GroupView => ({
     group_id: id, name: `${id}群`, members: ["Ada", "Lin"], dissolved: false, member_sessions: { Ada: "agent-ada", Lin: "agent-lin" }, calling: [],
+    favorite: false, last_activity: "2026-10-23T00:00:00Z",
     messages: [{ message_id: `message-${id}`, sender: "Lin", sender_session_id: "agent-lin", text: `${id}群的消息`,
       mentioned_agents: [], reply_to: null, occurred_at: "2026-10-23T00:00:00Z" }],
   });
