@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import partial
 from io import BytesIO
@@ -22,7 +23,7 @@ from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
 from konden.assistant.external_messages import EXTERNAL_MESSAGE, USER_SOURCE, PostExternal
 from konden.assistant.shared_memory import READ_SHARED_MEMORY, UPDATE_SHARED_MEMORY, SharedMemoryStore
-from konden.assistant.personal_memory import READ_PERSONAL_MEMORY, UPDATE_PERSONAL_MEMORY, personal_memory_store
+from konden.assistant.personal_memory import READ_PERSONAL_MEMORY, UPDATE_PERSONAL_MEMORY, UpdatePersonalMemory, personal_memory_store
 from konden.assistant.memory_review import REVIEW_FACT
 from konden.automation.routines import RoutineFire
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
@@ -234,117 +235,111 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(observed[PERSONAL_MEMORY], own)
         self.assertTrue(self.host.failures.empty())
 
-    async def test_background_memory_crosses_worker_pipe_and_yields_to_new_input(self):
-        # The foreground never calls memory tools. This proves the real Worker /
-        # Host path, persistence and IPC cancellation, not model judgment quality.
-        note = "代码审查时先报告阻断问题。"
-        shared = SharedMemoryStore(self.home.state_root / "shared_memory.sqlite")
-        personal = personal_memory_store(self.home, self.ada)
-        initial_shared = shared.read().model_dump()
-        foreground = []
-        reviews = []
-        outputs = []
-        review_blocked = asyncio.Event()
-        review_aborted = asyncio.Event()
-        release_late_result = asyncio.Event()
-        self.host.sink = lambda *args: outputs.append(args)
+    @contextmanager
+    def memory_review_dialogue(self, review):
+        # Each unique input gets its own foreground request and explicit reply.
+        pending_input = None
+        requests = {}
+        replies = []
+        self.host.sink = lambda session_id, output_id, text: replies.append(text)
 
-        async def chat(messages, model, *, tools=None, **kwargs):
-            names = {tool["function"]["name"] for tool in tools or ()}
-            if names != {UPDATE_PERSONAL_MEMORY, UPDATE_SHARED_MEMORY}:
-                if messages[-1]["role"] == "tool":
-                    return LLMCallResult(LLMResponse(content="已交付"), LLMUsage(10, 5))
-                foreground.append(messages)
-                return LLMCallResult(LLMResponse(calls=(ToolCall(
-                    "reply", SEND_MESSAGE, '{"recipient":"user","text":"done"}',
-                ),)), LLMUsage(10, 5))
-            material = json.loads(messages[-1]["content"])
-            reviews.append(material)
-            if len(reviews) == 1:
-                content = note
-            elif len(reviews) == 2:
-                review_blocked.set()
-                try:
-                    await release_late_result.wait()
-                except asyncio.CancelledError:
-                    review_aborted.set()
-                    raise
-                content = "迟到的结果不应覆盖已有记忆。"
+        async def chat(messages, model, *, tools, **kwargs):
+            nonlocal pending_input
+            if {tool["function"]["name"] for tool in tools} == {UPDATE_PERSONAL_MEMORY, UPDATE_SHARED_MEMORY}:
+                response = await review(json.loads(messages[-1]["content"]))
+            elif pending_input is not None and {"role": "user", "content": pending_input} in messages:
+                requests[pending_input] = messages
+                response = LLMResponse(calls=(ToolCall(
+                    "reply", SEND_MESSAGE, json.dumps({"recipient": "user", "text": pending_input}),
+                ),))
+                pending_input = None
             else:
-                return LLMCallResult(LLMResponse(content="无需更新"), LLMUsage(10, 5))
-            return LLMCallResult(LLMResponse(calls=(ToolCall(
-                "remember", UPDATE_PERSONAL_MEMORY, json.dumps({
-                    "version": material["memories"]["personal"]["version"],
-                    "content": content,
-                }, ensure_ascii=False),
-            ),)), LLMUsage(10, 5))
+                response = LLMResponse(content="已交付")
+            return LLMCallResult(response, LLMUsage(10, 5))
 
-        async def send(text, number):
-            await self.host.receive_user_message(self.ada.session_id, text, delivery_id=f"review-{number}")
-            # A foreground reply is independent from the following review's
-            # completion; wait for that review through its actual Journal fact.
-            await until(lambda: len(outputs) == number)
+        async def send(text):
+            nonlocal pending_input
+            pending_input = text
+            await self.host.receive_user_message(self.ada.session_id, text, delivery_id=text)
+            await until(lambda: text in replies)
+            return requests[text]
 
-        async def finished_reviews(count):
-            async with asyncio.timeout(30):
-                while True:
-                    finished = [event.payload.data for event in await self.events(self.ada)
-                                if isinstance(event.payload, DomainFactCommitted)
-                                and event.payload.fact_type == REVIEW_FACT
-                                and event.payload.data["phase"] == "finished"]
-                    if len(finished) >= count:
-                        return finished
-                    await asyncio.sleep(.02)
-
-        initial_messages = (
-            "以后你做代码审查，先告诉我阻断问题。",
-            "我们先讨论接口边界。",
-            "这次回答短一点。",
-            "先把风险说清楚。",
-            "继续看看当前方案。",
-        )
         with patch.object(self.llm, "chat", side_effect=chat):
+            yield send
+        self.assertEqual(replies, list(requests))
+        self.assertTrue(self.host.failures.empty())
+
+    async def wait_review_statuses(self, count):
+        async with asyncio.timeout(30):
+            while True:
+                statuses = [e.payload.data["status"] for e in await self.events(self.ada)
+                            if isinstance(e.payload, DomainFactCommitted) and e.payload.fact_type == REVIEW_FACT
+                            and e.payload.data["phase"] == "finished"]
+                if len(statuses) >= count:
+                    return statuses
+                await asyncio.sleep(.02)
+
+    async def test_background_memory_reaches_the_next_foreground_request(self):
+        note = "代码审查时先报告阻断问题。"
+        personal = personal_memory_store(self.home, self.ada)
+        shared = SharedMemoryStore(self.home.state_root / "shared_memory.sqlite")
+        initial_shared = shared.read()
+        inputs = ("以后你做代码审查，先告诉我阻断问题。", "我们先讨论接口边界。", "这次回答短一点。",
+                  "先把风险说清楚。", "继续看看当前方案。")
+        reviews = []
+
+        async def review(material):
+            reviews.append(material)
+            return LLMResponse(calls=(ToolCall("remember", UPDATE_PERSONAL_MEMORY, json.dumps({
+                "version": material["memories"]["personal"]["version"], "content": note,
+            })),))
+
+        with self.memory_review_dialogue(review) as send:
+            for text in inputs:
+                await send(text)
+            self.assertEqual(await self.wait_review_statuses(1), ["updated"])
+            self.assertEqual(personal.read().content, note)
+            self.assertEqual(shared.read(), initial_shared)
+            self.assertEqual(personal_memory_store(self.home, self.lin).read().content, "")
+            material, = reviews
+            self.assertEqual(material["bot"], "Ada")
+            self.assertEqual([m["text"] for m in material["material"]["messages"]
+                              if m["sender"]["kind"] == "user"], list(inputs))
+
+            request = await send("开始下一次审查。")
+            shown = json.dumps(request, ensure_ascii=False)
+            self.assertIn(note, shown)
+            self.assertNotIn(REVIEW_FACT, shown)
+
+    async def test_new_input_cancels_background_memory_and_discards_its_late_write(self):
+        personal = personal_memory_store(self.home, self.ada)
+        personal.update(UpdatePersonalMemory(version=0, content="已有的审查约定。"),
+                        author="user", source="user", operation_id="seed")
+        saved = personal.read()
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def review(material):
+            if started.is_set():
+                return LLMResponse(content="无需更新")
+            started.set()
             try:
-                for number, text in enumerate(initial_messages, 1):
-                    await send(text, number)
-                first, = await finished_reviews(1)
-                self.assertEqual(first["status"], "updated")
-                self.assertEqual(personal.read().content, note)
-                self.assertEqual(shared.read().model_dump(), initial_shared)
-                self.assertEqual(personal_memory_store(self.home, self.lin).read().content, "")
-                self.assertEqual(len(reviews), 1)
-                self.assertEqual(reviews[0]["bot"], "Ada")
-                self.assertEqual([message["text"] for message in reviews[0]["material"]["messages"]
-                                  if message["sender"]["kind"] == "user"], list(initial_messages))
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                # Even a provider that returns a valid write after abort must not change memory.
+                cancelled.set()
+                return LLMResponse(calls=(ToolCall("late", UPDATE_PERSONAL_MEMORY, json.dumps({
+                    "version": material["memories"]["personal"]["version"], "content": "迟到的修改。",
+                })),))
 
-                await send("开始下一次审查。", 6)
-                shown = json.dumps(foreground[-1], ensure_ascii=False)
-                self.assertIn(note, shown)
-                self.assertNotIn(REVIEW_FACT, shown)
-
-                for number, text in enumerate((
-                    "我们再看一下模块职责。", "接着检查数据流。",
-                    "再确认一下错误处理。", "继续讨论验证方式。",
-                ), 7):
-                    await send(text, number)
-                await asyncio.wait_for(review_blocked.wait(), 30)
-                saved = personal.read().model_dump()
-
-                await send("先回答这个新问题。", 11)
-                await asyncio.wait_for(review_aborted.wait(), 30)
-                release_late_result.set()
-                finished = await finished_reviews(3)
-                self.assertEqual([item["status"] for item in finished],
-                                 ["updated", "cancelled", "unchanged"])
-                self.assertEqual(personal.read().model_dump(), saved)
-                self.assertEqual(shared.read().model_dump(), initial_shared)
-                self.assertIn("先回答这个新问题。", json.dumps(foreground[-1], ensure_ascii=False))
-                self.assertTrue(all(REVIEW_FACT not in json.dumps(request, ensure_ascii=False)
-                                    for request in foreground))
-                self.assertEqual([output[2] for output in outputs], ["done"] * 11)
-                self.assertTrue(self.host.failures.empty())
-            finally:
-                release_late_result.set()
+        with self.memory_review_dialogue(review) as send:
+            for n in range(5):
+                await send(f"审查第 {n + 1} 个模块。")
+            await asyncio.wait_for(started.wait(), 30)
+            await send("先回答这个新问题。")
+            await asyncio.wait_for(cancelled.wait(), 30)
+            self.assertEqual(await self.wait_review_statuses(2), ["cancelled", "unchanged"])
+            self.assertEqual(personal.read(), saved)
 
     async def test_group_members_receive_calls_even_after_current_turn_interruption(self):
         await self.host.cancel_turn(self.lin.session_id)
