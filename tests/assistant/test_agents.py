@@ -81,7 +81,7 @@ class AgentRosterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.host.agents.list(), ())
         rebuilt = AgentRoster(self.store)
         self.assertEqual(await rebuilt.list(), ())
-        historical = await rebuilt.resolve_recorded("Ada")
+        historical = await rebuilt.by_session(agent.session_id)
         self.assertTrue(historical.deleted)
         self.assertEqual(historical.projects, agent.projects)
         self.assertEqual(note.read_text(encoding="utf-8"), "保留")
@@ -90,8 +90,11 @@ class AgentRosterTest(unittest.IsolatedAsyncioTestCase):
         events = await SqliteJournal(self.store.require(agent.session_id)).snapshot(agent.session_id)
         self.assertEqual(sum(isinstance(event.payload, DomainFactCommitted)
                              and event.payload.fact_type == AGENT_DELETED for event in events), 1)
-        with self.assertRaises(AgentNameTaken):
-            await self.create("Ada")
+        replacement = await self.create("Ada")
+        self.assertNotEqual(replacement.directory, agent.directory)
+        rebuilt = AgentRoster(self.store)
+        self.assertEqual(await rebuilt.resolve("Ada"), replacement)
+        self.assertEqual((await rebuilt.original_owner("Ada")).session_id, agent.session_id)
 
     async def test_creation_wakes_the_new_agent_and_tells_existing_colleagues(self):
         first = await self.create("Ada")

@@ -1226,10 +1226,10 @@ class HostSupervisor:
         directory = self.home.agent_directories_root / hashlib.sha256(session_id.encode()).hexdigest()[:20]
         if name == USER_RECIPIENT:
             raise AgentNameTaken("user 是用户的私信地址，请换一个 Bot 名字。")
-        identity = AgentCreated(name=name, directory=str(directory))
         async with self._agent_creation_lock:
-            for entry in await self.agents.list(include_deleted=True):
-                if name in entry.names:
+            entries = await self.agents.list(include_deleted=True)
+            for entry in entries:
+                if not entry.deleted and name in entry.names:
                     pending = self.store.require(entry.session_id).parent / "agent-creation.json"
                     if pending.exists() and entry.name == name:
                         return await _settle(self._finish_agent_creation(entry))
@@ -1237,6 +1237,8 @@ class HostSupervisor:
             # A cancelled request must not leave a worktree without its identity fact.
             if path is not None:
                 project = self.agent_projects.resolve(path=path)
+            identity = AgentCreated(name=name, directory=str(directory),
+                                    reused_name=any(name in entry.names for entry in entries))
             return await _settle(self._create_agent(project, session_id, identity))
 
     async def _create_agent(self, project, session_id, identity) -> AgentRecord:
@@ -1294,11 +1296,14 @@ class HostSupervisor:
             raise AgentNotFound(session_id)
         if name == USER_RECIPIENT:
             raise AgentNameTaken("user 是用户的私信地址，请换一个 Bot 名字。")
-        fact = AgentRenamed(session_id=session_id, old_name=agent.name, name=name)
+        entries = await self.agents.list(include_deleted=True)
         if any(name in entry.names and entry.session_id != session_id
-               for entry in await self.agents.list(include_deleted=True)):
+               for entry in entries if not entry.deleted):
             raise AgentNameTaken(f"这个名字已被其他 Bot 使用：{name}")
         if name != agent.name:
+            fact = AgentRenamed(session_id=session_id, old_name=agent.name, name=name,
+                                old_name_reused=not agent.originally_owned(agent.name),
+                                reused_name=any(name in entry.names for entry in entries if entry.deleted))
             try:
                 await self.request("fact", session_id, fact_arguments(fact, delivery_id=f"rename:{uuid4().hex}"))
             finally:
@@ -1317,7 +1322,7 @@ class HostSupervisor:
         await self.agent_messages._broadcast(agent, parse_agent_fact(event.payload),
                                             f"renamed:{event.session_id}:{event.event_id}")
         for group in await self.agent_groups.list():
-            if any(member in agent.names for member in group.members):
+            if agent.session_id in group.member_sessions.values():
                 self.agent_groups._changed(group.group_id)
 
     async def delete_agent(self, session_id: str) -> None:

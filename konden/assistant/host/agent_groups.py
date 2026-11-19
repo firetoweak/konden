@@ -39,6 +39,7 @@ class GroupDissolvedError(LookupError):
 class GroupRecord:
     group_id: str
     created: GroupCreated
+    member_sessions: dict[str, str]
     dissolved: bool = False
 
     @property
@@ -126,7 +127,7 @@ class AgentGroups:
         data = dict(replies=dict(drive.replies), pending=[(name, asdict(call)) for name, call in drive.pending.items()],
                     batch=[(name, asdict(call)) for name, call in drive.batch.items()], active=drive.active,
                     answering=[(name, asdict(call)) for (name, _), call in drive.answering.items()],
-                    outbox=[message.model_dump(mode="json") for message in drive.outbox.values()],
+                    outbox=[message.model_dump(mode="json", exclude_defaults=True) for message in drive.outbox.values()],
                     receipt=None if receipt is None else list(receipt))
         await AgentRuntime(self._journal(drive.group.group_id), None, {}).receive_domain_fact(
             drive.group.group_id, _DRIVE, data, source="group", delivery_id=uuid4().hex)
@@ -149,8 +150,8 @@ class AgentGroups:
         await self.prepare_recovery()
         for group in await self.list(include_dissolved=True):
             async with self._group_locks.setdefault(group.group_id, asyncio.Lock()):
-                for name in group.members:
-                    agent = await self.host.agents.resolve_recorded(name)
+                for session_id in group.member_sessions.values():
+                    agent = await self.host.agents.by_session(session_id)
                     if not agent.deleted:
                         fact = GroupDissolved(group=group.name) if group.dissolved else group.created
                         await self._deliver_member(agent.session_id, fact_arguments(
@@ -183,7 +184,10 @@ class AgentGroups:
         dissolved = [parse_agent_fact(event.payload) for event in events
                      if isinstance(event.payload, DomainFactCommitted)
                      and event.payload.fact_type == GROUP_DISSOLVED]
-        return GroupRecord(group_id, created, bool(dissolved)), events
+        sessions = created.member_sessions
+        if sessions is None:
+            sessions = {name: (await self.host.agents.original_owner(name)).session_id for name in created.members}
+        return GroupRecord(group_id, created, sessions, bool(dissolved)), events
 
     async def list(self, *, include_dissolved=False) -> tuple[GroupRecord, ...]:
         groups = []
@@ -201,14 +205,17 @@ class AgentGroups:
         """What a person sees: the public record and who the Host is calling now."""
         group, events = await self._record(group_id)
         drive = self._drives.get(group_id)
+        active = await self._active_members(group)
         return {
             "group_id": group.group_id, "name": group.name,
             "dissolved": group.dissolved,
-            "members": await self.member_names(group),
-            "calling": [(await self.host.agents.resolve_recorded(drive.active)).name]
+            "members": list(active),
+            "member_sessions": {name: group.member_sessions[key] for name, key in active.items()},
+            "calling": [(await self.host.agents.by_session(group.member_sessions[drive.active])).name]
                        if drive is not None and drive.running and drive.active is not None and not group.dissolved else [],
             "messages": [
-                {"message_id": fact.message_id, "sender": fact.sender.name, "text": fact.text,
+                {"message_id": fact.message_id, "sender": fact.sender.name,
+                 "sender_session_id": await self.host.agents.sender_session(fact), "text": fact.text,
                  "mentioned_agents": fact.mentioned_agents, "reply_to": fact.reply_to,
                  "occurred_at": event.occurred_at.isoformat()}
                 for event in events
@@ -221,17 +228,20 @@ class AgentGroups:
         return [parse_agent_fact(event.payload) for event in await self._journal(group_id).snapshot(group_id)
                 if isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == GROUP_MESSAGE]
 
-    async def member_names(self, group: GroupRecord) -> list[str]:
-        agents = [await self.host.agents.resolve_recorded(name) for name in group.members]
-        return [agent.name for agent in agents if not agent.deleted]
+    async def _active_members(self, group):
+        members = {}
+        for key, session_id in group.member_sessions.items():
+            agent = await self.host.agents.by_session(session_id)
+            if not agent.deleted:
+                members[agent.name] = key
+        return members
 
-    async def _member_keys(self, group: GroupRecord, names: list[str]) -> list[str]:
-        agents = [(name, await self.host.agents.resolve_recorded(name)) for name in group.members]
-        return [next(key for key, agent in agents if agent.name == name and not agent.deleted) for name in names]
+    async def member_names(self, group: GroupRecord) -> list[str]:
+        return list(await self._active_members(group))
 
     async def create(self, *, name: str, members: list[str]) -> GroupRecord:
-        created = GroupCreated(group=name, members=members)
-        agents = [await self.host.agents.resolve(member) for member in created.members]
+        sessions = {member: (await self.host.agents.resolve(member)).session_id for member in members}
+        created = GroupCreated(group=name, members=members, member_sessions=sessions)
         group_id = f"group-{uuid4().hex}"
         async with self._creation_lock:
             if any(group.name == name for group in await self.list(include_dissolved=True)):
@@ -239,20 +249,20 @@ class AgentGroups:
             await self.store.create(group_id,
                                     initial_fact=fact_arguments(created, delivery_id="created"))
         await asyncio.gather(*(
-            self.host.request("fact", agent.session_id, fact_arguments(created, delivery_id=f"joined:{group_id}"))
-            for agent in agents))
+            self._deliver_member(session_id, fact_arguments(created, delivery_id=f"joined:{group_id}"))
+            for session_id in sessions.values()))
         # Other pages list groups too; a new group is a change they must hear about.
         self._changed(group_id)
-        return GroupRecord(group_id, created)
+        return GroupRecord(group_id, created, sessions)
 
     async def _publish(self, group: GroupRecord, message: GroupMessage) -> None:
         """The group record is the source; member timelines receive copies without deciding."""
         arguments = fact_arguments(message, delivery_id=message.message_id)
         await AgentRuntime(self._journal(group.group_id), None, {}).receive_domain_fact(group.group_id, **arguments)
-        recipients = [await self.host.agents.resolve_recorded(name)
-                      for name in group.members]
-        recipients = [agent for agent in recipients if not agent.deleted and message.sender.name not in agent.names]
-        await asyncio.gather(*(self._deliver_member(agent.session_id, arguments) for agent in recipients))
+        sender_id = await self.host.agents.sender_session(message)
+        recipients = [session_id for session_id in group.member_sessions.values() if session_id != sender_id
+                      and not (await self.host.agents.by_session(session_id)).deleted]
+        await asyncio.gather(*(self._deliver_member(session_id, arguments) for session_id in recipients))
         self._changed(group.group_id)
 
     async def _deliver_member(self, session_id, arguments):
@@ -271,8 +281,8 @@ class AgentGroups:
                 await AgentRuntime(self._journal(group_id), None, {}).receive_domain_fact(group_id,
                     **fact_arguments(GroupDissolved(group=group.name), delivery_id="dissolved"))
                 drive.replaced.set()
-            for name in group.members:
-                agent = await self.host.agents.resolve_recorded(name)
+            for session_id in group.member_sessions.values():
+                agent = await self.host.agents.by_session(session_id)
                 if not agent.deleted:
                     await self._deliver_member(agent.session_id, fact_arguments(
                         GroupDissolved(group=group.name), delivery_id=f"dissolved:{group_id}"))
@@ -291,7 +301,7 @@ class AgentGroups:
     async def post(self, group_id: str, text: str, mention: list[str], *, delivery_id: str | None = None) -> GroupMessage:
         """A human message starts a new drive, superseding the previous one."""
         group = await self.get(group_id)
-        members = await self.member_names(group)
+        members = await self._active_members(group)
         if any(name not in members for name in mention):
             raise ValueError("点名的成员不在这个群里")
         message = GroupMessage(message_id=f"group-message-{delivery_id or uuid4().hex}", sender=Speaker(kind="user", name=None),
@@ -308,7 +318,7 @@ class AgentGroups:
                 self._schedule(previous)
                 return existing
             drive = self._replace_drive(group)
-            drive.queue(None, await self._member_keys(group, mention), _Call(message.message_id, message.message_id, 1))
+            drive.queue(None, [members[name] for name in mention], _Call(message.message_id, message.message_id, 1))
             drive.outbox[message.message_id] = message
             await self._save(drive, receipt=(message.message_id, True))
             await self._flush(drive)
@@ -360,7 +370,7 @@ class AgentGroups:
         request must not hold up delivery to anyone else, including later work.
         Re-delivery after a restart uses the original fact identity.
         """
-        agent = await self.host.agents.resolve_recorded(name)
+        agent = await self.host.agents.by_session(drive.group.member_sessions[name])
         if agent.deleted:
             return
         delivery_id = f"attention:{drive.group.group_id}:{call.message_id}:{name}"
@@ -385,8 +395,8 @@ class AgentGroups:
                       if group.name == arguments["group"]), None)
         if group is None:
             return {"ok": False, "code": "GROUP_NOT_FOUND", "error": "没有这个群。"}
-        members = await self.member_names(group)
-        if sender.name not in members:
+        members = await self._active_members(group)
+        if sender.deleted or session_id not in group.member_sessions.values():
             return {"ok": False, "code": "NOT_A_MEMBER", "error": "你不在这个群里。"}
         mention = arguments["mention"]
         async with self._group_locks.setdefault(group.group_id, asyncio.Lock()):
@@ -398,7 +408,7 @@ class AgentGroups:
             identity = arguments["message_id"]
             existing = next((message for message in messages if message.message_id == identity), None)
             if existing is not None:
-                if (existing.sender.name not in sender.names or existing.group != group.name
+                if (await self.host.agents.sender_session(existing) != session_id or existing.group != group.name
                         or existing.text != arguments["text"] or existing.mentioned_agents != mention
                         or existing.reply_to != arguments["reply_to"]):
                     raise ValueError("persisted group message conflicts with its sending Command")
@@ -413,13 +423,14 @@ class AgentGroups:
             refused = await admit(group.name)
             if refused is not None:
                 return refused
-            speaker, = await self._member_keys(group, [sender.name])
-            mentioned = await self._member_keys(group, mention)
+            speaker = members[sender.name]
+            mentioned = [members[name] for name in mention]
             answered = drive.answering.get((speaker, arguments["reply_to"]))
             if answered is not None and drive.replies[answered.opener] >= MAX_GROUP_REPLIES:
                 return {"ok": False, "code": "GROUP_LIMIT_REACHED",
                         "error": "这次群讨论的回复已达上限；需要某位同事接着处理时可以私信他。"}
             message = GroupMessage(message_id=identity, sender=Speaker(kind="agent", name=sender.name),
+                                   sender_session_id=session_id,
                                    reply_to=arguments["reply_to"], text=arguments["text"], group=group.name,
                                    mentioned_agents=mention, origin=origin)
             if answered is not None:

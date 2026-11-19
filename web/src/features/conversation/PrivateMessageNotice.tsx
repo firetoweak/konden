@@ -3,7 +3,6 @@ import { IconArrowDownLeft, IconArrowUpRight } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { useGetAgentsQuery } from "../../api/kondenApi";
 import { BotAvatar, useIdentityColor } from "./ChatPresentation";
 import { formatMessageTime } from "./messageTime";
 import type { TimelineCommunication } from "./timelineTurns";
@@ -13,12 +12,10 @@ export function PrivateMessageNotice({ communication, agentName }: {
   communication: TimelineCommunication; agentName: string;
 }) {
   const [opened, setOpened] = useState(false);
-  const { data: agents = [] } = useGetAgentsQuery();
   const identityColor = useIdentityColor();
   const { sessionId } = useParams();
   const { message, messages } = communication;
-  const peer = message.external === undefined ? agents.find((agent) => agent.name === message.peer) : undefined;
-  const identity = <><BotAvatar name={message.peer} sessionId={peer?.session_id} /><span>{message.peer}</span></>;
+  const identity = <><BotAvatar name={message.peer} sessionId={message.peerSessionId} /><span>{message.peer}</span></>;
   const direction = message.direction === "sent" ? "已发消息给" : "消息来自";
   const DirectionIcon = message.direction === "sent" ? IconArrowUpRight : IconArrowDownLeft;
   const time = formatMessageTime(message.occurredAt);
@@ -27,7 +24,7 @@ export function PrivateMessageNotice({ communication, agentName }: {
   if (message.external === undefined) return <>
     <div className="private-message-notice" title={title}>
       {directionIcon}
-      <UnstyledButton className="private-message-peer private-message-trigger" data-identity={identityColor(message.peer)}
+      <UnstyledButton className="private-message-peer private-message-trigger" data-identity={identityColor(message.peer, message.peerSessionId)}
         aria-label={`${direction} ${message.peer}，查看私聊`} aria-haspopup="dialog" onClick={() => setOpened(true)}>
         {identity}
       </UnstyledButton>
@@ -46,8 +43,8 @@ export function PrivateMessageNotice({ communication, agentName }: {
               return <article className="private-message-entry" key={item.key} data-direction={item.direction}
                 aria-label={`${author} 发给 ${recipient} 的私信`}>
                 <header className="private-message-entry-meta">
-                  <BotAvatar name={author} sessionId={item.direction === "sent" ? sessionId : peer?.session_id} />
-                  <span data-identity={identityColor(author)}>{author}</span>
+                  <BotAvatar name={author} sessionId={item.direction === "sent" ? sessionId : item.peerSessionId} />
+                  <span data-identity={identityColor(author, item.direction === "sent" ? sessionId : item.peerSessionId)}>{author}</span>
                   <time dateTime={item.occurredAt} title={itemTime.full}>{itemTime.short}</time>
                 </header>
                 <div className="private-message-entry-body"><MarkdownMessage content={item.text} streaming={false} /></div>
@@ -60,7 +57,7 @@ export function PrivateMessageNotice({ communication, agentName }: {
   </>;
   return <div className="private-message-notice" title={title}>
     {directionIcon}
-    <Link className="private-message-peer" data-identity={identityColor(message.peer)}
+    <Link className="private-message-peer" data-identity={identityColor(message.peer, message.peerSessionId)}
       aria-label={`${direction} ${message.peer}，查看三方对话`}
       to={`/external/${encodeURIComponent(message.external.identity)}${sessionId === undefined ? "" : `?bot=${encodeURIComponent(sessionId)}`}`}>{identity}</Link>
   </div>;

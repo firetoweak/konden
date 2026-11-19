@@ -52,13 +52,13 @@ it("同事私信留在原线程，显式发给用户的消息可见并计入未�
       { kind: "user", message_id: "hi", text: "你好", occurred_at: "2026-10-19T00:00:00Z", images: [], files: [] },
       { kind: "step", step_id: "s1", output_id: "send-hi", text: "回给人", thinking: null,
         occurred_at: "2026-10-19T00:00:01Z", tools: [] },
-      { kind: "private_message", message_id: "received-lin", direction: "received", peer: "Lin",
+      { kind: "private_message", message_id: "received-lin", direction: "received", peer: "Lin", peer_session_id: "lin",
         text: "请检查文件", thread_id: "lin-thread", reply_to: null,
         occurred_at: "2026-10-19T00:01:00Z" },
       { kind: "step", step_id: "s2", output_id: "colleague", text: null, thinking: null,
         occurred_at: "2026-10-19T00:01:00Z", tools: [{ command_id: "read", name: "read_file", status: "succeeded",
           error: null, arguments: { path: "a.md" } }] },
-      { kind: "private_message", message_id: "sent-lin", direction: "sent", peer: "Lin",
+      { kind: "private_message", message_id: "sent-lin", direction: "sent", peer: "Lin", peer_session_id: "lin",
         text: "文件没问题", thread_id: "lin-thread", reply_to: "received-lin",
         occurred_at: "2026-10-19T00:01:04Z" },
       { kind: "step", step_id: "s3:tell", output_id: "tell", text: "结论给你", thinking: null,
@@ -108,7 +108,7 @@ it("同事私信留在原线程，显式发给用户的消息可见并计入未�
   act(() => {
     store.dispatch(kondenApi.util.updateQueryData("getConversation", "agent", (draft) => {
       draft.items.push({ kind: "private_message", message_id: "follow-up", thread_id: "lin-thread",
-        direction: "received", peer: "Lin", text: "收到，检查通过", reply_to: "sent-lin",
+        direction: "received", peer: "Lin", peer_session_id: "lin", text: "收到，检查通过", reply_to: "sent-lin",
         occurred_at: "2026-10-19T00:02:00Z" });
     }));
   });

@@ -44,6 +44,7 @@ export type VisiblePrivateMessage = {
   kind: "private_message";
   direction: "sent" | "received";
   peer: string;
+  peerSessionId?: string;
   text: string;
   threadId: string | null;
   replyTo: string | null;
@@ -90,6 +91,7 @@ export function visibleTimeline(
         replyTo: item.reply_to,
         kind: "private_message",
         direction: item.direction,
+        peerSessionId: item.peer_session_id,
         peer: item.peer,
         text: item.text,
         occurredAt: item.occurred_at,

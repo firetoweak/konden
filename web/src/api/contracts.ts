@@ -207,6 +207,7 @@ export const groupMessageSchema = z
   .object({
     message_id: z.string().min(1),
     sender: z.string().min(1).nullable(),
+    sender_session_id: z.string().min(1).nullable(),
     text: z.string().min(1),
     mentioned_agents: z.array(z.string().min(1)),
     reply_to: z.string().min(1).nullable(),
@@ -220,6 +221,7 @@ export const groupViewSchema = groupSummarySchema
   .extend({
     dissolved: z.boolean(),
     calling: z.array(z.string().min(1)),
+    member_sessions: z.record(z.string(), z.string().min(1)),
     messages: z.array(groupMessageSchema),
   })
   .strict();
@@ -319,6 +321,7 @@ export const conversationViewSchema = z
           message_id: z.string().min(1),
           thread_id: z.string().min(1),
           direction: z.enum(["sent", "received"]),
+          peer_session_id: z.string().min(1),
           peer: z.string().min(1),
           text: z.string().min(1),
           reply_to: z.string().nullable(),

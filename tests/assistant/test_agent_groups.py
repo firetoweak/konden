@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from konden.assistant.agent_messages import SEND_GROUP_MESSAGE
 from konden.assistant.agents import (
-    GROUP_ATTENTION, GROUP_CREATED, GROUP_MESSAGE, AgentCreated, fact_arguments, parse_agent_fact,
+    GROUP_ATTENTION, GROUP_CREATED, GROUP_MESSAGE, AgentCreated, GroupCreated, GroupMessage, Speaker, fact_arguments, identity_for_model, parse_agent_fact,
 )
 from konden.assistant.host.agent_groups import AgentGroups, GroupDissolvedError, GroupNameTaken
 from konden.assistant.host.agent_roster import AgentNotFound
@@ -117,6 +117,36 @@ class AgentGroupsTest(unittest.IsolatedAsyncioTestCase):
         await self.settled(group)
         self.assertEqual(len(await self.facts("Ada", GROUP_ATTENTION)), 0)
         self.assertEqual(len(await self.facts("Lin", GROUP_ATTENTION)), 1)
+
+    async def test_reused_name_does_not_join_old_groups_or_take_credit_for_old_speech(self):
+        # A pre-upgrade group and its copies have names only, including its pending turn keys.
+        groups = self.host.agent_groups
+        legacy = GroupCreated(group="原群", members=["Ada", "Lin"])
+        await groups.store.create("legacy", initial_fact=fact_arguments(legacy, delivery_id="created"))
+        original = GroupMessage(message_id="old", group="原群", sender=Speaker(kind="agent", name="Ada"),
+                                mentioned_agents=[], reply_to=None, origin="origin", text="旧发言")
+        await AgentRuntime(groups.store.journal("legacy"), None, {}).receive_domain_fact(
+            "legacy", **fact_arguments(original, delivery_id="old"))
+        await groups.recover()
+        await self.host.rename_agent("Ada", "旧名")
+        await self.host.delete_agent("Ada")
+        new = await self.host.create_agent(name="Ada")
+        await self.host.rename_agent(new.session_id, "旧名")
+        later = await self.group(("旧名", "Lin"), name="新群")
+        self.host.agent_groups = groups = AgentGroups(self.host)
+        await groups.recover()
+        old = await groups.view("legacy")
+        self.assertEqual(old["member_sessions"], {"Lin": "Lin"})
+        self.assertEqual(old["messages"][0]["sender_session_id"], "Ada")
+        self.assertEqual((await groups.view(later.group_id))["member_sessions"]["旧名"], new.session_id)
+        result = await groups.send(new.session_id, {"group": "原群"}, "origin", AsyncMock())
+        self.assertEqual(result["code"], "NOT_A_MEMBER")
+        await groups.post("legacy", "旧群继续", [])
+        await self.settled(await groups.get("legacy"))
+        self.assertEqual(await self.facts(new.session_id, GROUP_MESSAGE), [])
+        shown = identity_for_model(await self.journal("Lin").snapshot("Lin"))
+        self.assertEqual(shown["groups"], [{"group": "原群", "members": ["Lin"]},
+                                           {"group": "新群", "members": ["旧名", "Lin"]}])
 
     async def facts(self, session_id, fact_type):
         return [event.payload for event in await self.journal(session_id).snapshot(session_id)

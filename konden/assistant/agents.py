@@ -46,6 +46,7 @@ class _Fact(BaseModel):
 class AgentCreated(_Fact):
     name: Text
     directory: Text
+    reused_name: bool = False
 
     @field_validator("name")
     @classmethod
@@ -66,6 +67,8 @@ class AgentRenamed(_Fact):
     session_id: Text
     old_name: Text
     name: Text
+    reused_name: bool = False
+    old_name_reused: bool = False
 
     @field_validator("old_name", "name")
     @classmethod
@@ -76,6 +79,7 @@ class AgentRenamed(_Fact):
 class AgentDeleted(_Fact):
     session_id: Text
     name: Text
+    reused_name: bool = False
 
 
 class GroupDissolved(_Fact):
@@ -119,6 +123,7 @@ class Speaker(_Fact):
 class _Message(_Fact):
     message_id: Text
     sender: Speaker
+    sender_session_id: Text | None = None
     reply_to: Text | None
     text: Text
 
@@ -151,6 +156,14 @@ class GroupAttention(_Fact):
 class GroupCreated(_Fact):
     group: Text
     members: Annotated[list[Text], Field(min_length=2, max_length=6)]
+    member_sessions: dict[Text, Text] | None = None
+
+    @model_validator(mode="after")
+    def bound_members(self):
+        sessions = self.member_sessions
+        if sessions is not None and (set(sessions) != set(self.members) or len(set(sessions.values())) != len(self.members)):
+            raise ValueError("群成员与会话必须一一对应")
+        return self
 
     @field_validator("members")
     @classmethod
@@ -201,7 +214,7 @@ def fact_arguments(fact: _Fact, *, delivery_id: str) -> dict:
         for kind, (model, requests_decision) in _FACTS.items()
         if type(fact) is model
     )
-    return dict(fact_type=kind, data=fact.model_dump(), source=SOURCE,
+    return dict(fact_type=kind, data=fact.model_dump(exclude_defaults=True), source=SOURCE,
                 delivery_id=delivery_id, requests_decision=requests_decision)
 
 
@@ -219,13 +232,20 @@ class AgentRecord:
     projects: tuple[ProjectLinked, ...] = ()
     renamed_names: tuple[str, ...] = ()
     deleted: bool = False
+    reused_aliases: frozenset[str] = frozenset()
 
     @property
     def names(self) -> tuple[str, ...]:
         return (self.identity.name, *self.renamed_names)
 
-    def renamed(self, name: str) -> AgentRecord:
-        return replace(self, renamed_names=(*self.renamed_names, name))
+    def originally_owned(self, name: str) -> bool:
+        """Before names were reusable, name-only facts belonged to their first owner."""
+        return name in self.names and name not in self.reused_aliases and not (
+            self.identity.reused_name and name == self.identity.name)
+
+    def renamed(self, name: str, *, reused_name: bool = False) -> AgentRecord:
+        reused = self.reused_aliases | {name} if reused_name else self.reused_aliases
+        return replace(self, renamed_names=(*self.renamed_names, name), reused_aliases=reused)
 
     @property
     def name(self) -> str:
@@ -256,7 +276,7 @@ def project_agent(events) -> AgentRecord | None:
             if renamed.session_id == event.session_id:
                 if creation is None or creation.name != renamed.old_name:
                     raise ValueError("Agent rename differs from its current identity")
-                creation = creation.renamed(renamed.name)
+                creation = creation.renamed(renamed.name, reused_name=renamed.reused_name)
         elif isinstance(payload, DomainFactCommitted) and payload.fact_type == AGENT_DELETED:
             deleted = parse_agent_fact(payload)
             if deleted.session_id == event.session_id:
@@ -286,27 +306,33 @@ def identity_for_model(events) -> dict | None:
         return None
     shown = {"name": agent.name}
     groups = {}
-    renames = []
-    deleted_names = set()
+    names = {}
+    deleted = set()
+    original_owners = {}
     for event in events:
         if not isinstance(event.payload, DomainFactCommitted):
             continue
-        if event.payload.fact_type == GROUP_CREATED:
-            fact = parse_agent_fact(event.payload)
-            groups[fact.group] = {"group": fact.group, "members": list(fact.members)}
-        elif event.payload.fact_type == GROUP_DISSOLVED:
+        kind = event.payload.fact_type
+        if kind == GROUP_CREATED:
+            group = parse_agent_fact(event.payload)
+            groups[group.group] = group
+        elif kind == GROUP_DISSOLVED:
             groups.pop(parse_agent_fact(event.payload).group, None)
-        elif event.payload.fact_type == AGENT_DELETED:
+        elif kind == AGENT_RENAMED:
             fact = parse_agent_fact(event.payload)
-            deleted_names.add(fact.name)
-        elif event.payload.fact_type == AGENT_RENAMED:
-            renames.append(parse_agent_fact(event.payload))
-    for fact in renames:
-        for group in groups.values():
-            group["members"] = [fact.name if member == fact.old_name else member for member in group["members"]]
+            names[fact.session_id] = fact.name
+            if not fact.old_name_reused:
+                original_owners[fact.old_name] = fact.session_id
+        elif kind == AGENT_DELETED:
+            fact = parse_agent_fact(event.payload)
+            deleted.add(fact.session_id)
+            if not fact.reused_name:
+                original_owners[fact.name] = fact.session_id
+    shown["groups"] = []
     for group in groups.values():
-        group["members"] = [member for member in group["members"] if member not in deleted_names]
-    shown["groups"] = list(groups.values())
+        owners = group.member_sessions if group.member_sessions is not None else original_owners
+        shown["groups"].append({"group": group.group, "members": [
+            names.get(owners.get(name), name) for name in group.members if owners.get(name) not in deleted]})
     shown["projects"] = [{"project": item.name, "directory": item.worktree} for item in agent.projects]
     shown["notice"] = (
         "你当前的 Agent 资料：名字、所在的群，以及已关联的项目。")
@@ -327,8 +353,7 @@ def agent_fact_for_model(payload: DomainFactCommitted) -> dict:
                 "notice": "这个 Agent 改了名字。发消息和提及时请使用当前名字；已有的对话和群成员身份照常延续。"}
     if isinstance(fact, AgentDeleted):
         return {"name": fact.name, "notice": (
-            "用户删除了这个 Agent。它不再参与协作，"
-            "也无法接收私信或群聊提及。")}
+            "用户删除了这位 Bot，它已退出协作。之后新建的同名 Bot 拥有独立的会话和群关系。")}
     if isinstance(fact, GroupDissolved):
         return {"group": fact.group, "notice": (
             "用户解散了这个群。你不能再向它发送消息；"

@@ -901,7 +901,7 @@ class WebFirstSliceTest(unittest.TestCase):
         self.sessions.dissolve_group.assert_awaited_once_with("team")
 
     def test_group_endpoints_check_human_input_and_map_known_failures(self):
-        record = GroupRecord("group-1", GroupCreated(group="开发组", members=["Ada", "Lin"]))
+        record = GroupRecord("group-1", GroupCreated(group="开发组", members=["Ada", "Lin"]), {"Ada": "a", "Lin": "b"})
 
         async def create(*, name, members):
             if name == "taken":

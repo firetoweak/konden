@@ -10,10 +10,11 @@ from konden.assistant.agent_messages import (
     LIST_COLLEAGUES, SEND_MESSAGE, message_bindings, recover_message_attempts, send_message,
 )
 from konden.assistant.agents import (
-    COMMUNICATION_LIMIT_REACHED, PRIVATE_MESSAGE, AgentCreated, AgentRecord,
+    COMMUNICATION_LIMIT_REACHED, PRIVATE_MESSAGE, AgentCreated, AgentRecord, PrivateMessage, Speaker,
     fact_arguments, parse_agent_fact,
 )
 from konden.assistant.conversations import project_conversation
+from konden.assistant.host.agent_messages import AgentMessages
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
 from konden.assistant.sessions import session_view
@@ -118,6 +119,30 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
         response, = await self.messages("Ada")
         self.assertEqual(response.sender.name, "小林")
         self.assertEqual(response.hop, 1)
+
+    async def test_reused_name_separates_retries_replies_and_new_mail_after_restart(self):
+        first = await self.send()
+        # The old sender's name is all that pre-upgrade incoming messages recorded.
+        old = PrivateMessage(message_id="legacy", sender=Speaker(kind="agent", name="Lin"), recipient="Ada",
+                             reply_to=None, thread_id="legacy", hop=0, origin="origin", text="旧私信")
+        await AgentRuntime(self.journal("Ada"), None, {}).receive_domain_fact(
+            "Ada", **fact_arguments(old, delivery_id="legacy"))
+        await self.host.delete_agent("Lin")
+        new = await self.host.create_agent(name="Lin")
+        self.host.agent_messages = AgentMessages(self.host)
+        self.assertEqual(await self.send(), first)
+        # An interrupted attempt with only a name and no receipt cannot target the replacement.
+        unresolved = await self.transport(SEND_MESSAGE, "Ada", {
+            "command_id": await self.command("Ada", "interrupted"), "recipient": "Lin",
+            "text": "旧任务", "reply_to": None, "recovering": True})
+        self.assertEqual(unresolved["code"], "RECIPIENT_UNCONFIRMED")
+        for ref in ("legacy", first["data"]["message_id"]):
+            self.assertEqual((await self.send(command="quote-" + ref, reply_to=ref))["code"], "INVALID_REPLY")
+        self.assertEqual(await self.messages(new.session_id), [])
+        fresh = await self.send(command="fresh")
+        received, = await self.messages(new.session_id)
+        self.assertEqual((received.sender_session_id, received.message_id), ("Ada", fresh["data"]["message_id"]))
+        self.assertEqual(len(await self.messages("Lin")), 1)
 
     async def test_known_address_errors_and_same_pair_reply_validation(self):
         for name, code in (("Nobody", "RECIPIENT_NOT_FOUND"), ("Ada", "SELF_MESSAGE")):
