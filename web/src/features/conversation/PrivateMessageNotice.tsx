@@ -14,18 +14,19 @@ export function PrivateMessageNotice({ communication, agentName }: {
   const [opened, setOpened] = useState(false);
   const identityColor = useIdentityColor();
   const { sessionId } = useParams();
-  const { message, messages } = communication;
+  const { message, messages, bidirectional } = communication;
   const identity = <><BotAvatar name={message.peer} sessionId={message.peerSessionId} /><span>{message.peer}</span></>;
   const direction = message.direction === "sent" ? "已发消息给" : "消息来自";
   const DirectionIcon = message.direction === "sent" ? IconArrowUpRight : IconArrowDownLeft;
   const time = formatMessageTime(message.occurredAt);
-  const title = `${direction} ${message.peer} · ${time.full}`;
-  const directionIcon = <span className="private-message-direction" role="img" aria-label={direction}><DirectionIcon aria-hidden="true" size={17} /></span>;
+  const label = bidirectional ? `与 ${message.peer} 的私聊` : `${direction} ${message.peer}`;
+  const title = `${label} · ${time.full}`;
+  const directionIcon = !bidirectional && <span className="private-message-direction" role="img" aria-label={direction}><DirectionIcon aria-hidden="true" size={17} /></span>;
   if (message.external === undefined) return <>
     <div className="private-message-notice" title={title}>
       {directionIcon}
       <UnstyledButton className="private-message-peer private-message-trigger" data-identity={identityColor(message.peer, message.peerSessionId)}
-        aria-label={`${direction} ${message.peer}，查看私聊`} aria-haspopup="dialog" onClick={() => setOpened(true)}>
+        aria-label={bidirectional ? `查看${label}` : `${label}，查看私聊`} aria-haspopup="dialog" onClick={() => setOpened(true)}>
         {identity}
       </UnstyledButton>
     </div>

@@ -22,7 +22,7 @@ it.each([
     peer: "Codex", occurredAt: "2026-10-23T01:00:00Z",
     text: "来讨论一下方案", messageId: "1", replyTo: null,
     external: { identity: "1".repeat(32) } };
-  render(<MemoryRouter initialEntries={["/sessions/receiver"]}><Routes><Route path="/sessions/:sessionId" element={<PrivateMessageNotice agentName="接收方" communication={{ key: message.key, message, messages: [message] }} />} /></Routes></MemoryRouter>);
+  render(<MemoryRouter initialEntries={["/sessions/receiver"]}><Routes><Route path="/sessions/:sessionId" element={<PrivateMessageNotice agentName="接收方" communication={{ key: message.key, message, bidirectional: false, messages: [message] }} />} /></Routes></MemoryRouter>);
   expect(screen.getByRole("img", { name: label })).toBeInTheDocument();
   expect(screen.queryByText("外部协作者")).not.toBeInTheDocument();
   expect(screen.queryByText(message.text)).not.toBeInTheDocument();

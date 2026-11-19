@@ -283,6 +283,11 @@ describe("timelineTurns", () => {
     const earlyReply = timelineTurns(visibleTimeline({ ...conversation, items: [incoming, sent] }, {}, null, {}));
     expect(earlyReply[0].communications[0].messages.map((message) => message.messageId)).toEqual(["out", "in"]);
     expect(earlyReply[0].communications.map(({ message }) => message.messageId)).toEqual(["in"]);
+    expect(earlyReply[0].communications[0].bidirectional).toBe(true);
+    const sentTwice = timelineTurns(visibleTimeline({ ...conversation, items: [sent,
+      { ...sent, message_id: "also-out", reply_to: "out" },
+    ] }, {}, null, {}));
+    expect(sentTwice[0].communications).toMatchObject([{ bidirectional: false }]);
   });
 
   it("keeps tool steps in the process and exposes the final no-tool step", () => {
