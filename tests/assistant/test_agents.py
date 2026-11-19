@@ -204,7 +204,8 @@ class AgentRosterTest(unittest.IsolatedAsyncioTestCase):
         journal = SqliteJournal(self.store.require(agent.session_id))
         runtime = AgentRuntime(journal, None, {})
         await runtime.receive_domain_fact(agent.session_id, **fact_arguments(
-            GroupCreated(group="开发组", members=["Ada", "Lin"]), delivery_id="setup-group"))
+            GroupCreated(group="开发组", members=["Ada", "Lin"], started_by="Ada", group_path="/groups/team"),
+            delivery_id="setup-group"))
 
         async def accept(_operation, session_id, arguments):
             await AgentRuntime(SqliteJournal(self.store.require(session_id)), None, {}).receive_domain_fact(
@@ -220,7 +221,8 @@ class AgentRosterTest(unittest.IsolatedAsyncioTestCase):
             await rebuilt.resolve("Ada")
         identity = identity_for_model(await journal.snapshot(agent.session_id))
         self.assertEqual(identity["name"], "测试")
-        self.assertEqual(identity["groups"], [{"group": "开发组", "members": ["测试", "Lin"]}])
+        self.assertEqual(identity["groups"], [{"group": "开发组", "members": ["测试", "Lin"],
+                                               "started_by": "测试", "group_path": "/groups/team"}])
         notices = [event.payload for event in await SqliteJournal(self.store.require(colleague.session_id)).snapshot(
             colleague.session_id) if getattr(event.payload, "fact_type", None) == AGENT_RENAMED]
         self.assertEqual(len(notices), 1)

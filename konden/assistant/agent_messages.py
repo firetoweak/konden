@@ -20,6 +20,7 @@ USER_RECIPIENT = "user"
 LIST_COLLEAGUES = "list_colleagues"
 SEND_FILE = "send_file"
 SEND_GROUP_MESSAGE = "send_group_message"
+CREATE_GROUP = "create_group"
 # Starting values to tune against real collaboration. All are deterministic
 # counts; none of them judges what a message says.
 MAX_MESSAGE_HOPS = 10
@@ -41,6 +42,28 @@ class MessageArguments(BaseModel):
     def nonblank(cls, value):
         if value is not None and not value.strip():
             raise ValueError("文字不能为空白")
+        return value
+
+
+class CreateGroupArguments(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    name: str = Field(min_length=1, description="新群的唯一名字，不能带首尾空白。")
+    colleagues: list[str] = Field(min_length=1, max_length=5,
+        description="邀请 1 到 5 位同事，使用 list_colleagues 中的当前名字。你自动入群。")
+    favorite: bool = Field(default=False, description="默认创建临时组。用户要求建常用组时填 true，固定在侧栏。")
+
+    @field_validator("name")
+    @classmethod
+    def stable_name(cls, value):
+        if value != value.strip():
+            raise ValueError("群名不能以空白开头或结尾")
+        return value
+
+    @field_validator("colleagues")
+    @classmethod
+    def distinct_names(cls, value):
+        if any(not name.strip() for name in value) or len(set(value)) != len(value):
+            raise ValueError("同事名字不能为空白或重复")
         return value
 
 
@@ -67,6 +90,15 @@ class GroupMessageArguments(BaseModel):
 
 
 MESSAGE_SCHEMAS = [
+    {"type": "function", "function": {
+        "name": CREATE_GROUP,
+        "description": (
+            "发起讨论组。在用户交办的工作需要协作时，自行选择同事；用户只想讨论方案时继续私聊。"
+            "建组后用 send_group_message 交代本次协作所需的结论、目标和分工，不转发无关私聊。"
+            "有结果时用 send_message 给 user 汇报，在正文中用 Markdown 链接附上返回的 group_path。"
+        ),
+        "parameters": CreateGroupArguments.model_json_schema(),
+    }},
     {"type": "function", "function": {
         "name": LIST_EXTERNAL,
         "description": "查询已登记的外部会话名字、identity、最近消息、接入是否有效和收信提醒状态。接入有效不代表客户端在线；disabled 需主动收信，ready 已启用自动接续，pending 尚未提醒，queued 提醒已入队，failed 提醒失败，unknown 提醒结果未确认。外部会话保留原生工具中的上下文，用 send_external_message 联系。查询本身不构成联系对方的用户授权。",
@@ -156,7 +188,8 @@ MESSAGE_SCHEMAS = [
 ]
 
 
-_ARGUMENTS = {SEND_MESSAGE: MessageArguments, SEND_GROUP_MESSAGE: GroupMessageArguments, SEND_EXTERNAL: SendToExternal}
+_ARGUMENTS = {CREATE_GROUP: CreateGroupArguments, SEND_MESSAGE: MessageArguments,
+              SEND_GROUP_MESSAGE: GroupMessageArguments, SEND_EXTERNAL: SendToExternal}
 
 
 async def _send(operation, transport, session_id, command_id, arguments: Mapping[str, object]):
@@ -238,7 +271,7 @@ def message_bindings(transport, journal, sink=None):
             return delivered
         return {"ok": True, "code": "FILE_SENT", "data": {"attachment": delivered["attachment"]}}
 
-    return {SEND_MESSAGE: sender(SEND_MESSAGE), SEND_GROUP_MESSAGE: sender(SEND_GROUP_MESSAGE),
+    return {CREATE_GROUP: sender(CREATE_GROUP), SEND_MESSAGE: sender(SEND_MESSAGE), SEND_GROUP_MESSAGE: sender(SEND_GROUP_MESSAGE),
             SEND_EXTERNAL: sender(SEND_EXTERNAL), LIST_EXTERNAL: ToolBinding(external_sessions),
             LIST_COLLEAGUES: ToolBinding(colleagues),
             SEND_FILE: ToolBinding(send_file)}

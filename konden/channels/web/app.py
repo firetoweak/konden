@@ -196,6 +196,7 @@ class LinkProjectRequest(ConnectionRequest):
 
 
 class CreateGroupRequest(ConnectionRequest):
+    favorite: bool = False
     name: str = Field(min_length=1)
     members: list[str] = Field(min_length=2, max_length=6)
 
@@ -218,6 +219,10 @@ class GroupMessageRequest(ConnectionRequest):
     delivery_id: str = Field(min_length=1)
     text: str
     mention: list[str] = Field(default_factory=list)
+
+
+class GroupFavoriteRequest(ConnectionRequest):
+    favorite: bool
 
 
 class RoutineStateRequest(ConnectionRequest):
@@ -750,7 +755,12 @@ def create_web_app(
 
     @app.post("/api/groups", status_code=201)
     async def create_group(body: CreateGroupRequest, request: Request):
-        return await _channel(request).create_group(body.connection_id, body.name, body.members)
+        return await _channel(request).create_group(body.connection_id, body.name, body.members, body.favorite)
+
+    @app.put("/api/groups/{group_id}/favorite", status_code=204)
+    async def set_group_favorite(group_id: str, body: GroupFavoriteRequest, request: Request):
+        await _channel(request).set_group_favorite(body.connection_id, group_id, body.favorite)
+        return Response(status_code=204)
 
     @app.delete("/api/groups/{group_id}", status_code=204)
     async def dissolve_group(group_id: str, body: ConnectionRequest, request: Request):

@@ -409,12 +409,12 @@ export const kondenApi = createApi({
     }),
     createGroup: build.mutation<
       GroupView,
-      { connectionId: string; name: string; members: string[] }
+      { connectionId: string; name: string; members: string[]; favorite: boolean }
     >({
-      query: ({ connectionId, name, members }) => ({
+      query: ({ connectionId, name, members, favorite }) => ({
         url: "/groups",
         method: "POST",
-        body: { connection_id: connectionId, name, members },
+        body: { connection_id: connectionId, name, members, favorite },
       }),
       transformResponse: (value: unknown) => groupViewSchema.parse(value),
       transformErrorResponse: (response) => {
@@ -423,6 +423,13 @@ export const kondenApi = createApi({
         }
         return apiErrorDetail(response.data) ?? response;
       },
+      invalidatesTags: ["Groups"],
+    }),
+    setGroupFavorite: build.mutation<void, { connectionId: string; groupId: string; favorite: boolean }>({
+      query: ({ connectionId, groupId, favorite }) => ({
+        url: `/groups/${encodeURIComponent(groupId)}/favorite`, method: "PUT", body: { connection_id: connectionId, favorite },
+      }),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
       invalidatesTags: ["Groups"],
     }),
     postGroupMessage: build.mutation<
@@ -778,6 +785,7 @@ export const {
   useGetGroupsQuery,
   useGetGroupQuery,
   useCreateGroupMutation,
+  useSetGroupFavoriteMutation,
   usePostGroupMessageMutation,
   useGetWorkspacesQuery,
   useGetConversationQuery,

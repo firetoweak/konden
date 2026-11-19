@@ -49,7 +49,7 @@ from konden.assistant.host.agent_groups import AgentGroups
 from konden.assistant.host.external_messages import ExternalMessages
 from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL
 from konden.assistant.agent_messages import (
-    LIST_COLLEAGUES, SEND_FILE, SEND_GROUP_MESSAGE, SEND_MESSAGE, USER_RECIPIENT,
+    CREATE_GROUP, LIST_COLLEAGUES, SEND_FILE, SEND_GROUP_MESSAGE, SEND_MESSAGE, USER_RECIPIENT,
 )
 from konden.assistant.sessions import session_view
 from konden.assistant.subagent.subagent import (
@@ -346,6 +346,8 @@ class HostSupervisor:
             return await self.external_messages.colleagues(session_id)
         if operation == SEND_GROUP_MESSAGE:
             return await self.agent_messages.send_group(session_id, arguments)
+        if operation == CREATE_GROUP:
+            return await self.agent_groups.create_from_bot(session_id, arguments)
         if operation == SEND_FILE:
             attachment = await self._copy_worktree_file(session_id, arguments["path"])
             if attachment.get("ok") is False:
@@ -799,7 +801,7 @@ class HostSupervisor:
                 raise ValueError(f"Unknown Host signal: {kind}")
 
         async def route(operation, target, arguments):
-            if operation in {SEND_MESSAGE, SEND_GROUP_MESSAGE, LIST_COLLEAGUES} and target != session_id:
+            if operation in {CREATE_GROUP, SEND_MESSAGE, SEND_GROUP_MESSAGE, LIST_COLLEAGUES} and target != session_id:
                 raise ValueError("communication request does not belong to this Worker")
             return await self._route(
                 operation,
