@@ -195,10 +195,25 @@ it("删除 Bot 要确认，失败保留弹窗，成功后离开被删除的会�
   expect(queries.deleteAgent).toHaveBeenLastCalledWith({ connectionId: "connection", sessionId: "ada" });
 });
 
+it("旧临时组可从搜索找回，常用组和近期讨论一直可见", () => {
+  browserStubs();
+  const old = { members: ["Ada", "Lin"], last_activity: "2020-01-01T00:00:00Z", favorite: false };
+  queries.groups = [{ ...old, group_id: "old", name: "旧实验" }, { ...old, group_id: "regular", name: "评审", favorite: true },
+    { ...old, group_id: "recent", name: "新实验", last_activity: new Date().toISOString() }];
+  renderSidebar("/");
+  expect(screen.queryByRole("button", { name: "群聊 旧实验" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "群聊 评审" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "群聊 新实验" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "搜索对话" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "搜索对话" }), { target: { value: "旧实验" } });
+  fireEvent.click(screen.getByRole("button", { name: "群聊 旧实验" }));
+  expect(screen.getByTestId("current-path")).toHaveTextContent("/groups/old");
+});
+
 it("解散其他群聊不离开当前 Bot 会话", async () => {
   browserStubs();
   queries.agents = [agent({ session_id: "ada", name: "Ada" })];
-  queries.groups = [{ group_id: "team", name: "开发群", members: ["Ada", "Lin"] }];
+  queries.groups = [{ favorite: true, last_activity: "2026-10-23T00:00:00Z", group_id: "team", name: "开发群", members: ["Ada", "Lin"] }];
   queries.dissolveGroup.mockClear();
   renderSidebar("/sessions/ada");
   fireEvent.click(screen.getByRole("button", { name: "群聊 开发群 操作" }));
@@ -215,7 +230,7 @@ it("Bot 和群聊可混放分组，折叠与归属刷新保留，删除分组不
   vi.stubGlobal("crypto", { getRandomValues: crypto.getRandomValues.bind(crypto) });
   queries.workspaces = [workspace("organize", "项目")];
   queries.agents = [agent({ session_id: "ada", name: "Ada", workspace_id: "organize" })];
-  queries.groups = [{ group_id: "chat", name: "开发群", members: ["Ada", "Lin"] }];
+  queries.groups = [{ favorite: true, last_activity: "2026-10-23T00:00:00Z", group_id: "chat", name: "开发群", members: ["Ada", "Lin"] }];
   renderSidebar("/sessions/ada");
   fireEvent.contextMenu(screen.getByRole("button", { name: "Ada", exact: true }));
   fireEvent.click(await screen.findByRole("menuitem", { name: "新建分组", exact: true }));
@@ -370,7 +385,7 @@ it("群聊直接列在名册中，点击进入群聊", () => {
     agent({ session_id: "l", name: "Lin" }),
     agent({ session_id: "x", name: "外人", workspace_id: "other" }),
   ];
-  queries.groups = [{ group_id: "group-1", name: "开发组", members: ["Ada", "Lin"] }];
+  queries.groups = [{ favorite: true, last_activity: "2026-10-23T00:00:00Z", group_id: "group-1", name: "开发组", members: ["Ada", "Lin"] }];
   renderSidebar("/");
 
   fireEvent.click(screen.getByLabelText("群聊 开发组"));
@@ -392,7 +407,7 @@ it("侧栏自动放行提交全局设置，返回首页仍显示开关", async (
 it("头像栏展开折叠分组中的图标，搜索与右键可用，恢复宽度后保留分组偏好", async () => {
   browserStubs();
   queries.agents = [agent({ session_id: "ada", name: "Ada" }), agent({ session_id: "lin", name: "Lin" })];
-  queries.groups = [{ group_id: "team", name: "开发群", members: ["Ada", "Lin"] }];
+  queries.groups = [{ favorite: true, last_activity: "2026-10-23T00:00:00Z", group_id: "team", name: "开发群", members: ["Ada", "Lin"] }];
   queries.externalSessions = [{ identity: "1".repeat(32), name: "外部验证", active: true, codex_status: "disabled",
     created_at: "2026-10-25T01:00:00Z", last_activity_at: "2026-10-25T01:00:00Z", peers: [] }];
   window.localStorage.setItem("konden.sidebarGroups", JSON.stringify({

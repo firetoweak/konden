@@ -169,7 +169,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | `read_shared_memory` `update_shared_memory`、`read_personal_memory` `update_personal_memory` | `konden/assistant/shared_memory.py`、`personal_memory.py` | colleague-tools |
 | `send_message` | `konden/assistant/agent_messages.py` | private-messages |
 | 全局设置「Codex 接入」、侧栏「外部会话」；MCP 身份与消息；Bot 外部查询和发送 | `features/settings/ExternalAccess.tsx`、`features/external/`、`konden/channels/mcp/`、`assistant/host/external_messages.py` | external-conversations |
-| `send_group_message` | `konden/assistant/agent_messages.py` | group-chat |
+| `create_group`、`send_group_message` | `konden/assistant/agent_messages.py` | group-chat |
 | `link_project` `unlink_project` | `konden/assistant/agent_tools.py` | workspace-management |
 | `land_branch` `sync_branch` | `konden/assistant/agent_tools.py` | land-and-sync |
 | `send_file`，以及长期 Agent 的普通回复直接给人看 | `konden/assistant/agent_messages.py`、`konden/assistant/conversations.py` | reply-delivery |

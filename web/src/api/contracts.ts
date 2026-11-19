@@ -196,6 +196,8 @@ export type Workspace = z.infer<typeof workspaceSchema>;
 export const groupSummarySchema = z
   .object({
     group_id: z.string().min(1),
+    favorite: z.boolean(),
+    last_activity: z.string().datetime({ offset: true }),
     name: z.string().min(1),
     members: z.array(z.string().min(1)),
   })
