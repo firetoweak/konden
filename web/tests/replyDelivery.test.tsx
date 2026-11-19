@@ -93,10 +93,8 @@ it("同事私信留在原线程，显式发给用户的消息可见并计入未�
   expect(screen.queryByRole("link", { name: "打开 Lin 的对话" })).not.toBeInTheDocument();
   expect(screen.queryByText("请检查文件")).not.toBeInTheDocument();
   expect(screen.queryByText("文件没问题", { exact: true })).not.toBeInTheDocument();
-  expect(screen.getByRole("img", { name: "消息来自" })).toBeVisible();
-  expect(screen.getByRole("img", { name: "已发消息给" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "已发消息给 Lin，查看私聊" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "消息来自 Lin，查看私聊" }));
+  expect(screen.queryByRole("img", { name: /消息来自|已发消息给/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "查看与 Lin 的私聊" }));
   expect(screen.getByRole("dialog", { name: "与 Lin 的私聊" })).toBeVisible();
   expect(screen.queryByRole("heading", { name: "与 Lin 的私聊" })).not.toBeInTheDocument();
   expect(screen.queryByText("2 条消息")).not.toBeInTheDocument();
@@ -116,6 +114,8 @@ it("同事私信留在原线程，显式发给用户的消息可见并计入未�
   expect(screen.getAllByRole("article", { name: /的私信$/ })).toHaveLength(3);
   expect(screen.getAllByRole("dialog", { name: "与 Lin 的私聊" })).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "关闭私聊" }));
+  expect(screen.getByRole("button", { name: "消息来自 Lin，查看私聊" })).toBeVisible();
+  expect(screen.getByRole("img", { name: "消息来自" })).toBeVisible();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByText("请检查文件")).not.toBeInTheDocument();
   expect(screen.queryByText("文件没问题", { exact: true })).not.toBeInTheDocument();
