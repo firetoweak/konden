@@ -170,3 +170,51 @@ it("recovers a model failure from the conversation after refresh and retries wit
   cleanup();
   store.dispatch(kondenApi.util.resetApiState());
 });
+
+it("关闭操作结果只影响当前提示，同文案的新结果仍可关闭", async () => {
+  prepareBrowser();
+  const message = "Skill 已安装并启用。";
+  const view: ConversationView = {
+    session_id: "session", workspace_id: "workspace", revision: 1,
+    compact_count: 0, compact_phase: null, waiting_until: null, work_plan: null, work_plan_updates: [], context_input_tokens: null,
+    deleted: false, agent_name: null,
+    session: {
+      status: "waiting", waiting_for: ["external_fact"], pending_authorization_ids: [], pending_authorization_commands: [],
+      should_wake: false, has_open_subagents: false, control_approval: null, control_message: message,
+      auto_authorize: false, last_error: null,
+    },
+    items: [{ kind: "user", message_id: "user", text: "安装 Skill", occurred_at: "2026-10-12T00:00:00Z", images: [], files: [] }],
+  };
+  const fetch = vi.fn(async () => Response.json(view));
+  vi.stubGlobal("fetch", fetch);
+  const store = configureStore({
+    reducer: { runtime: runtimeReducer, [kondenApi.reducerPath]: kondenApi.reducer },
+    middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(kondenApi.middleware),
+  });
+  store.dispatch(connected("connection"));
+  render(<Provider store={store}><MantineProvider>
+    <MemoryRouter initialEntries={["/sessions/session"]}>
+      <Routes><Route path="/sessions/:sessionId" element={<Conversation />} /></Routes>
+    </MemoryRouter>
+  </MantineProvider></Provider>);
+  const close = await screen.findByRole("button", { name: "关闭操作结果" });
+  await waitFor(() => expect(store.getState().runtime.ownerSessionId).toBe("session"));
+  fetch.mockClear();
+  fireEvent.click(close);
+  expect(screen.queryByText(message)).not.toBeInTheDocument();
+  expect(fetch).not.toHaveBeenCalled();
+  act(() => {
+    store.dispatch(kondenApi.util.updateQueryData("getConversation", "session", (draft) => { draft.revision += 1; }));
+  });
+  expect(screen.queryByText(message)).not.toBeInTheDocument();
+  act(() => {
+    store.dispatch(kondenApi.util.updateQueryData("getConversation", "session", (draft) => {
+      draft.session.control_message = null;
+      draft.session.control_approval = { request_id: "next", summary: "再次安装", risk: "需要确认" };
+    }));
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "确认" }));
+  expect(await screen.findByRole("button", { name: "关闭操作结果" })).toBeVisible();
+  cleanup();
+  store.dispatch(kondenApi.util.resetApiState());
+});

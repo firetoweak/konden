@@ -160,6 +160,11 @@ export function Conversation({ agentName, agentNames = [], ref }: {
   }, [connectionId, ownerSessionId, routeSessionId, selectSession, sessionId]);
 
   const conversation = selected.currentData;
+  const notice = runtime?.controlNotice ?? conversation?.session.control_message ?? null;
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  useEffect(() => {
+    setNoticeDismissed(false);
+  }, [notice]);
   if (
     conversation === undefined &&
     (selected.isLoading || selected.isUninitialized || selected.isFetching)
@@ -229,8 +234,6 @@ export function Conversation({ agentName, agentNames = [], ref }: {
     runtime?.conversationStatus?.compactPhase ?? conversation.compact_phase;
   const lastTurnKey = turns.at(-1)?.key;
   const awaitingControl = conversation.session.control_approval !== null;
-  const notice =
-    runtime?.controlNotice ?? conversation.session.control_message;
   const subagentsOpen = conversation.session.has_open_subagents;
   const activePlan = conversation.work_plan !== null && !isPlanCompleted(conversation.work_plan)
     ? conversation.work_plan : null;
@@ -269,6 +272,7 @@ export function Conversation({ agentName, agentNames = [], ref }: {
       return;
     }
     await resolveControl({ connectionId, sessionId, requestId, approved }).unwrap();
+    setNoticeDismissed(false);
   }
 
   return (
@@ -383,8 +387,8 @@ export function Conversation({ agentName, agentNames = [], ref }: {
                 {turn.communications.map((communication) => <PrivateMessageNotice key={communication.key}
                   communication={communication} agentName={conversation.agent_name ?? agentName ?? "konden"} />)}
                 {body}
-                {latest && notice !== null ? (
-                  <ControlNotice message={notice} />
+                {latest && notice !== null && !noticeDismissed ? (
+                  <ControlNotice message={notice} onClose={() => setNoticeDismissed(true)} />
                 ) : null}
                 {turnNeedsSubagentHint(
                   turn.key === lastTurnKey,
@@ -571,13 +575,16 @@ function SilentEndHint() {
   );
 }
 
-function ControlNotice({ message }: { message: string }) {
+function ControlNotice({ message, onClose }: { message: string; onClose: () => void }) {
   return (
     <Alert
       className="control-notice"
       color="ember"
       icon={<IconCheck size={16} />}
       title="操作结果"
+      withCloseButton
+      closeButtonLabel="关闭操作结果"
+      onClose={onClose}
       variant="light"
     >
       <Text className="pre-wrap" size="sm">

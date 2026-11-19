@@ -72,6 +72,7 @@
   - (b) 再次请求后点 `确认` → `skills/` 出现该 skill，`list_installed_skills` 含它；`test_installed_skill` 通过。
   - (c) 取消那次不留下半成品目录。
   - (d) 给相对路径 → 工具校验失败 `local locator 必须是本机绝对目录`，不弹确认；`local` 来源附带 ref → `requested_ref 仅适用于 github 来源`。
+  - 安装完成后，在输入框留下草稿，点击「操作结果」右上角的「关闭操作结果」。结果条收起，草稿和会话版本保持原值。
 - **登记 CLI**：让助手登记本机的 `git`。
   - (a) 确认后 `clis/` 出现登记，`list_installed_clis` 含它，`inspect_cli` 返回解析路径与体检。
   - (b) 待处理条中该项摘要含 `准备登记 CLI`、`解析路径：`、`体检：`。
