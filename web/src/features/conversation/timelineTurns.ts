@@ -3,6 +3,7 @@ import type { VisibleItem, VisiblePrivateMessage, VisibleStep, VisibleUser } fro
 export type TimelineCommunication = {
   key: string;
   message: VisiblePrivateMessage;
+  bidirectional: boolean;
   messages: VisiblePrivateMessage[];
 };
 
@@ -16,7 +17,12 @@ export type TimelineTurn = {
 };
 
 export function timelineTurns(items: VisibleItem[]): TimelineTurn[] {
-  const turns: Array<{ key: string; user: VisibleUser | null; steps: VisibleStep[]; communications: VisiblePrivateMessage[] }> = [];
+  const turns: Array<{
+    key: string;
+    user: VisibleUser | null;
+    steps: VisibleStep[];
+    communications: Pick<TimelineCommunication, "message" | "bidirectional">[];
+  }> = [];
   const privateThreads = new Map<string, VisiblePrivateMessage[]>();
   let current: (typeof turns)[number] | null = null;
 
@@ -32,7 +38,12 @@ export function timelineTurns(items: VisibleItem[]): TimelineTurn[] {
       turns.push(current);
     }
     if (item.kind === "private_message") {
-      current.communications.push(item);
+      const last = current.communications.at(-1);
+      if (last && item.threadId !== null && item.threadId === last.message.threadId) {
+        if (item.direction !== last.message.direction) last.bidirectional = true;
+      } else {
+        current.communications.push({ message: item, bidirectional: false });
+      }
       if (item.threadId !== null) {
         const thread = privateThreads.get(item.threadId) ?? [];
         thread.push(item);
@@ -53,9 +64,10 @@ export function timelineTurns(items: VisibleItem[]): TimelineTurn[] {
     return {
       key,
       user,
-      communications: communications.map((message) => ({
+      communications: communications.map(({ message, bidirectional }) => ({
         key: message.key,
         message,
+        bidirectional,
         messages: message.threadId === null ? [message] : privateThreads.get(message.threadId)!,
       })),
       process: active === null && final === null ? steps : steps.slice(0, -1),
