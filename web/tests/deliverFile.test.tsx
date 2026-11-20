@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -55,8 +55,16 @@ it("带附件的消息单独成气泡，子 Agent 执行步骤里也能下载", 
   expect(screen.queryByRole("button", { name: "evidence.txt", hidden: true })).not.toBeInTheDocument();
 });
 
-it("图片只显示画面，文件名和大小不固定占位，点开放大后可下载原图", () => {
+it("图片只显示画面，点开可缩放、适应窗口和下载原图", async () => {
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private readonly onResize: ResizeObserverCallback) {}
+    observe() {
+      this.onResize([{ contentRect: { width: 600, height: 400 } } as ResizeObserverEntry], this);
+    }
+    disconnect() {}
+    unobserve() {}
+  });
   const href = `/api/sessions/ada/attachments/${encodeURIComponent(file.attachment_id)}`;
   render(<MantineProvider env="test">
     <FileAttachmentTile name="e2e-03-stopped.PNG" size={83000} href={href} />
@@ -67,10 +75,20 @@ it("图片只显示画面，文件名和大小不固定占位，点开放大后�
   expect(screen.queryByText("e2e-03-stopped.PNG")).not.toBeInTheDocument();
   expect(screen.queryByText(/KB/)).not.toBeInTheDocument();
   fireEvent.click(preview);
-  expect(within(screen.getByRole("dialog", { name: "e2e-03-stopped.PNG" }))
-    .getByRole("img", { name: "e2e-03-stopped.PNG" })).toHaveAttribute("src", href);
-  expect(within(screen.getByRole("dialog", { name:/e2e-03-stopped.PNG/ }))
-    .getByRole("link", {name:"下载原图"})).toHaveAttribute("href", href);
+  const dialog = within(screen.getByRole("dialog", { name: "e2e-03-stopped.PNG" }));
+  const image = dialog.getByRole("img", { name: "e2e-03-stopped.PNG" });
+  expect(image).toHaveAttribute("src", href);
+  expect(dialog.getByRole("link", { name: "下载原图" })).toHaveAttribute("href", href);
+
+  Object.defineProperties(image, { naturalWidth: { value: 1000 }, naturalHeight: { value: 800 } });
+  fireEvent.load(image);
+  const zoomIn = dialog.getByRole("button", { name: "放大" });
+  await waitFor(() => expect(zoomIn).toBeEnabled());
+  expect(image).toHaveStyle({ width: "500px", height: "400px" });
+  fireEvent.click(zoomIn);
+  expect(image).toHaveStyle({ width: "625px", height: "500px" });
+  fireEvent.click(dialog.getByRole("button", { name: "适应窗口" }));
+  expect(image).toHaveStyle({ width: "500px", height: "400px" });
 });
 
 it("无说明的图片交付仍是完整消息，接口和时间线不会丢失附件", () => {
