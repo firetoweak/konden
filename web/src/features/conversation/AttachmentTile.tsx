@@ -1,14 +1,12 @@
 import {
   ActionIcon,
-  Anchor,
-  Group,
   Image,
   Loader,
-  Modal,
   UnstyledButton,
 } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import { useState } from "react";
+import { ImagePreview } from "./ImagePreview";
 
 type AttachmentTileProps = {
   src: string;
@@ -73,20 +71,13 @@ export function AttachmentTile({
           </ActionIcon>
         )}
       </span>
-      <Modal
-        centered
+      <ImagePreview
+        downloadHref={downloadHref}
+        name={name}
         onClose={() => setOpened(false)}
         opened={opened}
-        size="auto"
-        title={name}
-        withCloseButton
-        closeButtonProps={{"aria-label":"关闭图片预览"}}
-      >
-        {downloadHref === undefined ? null : <Group justify="flex-end" mb="xs">
-          <Anchor href={downloadHref} download={name} size="sm">下载原图</Anchor>
-        </Group>}
-        <Image alt={name} mah="80vh" maw="80vw" src={src} />
-      </Modal>
+        src={src}
+      />
     </>
   );
 }
