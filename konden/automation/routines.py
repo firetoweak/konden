@@ -9,20 +9,19 @@ it, so recovery may replay a request without applying it twice.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
+from contextlib import closing, suppress
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 import json
+from pathlib import Path
 import re
 import sqlite3
-from contextlib import closing
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from itertools import pairwise
-from pathlib import Path
-from typing import Awaitable, Callable
 
 from croniter import croniter
 
 from konden.automation.once import ScheduleDeliveryUnavailable
-
 
 ROUTINE_DUE = "automation.routine_due"
 MIN_INTERVAL = timedelta(minutes=5)
@@ -89,7 +88,7 @@ def next_run(schedule: str, after: datetime) -> datetime:
     if every is not None:
         return after + timedelta(**{_UNITS[every.group(2)]: int(every.group(1))})
     local = croniter(schedule, after.astimezone()).get_next(datetime)
-    return local.astimezone(timezone.utc)
+    return local.astimezone(UTC)
 
 
 def validate_schedule(schedule: str) -> None:
@@ -206,7 +205,7 @@ class RoutineStore:
             if not intent.strip() or len(intent) > MAX_INTENT_CHARS:
                 raise RoutineError("INVALID_INTENT", f"intent 需要 1 到 {MAX_INTENT_CHARS} 个字符。")
             validate_schedule(schedule)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if routine_id is None:
                 connection.execute(
                     "INSERT INTO routines VALUES (?, ?, ?, ?, ?, ?, 1, ?, NULL)",
@@ -257,7 +256,7 @@ class RoutineStore:
 
     @staticmethod
     def _write_state(connection, row, state) -> None:
-        next_due = (next_run(row["schedule"], datetime.now(timezone.utc)).isoformat()
+        next_due = (next_run(row["schedule"], datetime.now(UTC)).isoformat()
                     if state == ACTIVE else None)
         connection.execute(
             "UPDATE routines SET state = ?, next_due = ? WHERE routine_id = ?",
@@ -327,7 +326,7 @@ class RoutineStore:
 
     def fire(self, routine: Routine) -> RoutineFire | None:
         """Record the fire and advance the schedule together; a changed routine is not fired."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with closing(self._connect()) as connection:
             with connection:
                 connection.execute("BEGIN IMMEDIATE")
@@ -361,7 +360,7 @@ class RoutineStore:
             with connection:
                 connection.execute(
                     "UPDATE routine_fires SET delivered_at = ? WHERE fire_id = ? AND delivered_at IS NULL",
-                    (datetime.now(timezone.utc).isoformat(), fire_id),
+                    (datetime.now(UTC).isoformat(), fire_id),
                 )
 
     def presence(self) -> tuple[datetime | None, int]:
@@ -438,7 +437,7 @@ class RoutineStore:
                         (PAUSED_UNWATCHED, row["routine_id"]),
                     )
                 ids = [row["routine_id"] for row in active]
-                asked_at = current["asked_at"] if current is not None else datetime.now(timezone.utc).isoformat()
+                asked_at = current["asked_at"] if current is not None else datetime.now(UTC).isoformat()
                 connection.execute(
                     """
                     INSERT INTO absence_watch (session_id, phase, asked_at, paused_ids, fact_recorded)
@@ -515,12 +514,10 @@ class RoutineClock:
                 if routine is None:
                     await self.changed.wait()
                     continue
-                seconds = (routine.next_due - datetime.now(timezone.utc)).total_seconds()
+                seconds = (routine.next_due - datetime.now(UTC)).total_seconds()
                 if seconds > 0:
-                    try:
+                    with suppress(TimeoutError):
                         await asyncio.wait_for(self.changed.wait(), timeout=seconds)
-                    except TimeoutError:
-                        pass
                     continue
                 fire = self.store.fire(routine)
                 if fire is None:
@@ -539,7 +536,7 @@ def _utc(value: str | None) -> datetime | None:
     if value is None:
         return None
     parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is not timezone.utc:
+    if parsed.tzinfo is not UTC:
         raise ValueError("routine times must use UTC")
     return parsed
 

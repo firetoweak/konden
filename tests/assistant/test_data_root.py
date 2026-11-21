@@ -10,7 +10,6 @@ import pytest
 from konden.assistant.host.data_root import DataRootInUse, hold_data_root
 from konden.paths import KondenHome
 
-
 pytestmark = pytest.mark.process
 
 _HOLDER = """
@@ -40,7 +39,7 @@ def test_second_host_is_refused_until_the_holder_dies(tmp_path):
         # venv 的 python.exe 只是启动器。kill() 停掉它之后，真正持锁的子进程还在。
         if os.name == "nt":
             subprocess.run(
-                [str(Path(os.environ["SystemRoot"]) / "System32/taskkill.exe"),
+                [str(Path(os.environ["SYSTEMROOT"]) / "System32/taskkill.exe"),
                  "/PID", str(holder.pid), "/T", "/F"],
                 capture_output=True,
             )

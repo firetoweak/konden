@@ -1,13 +1,14 @@
 """Host shutdown must stop command writers and must not repeat unknown work."""
 import asyncio
+import contextlib
 import json
 import os
+from pathlib import Path
 import shlex
 import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
 
@@ -110,8 +111,8 @@ def test_host_exit_stops_writers_and_two_restarts_do_not_repeat_command(tmp_path
                 stop(host, "close")
             if background:
                 from konden.assistant.host.session_store import SessionStore
-                from konden.runtime import DomainFactCommitted, SqliteJournal
                 from konden.paths import KondenHome
+                from konden.runtime import DomainFactCommitted, SqliteJournal
                 store = SessionStore(KondenHome(tmp_path / "home").runtime_sessions_root)
                 events = asyncio.run(SqliteJournal(store.require("session")).snapshot("session"))
                 facts = [event for event in events if isinstance(event.payload, DomainFactCommitted)
@@ -128,7 +129,5 @@ def test_host_exit_stops_writers_and_two_restarts_do_not_repeat_command(tmp_path
                 if marker.exists():
                     pid = int(marker.read_text())
                     if not gone(pid):
-                        try:
+                        with contextlib.suppress(ProcessLookupError):
                             os.kill(pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            pass

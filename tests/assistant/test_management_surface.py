@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 
 from pydantic import BaseModel, ConfigDict
 
 from konden.assistant.artifacts import FileArtifactGateway
+from konden.assistant.context.projection import ModelContextSettings
 from konden.assistant.delivery import DELIVER_TOOL_NAME, deliver_binding
 from konden.assistant.management import (
     LOAD_MANAGEMENT_TOOLS,
@@ -14,13 +15,12 @@ from konden.assistant.management import (
     ManagementSurface,
     ResidentTool,
 )
-from konden.assistant.context.projection import ModelContextSettings
-from tests.session_scheduler import settle_session
 from konden.runtime import AgentRuntime, InvokeTool, ModelDecision
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.state import DecisionFrame
 from konden.tools.control import ControlApprovalExecution, ControlOperation
 from konden.tools.spec import PydanticParameters, ToolSpec
+from tests.fixtures.memory_journal import MemoryJournal
+from tests.session_scheduler import settle_session
 
 
 class EmptyInput(BaseModel):

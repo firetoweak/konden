@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from konden.runtime import DomainFactCommitted, Event
+from pathlib import Path
+
 from konden.filesystem.registry import WorkspaceRecord, WorkspaceRegistry
 from konden.filesystem.workspace import FileWorkspace
-from pathlib import Path
+from konden.runtime import DomainFactCommitted, Event
 
 SESSION_WORKSPACE_FACT = "session.workspace"
 SESSION_DIRECTORY_FACT = "session.directory"

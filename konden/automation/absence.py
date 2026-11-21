@@ -13,8 +13,12 @@ from datetime import datetime, timedelta
 from konden.assistant.agent_messages import SEND_FILE
 from konden.assistant.delivery import DELIVER_TOOL_NAME
 from konden.automation.routines import ROUTINE_DUE, AbsenceWatch
-from konden.runtime import CommandOutcomeReceived, DomainFactCommitted, OutcomeStatus, replay
-
+from konden.runtime import (
+    CommandOutcomeReceived,
+    DomainFactCommitted,
+    OutcomeStatus,
+    replay,
+)
 
 # Starting values, tuned the same way as hop and origin limits.
 AWAY_BEFORE_ASK = timedelta(hours=12)
@@ -70,6 +74,6 @@ def counts_since(session_id: str, events, since: datetime | None) -> tuple[int, 
               and payload.outcome.status is OutcomeStatus.SUCCEEDED):
             value = payload.outcome.value
             if (deliveries[payload.command_id] == DELIVER_TOOL_NAME
-                    or isinstance(value, Mapping) and value.get("code") == "FILE_SENT"):
+                    or (isinstance(value, Mapping) and value.get("code") == "FILE_SENT")):
                 reports += 1
     return reports, triggers

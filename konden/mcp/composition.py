@@ -3,13 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from konden.paths import KondenHome
 from konden.mcp.application import McpApplicationService
-from konden.mcp.bundled import create_bundled_servers
-from konden.mcp.client_manager import McpClientManager
-from konden.mcp.content import McpContentService
-from konden.mcp.registry import McpRegistry
-from konden.mcp.secrets import McpSecretStore
 from konden.mcp.approval import (
     McpInstallApprovalHandler,
     McpRecoveryApprovalHandler,
@@ -20,7 +14,13 @@ from konden.mcp.approval import (
     create_mcp_remove_proposal_spec,
     create_mcp_update_proposal_spec,
 )
+from konden.mcp.bundled import create_bundled_servers
+from konden.mcp.client_manager import McpClientManager
+from konden.mcp.content import McpContentService
 from konden.mcp.management_tools import create_mcp_management_specs
+from konden.mcp.registry import McpRegistry
+from konden.mcp.secrets import McpSecretStore
+from konden.paths import KondenHome
 from konden.tools.control import ControlOperation
 from konden.tools.spec import ToolSpec
 

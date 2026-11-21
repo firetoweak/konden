@@ -71,7 +71,7 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except subprocess.CalledProcessError as error:
         print(f"准备未完成（命令退出码 {error.returncode}）。请处理上方错误后重新执行。", file=sys.stderr)
-        raise SystemExit(error.returncode)
+        raise SystemExit(error.returncode) from None
     except (ValueError, OSError, tarfile.TarError, zipfile.BadZipFile) as error:
         print(f"准备未完成：{error}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None

@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+import json
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from konden.runtime import (
-    CommandOutcomeReceived, Event, OutcomeStatus, StepCommitted, ToolBinding,
+    CommandOutcomeReceived,
+    Event,
+    OutcomeStatus,
+    StepCommitted,
+    ToolBinding,
 )
 from konden.runtime.json_values import thaw_value
 from konden.tools.executor import ToolsExecutor
 from konden.tools.registry import ToolRegistry
 from konden.tools.spec import pydantic_tool_spec
-
 
 UPDATE_PLAN = "update_plan"
 WORK_PLAN_CONTEXT = "work_plan_context"

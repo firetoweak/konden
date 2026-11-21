@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 import tempfile
-from dataclasses import replace
 
+from konden.skills.errors import (
+    SkillCandidateNotFoundError,
+    SkillInputError,
+    SkillPreconditionError,
+)
 from konden.skills.models import (
     SkillBundle,
     SkillManifestDiff,
@@ -15,11 +19,6 @@ from konden.skills.models import (
     SkillUpdateCandidate,
 )
 from konden.skills.package import LocalSkillPackageReader, write_skill_bundle
-from konden.skills.errors import (
-    SkillCandidateNotFoundError,
-    SkillInputError,
-    SkillPreconditionError,
-)
 
 
 def manifest_diff(
@@ -117,7 +116,7 @@ class SkillCandidateStore:
                 + "\n",
                 encoding="utf-8",
             )
-            os.replace(temporary, destination)
+            temporary.replace(destination)
         finally:
             if temporary.exists():
                 shutil.rmtree(temporary)

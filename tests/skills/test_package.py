@@ -1,7 +1,6 @@
-import os
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 from konden.skills.models import SkillPackageLimits
 from konden.skills.package import (
@@ -63,7 +62,7 @@ class LocalSkillPackageReaderTest(unittest.TestCase):
                 with self.subTest(description=description):
                     content = (
                         f"---\nname: demo\ndescription: {description}\n---\nbody\n"
-                    ).encode("utf-8")
+                    ).encode()
                     (root / "SKILL.md").write_bytes(content)
 
                     bundle = LocalSkillPackageReader().read(root)
@@ -129,7 +128,7 @@ class LocalSkillPackageReaderTest(unittest.TestCase):
             target.write_text("outside", encoding="utf-8")
             link = root / "references.txt"
             try:
-                os.symlink(target, link)
+                link.symlink_to(target)
             except (OSError, NotImplementedError):
                 self.skipTest("current platform cannot create symlinks")
 

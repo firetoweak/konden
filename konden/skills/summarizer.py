@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
+import json
 from typing import Protocol
 
 from konden.llm.api import LLMApi

@@ -49,7 +49,7 @@ def describe_transport_error(error: httpx.TransportError) -> str:
     elif any(isinstance(item, socket.gaierror) for item in causes):
         summary = "域名解析失败（DNS）。请检查 DNS、网络或代理地址。"
     elif any(isinstance(item, ConnectionRefusedError)
-             or isinstance(item, OSError) and item.errno in (errno.ECONNREFUSED, 10061) for item in causes):
+             or (isinstance(item, OSError) and item.errno in (errno.ECONNREFUSED, 10061)) for item in causes):
         summary = "连接被拒绝。请确认服务或代理已启动，且地址、端口正确。"
     elif any(isinstance(item, OSError) and item.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH) for item in causes):
         summary = "目标网络不可达。请检查网络或代理连接。"

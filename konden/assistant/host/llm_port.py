@@ -22,7 +22,7 @@ class WorkerLlmPort:
     def bind_attachment_reader(self, read) -> None:
         self._read_attachment = read
 
-    async def __aenter__(self) -> "WorkerLlmPort":
+    async def __aenter__(self) -> WorkerLlmPort:
         return self
 
     async def __aexit__(self, exc_type, exc, traceback) -> None:

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 import shutil
 import tempfile
 from typing import Protocol
 
-from konden.skills.models import SkillBundle, SkillRecord
 from konden.skills.errors import SkillAlreadyInstalledError
+from konden.skills.models import SkillBundle, SkillRecord
 from konden.skills.package import (
     LocalSkillPackageReader,
     write_skill_bundle,
@@ -68,7 +67,7 @@ class LocalSkillInstaller:
             try:
                 write_skill_bundle(staging_package, bundle)
                 self.package_reader.read(staging_package)
-                os.replace(staging_package, target)
+                staging_package.replace(target)
                 record = SkillRecord(
                     name=bundle.name,
                     description=bundle.description,
@@ -86,7 +85,7 @@ class LocalSkillInstaller:
                         raise BaseExceptionGroup(
                             "Skill Registry 写入失败且安装目录清理失败",
                             [registry_error, cleanup_error],
-                        )
+                        ) from cleanup_error
                     raise
             finally:
                 if staging_parent.exists():

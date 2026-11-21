@@ -11,8 +11,8 @@ from konden.assistant.host.supervisor import HostSupervisor
 from konden.filesystem.registry import WorkspaceRegistry
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
 from konden.paths import KondenHome
-from tests.fixtures.session_worker import config_for
 from tests.execution.test_host_process_process import shell, until
+from tests.fixtures.session_worker import config_for
 
 pytestmark = [pytest.mark.process, pytest.mark.skipif(sys.platform not in {"win32", "linux", "darwin"}, reason="Host ownership")]
 

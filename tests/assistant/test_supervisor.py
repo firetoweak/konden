@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import sys
+from datetime import UTC
 from functools import partial
+import json
 from pathlib import Path
+import sys
 import tempfile
+from typing import ClassVar
 import unittest
 
 import pytest
@@ -23,12 +25,12 @@ from konden.runtime import SqliteJournal
 from tests.fixtures.session_worker import (
     CancellableProcessLlm,
     ProcessLlm,
-    is_subagent_request,
     cancellable_config,
     config_for,
-    interrupted_read_config,
-    failing_startup_config,
     failing_request_config,
+    failing_startup_config,
+    interrupted_read_config,
+    is_subagent_request,
 )
 
 pytestmark = pytest.mark.process
@@ -52,7 +54,11 @@ async def until(predicate, timeout=30):
 
 class SupervisorTest(unittest.IsolatedAsyncioTestCase):
     async def test_clarification_deadlines_survive_restart_and_only_wake_unanswered_questions(self):
-        from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, questions_by_id
+        from konden.assistant.clarification import (
+            ANSWER_SOURCE,
+            DEADLINE_REACHED,
+            questions_by_id,
+        )
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
         from konden.runtime import DomainFactCommitted
 
@@ -201,6 +207,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
     async def test_web_can_reject_journal_authorization_after_host_restart(self):
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
+
         from konden.assistant.conversations import AssistantQueries
         from konden.channels.web.channel import WebChannel
         from konden.runtime import AgentRuntime, InvokeTool, ModelDecision, ToolBinding
@@ -239,11 +246,12 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.failures.empty())
 
     async def persist_child(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         from konden.runtime.events import (
+            DeliveryIdentity,
             DomainFactCommitted,
             EventDraft,
-            DeliveryIdentity,
         )
 
         await self.store.create(CHILD, workspace_id=self.workspace.workspace_id)
@@ -257,7 +265,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
                     child_task("read")["data"],
                     requests_decision=True,
                 ),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 delivery=DeliveryIdentity(
                     "subagent",
                     f"{MANUAL_CHILD_COMMAND}:task",
@@ -465,8 +473,20 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_model_failure_survives_query_and_selection_then_retries_without_repeating_tool(self):
         from konden.assistant.conversations import AssistantQueries
-        from konden.llm.api import LLMAuthenticationError, LLMTransientError, LLMProviderError, LLMCallResult, LLMResponse, LLMUsage, ToolCall
-        from konden.runtime.events import UserMessageReceived, CommandOutcomeReceived, StepCommitted
+        from konden.llm.api import (
+            LLMAuthenticationError,
+            LLMCallResult,
+            LLMProviderError,
+            LLMResponse,
+            LLMTransientError,
+            LLMUsage,
+            ToolCall,
+        )
+        from konden.runtime.events import (
+            CommandOutcomeReceived,
+            StepCommitted,
+            UserMessageReceived,
+        )
 
         (self.root / "input.txt").write_text("evidence", encoding="utf-8")
         for index, error in enumerate((LLMAuthenticationError("401"), LLMTransientError("429 exhausted"),
@@ -745,7 +765,10 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_parent_instruction_redirects_child_once_even_after_parent_crash(self):
         from konden.assistant.subagent.subagent import (
-            INSTRUCT, INSTRUCTION_FACT, project_pending, project_returned,
+            INSTRUCT,
+            INSTRUCTION_FACT,
+            project_pending,
+            project_returned,
         )
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
         from konden.runtime import DomainFactCommitted, UserMessageReceived
@@ -757,7 +780,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         class InstructionLlm(ProcessLlm):
             target = None
             phase = "redirect"
-            sent = set()
+            sent: ClassVar[set] = set()
             new_calls = 0
             child_messages = None
 
@@ -857,8 +880,11 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_parent_can_ask_twice_and_child_reply_recovery_does_not_finish_task(self):
         from konden.assistant.subagent.subagent import (
-            REPLY_FACT, CLOSED_FACT, RETURN_FACT,
-            project_pending, project_returned,
+            CLOSED_FACT,
+            REPLY_FACT,
+            RETURN_FACT,
+            project_pending,
+            project_returned,
         )
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
         from konden.runtime import DomainFactCommitted, UserMessageReceived, replay
@@ -868,8 +894,8 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         class InteractiveLlm(ProcessLlm):
             target = None
             phase = "ONE"
-            asked = set()
-            replied = set()
+            asked: ClassVar[set] = set()
+            replied: ClassVar[set] = set()
 
             async def chat(client, messages, model, **kwargs):
                 text = json.dumps(messages)
@@ -982,7 +1008,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         await until(lambda: "one" not in self.host.workers)
 
     async def test_failed_selection_keeps_previous_owner_mapping(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from konden.assistant.host.ipc import WorkerFailed
         from konden.runtime import UserMessageReceived
@@ -996,7 +1022,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
                 event_id="broken-input",
                 session_id="broken",
                 payload=UserMessageReceived("start"),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 delivery=DeliveryIdentity("test", "broken-input"),
             )
         )
@@ -1094,8 +1120,8 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(after[:len(before)], before)
         self.assertIn(started, {e.event_id for e in after})
         self.assertFalse((self.root / "read-retried").exists())
-        from konden.runtime import CommandPhase, DomainFactCommitted, StateProjector
         from konden.assistant.subagent.subagent import CLOSED_FACT, RETURN_FACT
+        from konden.runtime import CommandPhase, DomainFactCommitted, StateProjector
         state = StateProjector().project(CHILD, after).state
         self.assertEqual(state.commands[0].phase, CommandPhase.UNKNOWN)
         self.assertEqual(sum(
@@ -1119,8 +1145,8 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.failures.empty())
 
     async def test_child_unexpected_crash_is_reported_then_still_exposed(self):
-        from konden.runtime import DomainFactCommitted
         from konden.assistant.subagent.subagent import CLOSED_FACT
+        from konden.runtime import DomainFactCommitted
 
         await self.host.create("parent", self.workspace.workspace_id)
         await self.host._route(
@@ -1143,8 +1169,8 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Traceback", report.data["failure"])
 
     async def test_parent_reclaim_stops_child_and_does_not_resume_it(self):
-        from konden.runtime import DomainFactCommitted
         from konden.assistant.subagent.subagent import CLOSED_FACT, RETURN_FACT
+        from konden.runtime import DomainFactCommitted
 
         await self.host.create("parent", self.workspace.workspace_id)
         await self.host._route(

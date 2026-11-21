@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-import re
-import unittest
+from datetime import UTC
 from pathlib import Path
+import re
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+import unittest
 from unittest.mock import patch
 
-from tests.fixtures.artifacts import MemoryArtifactGateway
 from konden.assistant.agent_messages import MESSAGE_SCHEMAS
-from konden.assistant.shared_memory import SHARED_MEMORY_SCHEMAS
-from konden.assistant.personal_memory import PERSONAL_MEMORY_SCHEMAS
-from konden.assistant.context.memory import MEMORY_TAG
 from konden.assistant.assembly import build_assistant_assembly
+from konden.assistant.context.memory import MEMORY_TAG
 from konden.assistant.context.projection import externalize_payload
 from konden.assistant.context.prompt import (
-    DEFAULT_ASSISTANT_PROMPT,
     BOT_PROMPT,
+    DEFAULT_ASSISTANT_PROMPT,
     SUBAGENT_PROMPT,
 )
+from konden.assistant.personal_memory import PERSONAL_MEMORY_SCHEMAS
+from konden.assistant.shared_memory import SHARED_MEMORY_SCHEMAS
 from konden.assistant.subagent.subagent import (
     CHILD_BUILTIN_TOOL_NAMES,
     CLOSED_FACT,
@@ -28,15 +28,19 @@ from konden.assistant.subagent.subagent import (
 )
 from konden.assistant.toolsets import LOAD_TOOLSET
 from konden.assistant.work_plan import WORK_PLAN_TAG
-from konden.skills.runtime import PROJECT_SKILL_PREFIX, PROJECT_SKILLS_DIRECTORY
 from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage
 from konden.paths import KondenHome
-from tests.fixtures.memory_journal import MemoryJournal
-from konden.skills.runtime import LOAD_SKILL, READ_SKILL_RESOURCE
+from konden.skills.runtime import (
+    LOAD_SKILL,
+    PROJECT_SKILL_PREFIX,
+    PROJECT_SKILLS_DIRECTORY,
+    READ_SKILL_RESOURCE,
+)
 from konden.tools.executor import RESERVED_KEYS
+from tests.fixtures.artifacts import MemoryArtifactGateway
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.fixtures.workspaces import workspace_record
-
 
 _ASCII_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -260,9 +264,13 @@ class PromptVocabularyTests(unittest.IsolatedAsyncioTestCase):
 
 class SubagentProjectInstructionsTests(unittest.IsolatedAsyncioTestCase):
     async def test_shared_subagent_has_the_same_on_demand_knowledge_boundary(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        from konden.runtime.events import DeliveryIdentity, DomainFactCommitted, EventDraft
+        from konden.runtime.events import (
+            DeliveryIdentity,
+            DomainFactCommitted,
+            EventDraft,
+        )
 
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -281,7 +289,7 @@ class SubagentProjectInstructionsTests(unittest.IsolatedAsyncioTestCase):
                     "task": "read", "parent_session_id": "parent",
                     "delegate_command_id": "delegate-1", "cwd": None,
                 }, requests_decision=True),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 delivery=DeliveryIdentity("subagent", "delegate-1:task"),
             ))
             with patch("konden.assistant.assembly.runtime_data_root", return_value=root / "runtime"):

@@ -6,9 +6,9 @@ import json
 import time
 
 from konden.config import load_app_config
-from thinllm import create_client
 from konden.llm.api import LLMApi
 from konden.llm.config import load_endpoint
+from thinllm import create_client
 
 
 async def _stream_once(

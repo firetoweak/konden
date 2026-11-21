@@ -1,8 +1,8 @@
 """The external collaboration MCP entrance into the existing Web Host."""
 from __future__ import annotations
 
-import json
 from base64 import b64encode
+import json
 from pathlib import Path
 from uuid import UUID
 
@@ -12,8 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from konden.assistant.external_messages import SendExternal
 from konden.assistant.attachments import is_valid_attachment_id
+from konden.assistant.external_messages import SendExternal
 
 
 class ContextArguments(BaseModel):
@@ -91,6 +91,7 @@ class ScopedAccess:
             return await response(scope, receive, send)
         scope["external_connection"] = connection
         await self.app(scope, receive, send)
+        return None
 
 
 def create_mcp_app(service):

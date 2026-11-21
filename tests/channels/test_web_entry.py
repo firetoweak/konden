@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import signal
-import socket
-import unittest
 from contextlib import nullcontext
 from pathlib import Path
+import signal
+import socket
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
 import uvicorn
 
-import web_chat
 from konden.channels.web.app import create_web_app
 from konden.channels.web.channel import WebChannel
+import web_chat
 
 
 @pytest.mark.process

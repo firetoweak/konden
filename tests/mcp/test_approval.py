@@ -1,9 +1,7 @@
-import unittest
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock
 
-from konden.tools.control import ControlApprovalProposal
-from konden.tools.spec import ToolArgumentsError
 from konden.mcp.approval import (
     MCP_INSTALL_ACTION,
     MCP_RECOVER_ACTION,
@@ -17,9 +15,11 @@ from konden.mcp.approval import (
     create_mcp_remove_proposal_spec,
     create_mcp_update_proposal_spec,
 )
+from konden.mcp.console import McpConsoleAdapter
 from konden.mcp.errors import McpRecoveryPreconditionError
 from konden.mcp.models import McpServerRuntimeState, RuntimeAvailability
-from konden.mcp.console import McpConsoleAdapter
+from konden.tools.control import ControlApprovalProposal
+from konden.tools.spec import ToolArgumentsError
 
 
 class McpInstallProposalTest(unittest.IsolatedAsyncioTestCase):

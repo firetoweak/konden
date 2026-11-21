@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
-import os
-import stat
 from pathlib import Path
-from typing import Mapping
+import stat
 
-from konden.paths import KondenHome
 from konden.mcp.models import validate_server_id
+from konden.paths import KondenHome
 
 
 class McpSecretStore:
@@ -17,7 +16,7 @@ class McpSecretStore:
         self._root = root.resolve()
 
     @classmethod
-    def from_home(cls, home: KondenHome) -> "McpSecretStore":
+    def from_home(cls, home: KondenHome) -> McpSecretStore:
         return cls(home.mcp_root / "secrets")
 
     def put_namespace(
@@ -41,7 +40,7 @@ class McpSecretStore:
             encoding="utf-8",
         )
         self._restrict_file(temporary)
-        os.replace(temporary, path)
+        temporary.replace(path)
         self._restrict_file(path)
         return {name: self.ref_for(server_id, name) for name in values}
 
@@ -105,4 +104,4 @@ class McpSecretStore:
 
     @staticmethod
     def _restrict_file(path: Path) -> None:
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)

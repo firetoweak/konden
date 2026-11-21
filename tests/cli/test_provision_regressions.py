@@ -6,11 +6,11 @@
 
 import hashlib
 import io
+from pathlib import Path
 import tempfile
 import unittest
-import zipfile
-from pathlib import Path
 from unittest.mock import patch
+import zipfile
 
 import httpx
 

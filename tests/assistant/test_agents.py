@@ -3,21 +3,31 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from konden.assistant.agents import (
-    AGENT_CREATED, AGENT_DELETED, AGENT_RENAMED, COLLEAGUE_JOINED, GroupCreated, fact_arguments,
-    identity_for_model, project_agent,
+    AGENT_CREATED,
+    AGENT_DELETED,
+    AGENT_RENAMED,
+    COLLEAGUE_JOINED,
+    GroupCreated,
+    fact_arguments,
+    identity_for_model,
+    project_agent,
 )
 from konden.assistant.compact.core import window_preamble
-from konden.automation.routine_tool import SAVE_ROUTINE, SET_ROUTINE_STATE
-from konden.automation.routines import PAUSED_BY_USER, ROUTINE_DUE
-from konden.assistant.host.agent_roster import AgentNameTaken, AgentNotFound, AgentRoster
+from konden.assistant.host.agent_roster import (
+    AgentNameTaken,
+    AgentNotFound,
+    AgentRoster,
+)
 from konden.assistant.host.agent_worktrees import GitWorktree
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor, Worker
+from konden.automation.routine_tool import SAVE_ROUTINE, SET_ROUTINE_STATE
+from konden.automation.routines import PAUSED_BY_USER, ROUTINE_DUE
 from konden.config import write_json
 from konden.filesystem.registry import WorkspaceRegistry
 from konden.model_settings import ModelConfigurationError, ModelSettings

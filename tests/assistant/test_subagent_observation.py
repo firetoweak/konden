@@ -8,10 +8,21 @@ from konden.assistant.conversations import AssistantQueries
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
 from konden.assistant.runner import SessionNotFoundError
-from konden.assistant.subagent.subagent import DELEGATE, child_session_id, persist_return, return_data
+from konden.assistant.subagent.subagent import (
+    DELEGATE,
+    child_session_id,
+    persist_return,
+    return_data,
+)
 from konden.channels.web.channel import WebChannel
 from konden.paths import KondenHome
-from konden.runtime import AgentRuntime, InvokeTool, ModelDecision, SqliteJournal, ToolBinding
+from konden.runtime import (
+    AgentRuntime,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
+    ToolBinding,
+)
 from tests.assistant.test_runner import ScriptedDecisionMaker
 from tests.session_scheduler import settle_session
 

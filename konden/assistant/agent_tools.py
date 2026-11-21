@@ -6,7 +6,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from konden.runtime import ToolBinding
 from konden.runtime.dispatcher import AttemptContext
 
-
 LAND = "land_branch"
 SYNC = "sync_branch"
 LINK = "link_project"

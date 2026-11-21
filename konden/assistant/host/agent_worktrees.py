@@ -3,16 +3,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
-import os
 import json
+import os
 from pathlib import Path
 import subprocess
 
 from konden.assistant.agent_git import Git, MergeResult, git_error, raise_git
 from konden.assistant.agents import AgentRecord, ProjectLinked
+from konden.config import write_json
 from konden.filesystem.registry import WorkspaceRecord
 from konden.paths import KondenHome
-from konden.config import write_json
 
 
 class AgentProjectRequired(ValueError):
@@ -177,7 +177,7 @@ class AgentWorktrees:
             return
         else:
             oid = self.git.oid(root, base)
-            write_json(pending, dict(path=str(worktree.path), branch=worktree.branch, oid=oid))
+            write_json(pending, {"path": str(worktree.path), "branch": worktree.branch, "oid": oid})
         worktree.path.parent.mkdir(parents=True, exist_ok=True)
         if self._has_branch(root, worktree.branch):
             if self.git.oid(root, f"refs/heads/{worktree.branch}") != oid:

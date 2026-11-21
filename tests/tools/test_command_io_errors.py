@@ -1,6 +1,6 @@
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from konden.execution.api import CommandEnvironment

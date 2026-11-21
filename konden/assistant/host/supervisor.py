@@ -1,83 +1,131 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
+import contextlib
 from dataclasses import asdict, dataclass, field, replace
+from datetime import UTC, datetime
+import hashlib
 from inspect import isawaitable
+import json
 import multiprocessing
 import os
-import json
-import sys
 from pathlib import Path
-from datetime import datetime, timezone
+import sys
 from uuid import uuid4
 
-from konden.automation.routine_tool import LIST_ROUTINES, SAVE_ROUTINE, SET_ROUTINE_STATE
-from konden.automation.absence import (
-    ABSENCE_REVIEW_SECONDS, AWAY_BEFORE_ASK, PAUSED_TEXT, RESUMED_TEXT, counts_since, next_absence_action,
+from konden.assistant.agent_git import GitWorkspace
+from konden.assistant.agent_messages import (
+    CREATE_GROUP,
+    LIST_COLLEAGUES,
+    SEND_FILE,
+    SEND_GROUP_MESSAGE,
+    SEND_MESSAGE,
+    USER_RECIPIENT,
 )
-from konden.automation.routines import ROUTINE_DUE, RoutineClock, RoutineFire, RoutineNotFound, RoutineStore
-from konden.automation.once import (
-    SOURCE as AUTOMATION_SOURCE,
-    TIME_REACHED,
-    OneShotClock,
-    OneShotSchedules,
-    ScheduleDeliveryUnavailable,
-    ScheduledCheck,
+from konden.assistant.agents import (
+    AGENT_CREATED,
+    AGENT_RENAMED,
+    AgentCreated,
+    AgentRecord,
+    AgentRenamed,
+    RoutinesUnwatched,
+    fact_arguments,
+    parse_agent_fact,
+    project_agent,
 )
-from konden.assistant.control import pending_approval_view, project_control, project_control_message
-from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, SCHEDULE_PREFIX, has_answer
-from konden.assistant.host.auto_authorize import AutoAuthorizeStore
-from konden.assistant.builtin_tools import bind_files
-from konden.filesystem.workspace import EnvironmentInputError
-from konden.assistant.compact.host import CompactHost
 from konden.assistant.attachments import AttachmentGateway, AttachmentRejected
+from konden.assistant.builtin_tools import bind_files
+from konden.assistant.clarification import (
+    ANSWER_SOURCE,
+    DEADLINE_REACHED,
+    SCHEDULE_PREFIX,
+    has_answer,
+)
+from konden.assistant.compact.host import CompactHost
+from konden.assistant.control import (
+    pending_approval_view,
+    project_control,
+    project_control_message,
+)
+from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL
+from konden.assistant.host.agent_groups import AgentGroups
+from konden.assistant.host.agent_lifecycle import AgentLifecycle
+from konden.assistant.host.agent_messages import AgentMessages
+from konden.assistant.host.agent_projects import AgentProjects, ProjectLinkRefused
+from konden.assistant.host.agent_roster import (
+    AgentDeletedError,
+    AgentNameTaken,
+    AgentNotFound,
+    AgentRoster,
+)
+from konden.assistant.host.agent_worktrees import AgentWorktrees, GitWorktree
+from konden.assistant.host.auto_authorize import AutoAuthorizeStore
+from konden.assistant.host.commands import CommandHost
+from konden.assistant.host.external_messages import ExternalMessages
 from konden.assistant.host.ipc import PipePeer, ProcessFailure, WorkerFailed
 from konden.assistant.host.llm_port import complete_llm_chat
 from konden.assistant.host.session_store import SessionStore
-from konden.assistant.agents import (
-    AGENT_CREATED, AGENT_RENAMED, AgentCreated, AgentRecord, AgentRenamed, RoutinesUnwatched,
-    fact_arguments, parse_agent_fact, project_agent,
-)
-from konden.assistant.host.agent_roster import AgentDeletedError, AgentNameTaken, AgentNotFound, AgentRoster
-from konden.assistant.host.agent_lifecycle import AgentLifecycle
-from konden.assistant.host.agent_worktrees import AgentWorktrees, GitWorktree
-from konden.assistant.host.agent_projects import AgentProjects, ProjectLinkRefused
-from konden.assistant.agent_git import GitWorkspace
-from konden.assistant.host.agent_messages import AgentMessages
-from konden.assistant.host.agent_groups import AgentGroups
-from konden.assistant.host.external_messages import ExternalMessages
-from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL
-from konden.assistant.agent_messages import (
-    CREATE_GROUP, LIST_COLLEAGUES, SEND_FILE, SEND_GROUP_MESSAGE, SEND_MESSAGE, USER_RECIPIENT,
-)
+from konden.assistant.host.spawn import start_worker
+from konden.assistant.host.worker import worker_main
 from konden.assistant.sessions import session_view
 from konden.assistant.subagent.subagent import (
     CLOSED_FACT,
     RETURN_FACT,
-    project_delegate_intents,
-    persist_return,
-    project_pending,
-    project_failed_delegations,
-    project_parent,
-    project_returned,
-    project_task,
-    instruction_arguments,
-    reply_arguments,
-    instructed_result,
     child_finished_result,
     closed_arguments,
+    instructed_result,
+    instruction_arguments,
+    persist_return,
+    project_delegate_intents,
+    project_failed_delegations,
+    project_parent,
+    project_pending,
+    project_returned,
+    project_task,
+    reply_arguments,
     return_data,
     task_from_arguments,
 )
-from konden.assistant.workspaces import bound_workspace_id, bound_directory, bound_workspace
-from konden.assistant.host.spawn import start_worker
-from konden.assistant.host.worker import worker_main
-from konden.runtime import AgentRuntime, SqliteJournal, replay, DomainFactCommitted
-from konden.execution.local.windows_job import WindowsJob
-from konden.assistant.host.commands import CommandHost
-from konden.filesystem.registry import WorkspaceRegistry
+from konden.assistant.workspaces import (
+    bound_directory,
+    bound_workspace,
+    bound_workspace_id,
+)
+from konden.automation.absence import (
+    ABSENCE_REVIEW_SECONDS,
+    AWAY_BEFORE_ASK,
+    PAUSED_TEXT,
+    RESUMED_TEXT,
+    counts_since,
+    next_absence_action,
+)
+from konden.automation.once import (
+    SOURCE as AUTOMATION_SOURCE,
+)
+from konden.automation.once import (
+    TIME_REACHED,
+    OneShotClock,
+    OneShotSchedules,
+    ScheduledCheck,
+    ScheduleDeliveryUnavailable,
+)
+from konden.automation.routine_tool import (
+    LIST_ROUTINES,
+    SAVE_ROUTINE,
+    SET_ROUTINE_STATE,
+)
+from konden.automation.routines import (
+    ROUTINE_DUE,
+    RoutineClock,
+    RoutineFire,
+    RoutineNotFound,
+    RoutineStore,
+)
 from konden.config import write_json
+from konden.execution.local.windows_job import WindowsJob
+from konden.filesystem.registry import WorkspaceRegistry
+from konden.filesystem.workspace import EnvironmentInputError
+from konden.runtime import AgentRuntime, DomainFactCommitted, SqliteJournal, replay
 
 
 @dataclass
@@ -395,7 +443,7 @@ class HostSupervisor:
             started_at = arguments.get("started_at")
             if started_at is not None:
                 started_at = datetime.fromisoformat(started_at)
-                if started_at.tzinfo is not timezone.utc:
+                if started_at.tzinfo is not UTC:
                     raise ValueError("schedule started_at must use UTC")
             schedule = self.automation.register(
                 arguments["schedule_id"],
@@ -554,10 +602,10 @@ class HostSupervisor:
         return updated
 
     def note_web_connected(self) -> None:
-        self.routines.store.note_connected(datetime.now(timezone.utc))
+        self.routines.store.note_connected(datetime.now(UTC))
 
     def note_web_disconnected(self) -> None:
-        self.routines.store.note_disconnected(datetime.now(timezone.utc))
+        self.routines.store.note_disconnected(datetime.now(UTC))
 
     def absence_watches(self):
         return self.routines.store.watches()
@@ -566,7 +614,7 @@ class HostSupervisor:
         """The person's inbox choice. Continue restores only this pause's routines."""
         if await self.agents.by_session(session_id) is None:
             raise AgentNotFound(session_id)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if action == "stop":
             watch = self.routines.store.pause_for_absence(session_id)
             await self._tell_absence(session_id, "paused", watch.paused_ids, watch.asked_at)
@@ -582,7 +630,7 @@ class HostSupervisor:
 
     async def review_absence(self, now: datetime | None = None) -> None:
         """One pass: finish an untold pause, then ask or pause while the person is away."""
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(UTC)
         store = self.routines.store
         for watch in store.watches():
             if watch.phase == "paused" and not watch.fact_recorded:
@@ -840,20 +888,14 @@ class HostSupervisor:
             process.close()
             local.close()
             remote.close()
-            try:
+            with contextlib.suppress(OSError):
                 admit_send.close()
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 admit_recv.close()
-            except OSError:
-                pass
             raise
         remote.close()
-        try:
+        with contextlib.suppress(OSError):
             admit_recv.close()
-        except OSError:
-            pass
         worker = Worker(process, peer)
         self.workers[session_id] = worker
         worker.reader = asyncio.create_task(self._watch(session_id, worker))
@@ -1443,7 +1485,7 @@ class HostSupervisor:
                     await self._interrupt_turn(session_id)
             view = await self.compact.application(
                 "accept_input", session_id,
-                dict(content=content, delivery_id=delivery_id, source=source, artifact_refs=artifact_refs),
+                {"content": content, "delivery_id": delivery_id, "source": source, "artifact_refs": artifact_refs},
             )
             if source == ANSWER_SOURCE:
                 schedule_id = SCHEDULE_PREFIX + delivery_id
@@ -1468,7 +1510,7 @@ class HostSupervisor:
         await self.compact.application(
             "resolve_authorization",
             session_id,
-            dict(command_id=command_id, approved=approved),
+            {"command_id": command_id, "approved": approved},
         )
 
     async def list_commands(self, session_id):
@@ -1481,7 +1523,7 @@ class HostSupervisor:
 
     async def resolve_authorizations(self, session_id, *, approved):
         await self.compact.application(
-            "resolve_authorizations", session_id, dict(approved=approved)
+            "resolve_authorizations", session_id, {"approved": approved}
         )
 
     async def set_auto_authorize(self, enabled):
@@ -1507,7 +1549,7 @@ class HostSupervisor:
         return await self.compact.application(
             "resolve_control",
             session_id,
-            dict(request_id=request_id, approved=approved),
+            {"request_id": request_id, "approved": approved},
         )
 
     async def cancel_turn(self, session_id):

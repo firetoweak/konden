@@ -262,6 +262,7 @@ class Step:
             raise ValueError("step commands do not match decision requests")
 
 
+# Runtime enums format with their qualified name. Journal records use the wire value in .value.
 class OutcomeStatus(str, Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"

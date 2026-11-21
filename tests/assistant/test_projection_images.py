@@ -2,22 +2,19 @@ from __future__ import annotations
 
 from hashlib import sha256
 from io import BytesIO
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import json
 import unittest
 
 from PIL import Image
 
 from konden.assistant.attachments import AttachmentGateway
-
-from tests.fixtures.artifacts import MemoryArtifactGateway
 from konden.assistant.context.projection import (
     ModelContextProjector,
     ModelContextSettings,
     externalize_payload,
 )
-from tests.fixtures.projection import project_chat_messages
 from konden.assistant.delivery import DELIVER_TOOL_NAME, deliver_binding
 from konden.runtime import (
     AgentRuntime,
@@ -26,8 +23,10 @@ from konden.runtime import (
     StateProjector,
     ToolBinding,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.artifacts import MemoryArtifactGateway
+from tests.fixtures.memory_journal import MemoryJournal
+from tests.fixtures.projection import project_chat_messages
 from tests.session_scheduler import settle_session
 
 

@@ -5,29 +5,50 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Literal
 
-from konden.assistant.control import pending_approval_view, project_control_message
-from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, ClarificationView, clarification_options
-from konden.assistant.external_messages import EXTERNAL_MESSAGE, USER_SOURCE, external_name, parse_external
-from konden.assistant.agents import COMMUNICATION_LIMIT_REACHED, PRIVATE_MESSAGE, parse_agent_fact, project_agent
-from konden.assistant.compact.core import latest_input_tokens
-from konden.assistant.attachments import AttachmentGateway, AttachmentStore
-from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
 from konden.assistant.agent_messages import SEND_FILE, SEND_MESSAGE
+from konden.assistant.agents import (
+    COMMUNICATION_LIMIT_REACHED,
+    PRIVATE_MESSAGE,
+    parse_agent_fact,
+    project_agent,
+)
+from konden.assistant.attachments import AttachmentGateway, AttachmentStore
+from konden.assistant.clarification import (
+    ANSWER_SOURCE,
+    DEADLINE_REACHED,
+    ClarificationView,
+    clarification_options,
+)
+from konden.assistant.compact.core import latest_input_tokens
+from konden.assistant.control import pending_approval_view, project_control_message
 from konden.assistant.delivery import DELIVER_TOOL_NAME, USER_MESSAGE_SENT
-from konden.runtime.json_values import thaw_value
-from konden.assistant.work_plan import WorkPlanUpdate, project_work_plan, project_work_plan_updates
+from konden.assistant.external_messages import (
+    EXTERNAL_MESSAGE,
+    USER_SOURCE,
+    external_name,
+    parse_external,
+)
+from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
 from konden.assistant.host.session_store import SessionStore
+from konden.assistant.runner import SessionNotFoundError, pending_authorization_ids
 from konden.assistant.sessions import SessionView, session_view
 from konden.assistant.subagent.subagent import (
-    RETURN_FACT, UnreportedChildReturn, project_delegate_intents,
-    project_pending, project_unreported_returns,
+    RETURN_FACT,
+    UnreportedChildReturn,
+    project_delegate_intents,
+    project_pending,
+    project_unreported_returns,
 )
-from konden.assistant.runner import SessionNotFoundError, pending_authorization_ids
+from konden.assistant.work_plan import (
+    WorkPlanUpdate,
+    project_work_plan,
+    project_work_plan_updates,
+)
 from konden.assistant.workspaces import bound_workspace_id
 from konden.runtime import (
+    CanonicalState,
     CommandPhase,
     CommandState,
-    CanonicalState,
     DomainFactCommitted,
     Event,
     OutcomeStatus,
@@ -35,7 +56,7 @@ from konden.runtime import (
     StepState,
     UserMessageReceived,
 )
-
+from konden.runtime.json_values import thaw_value
 
 ToolStatus = Literal[
     "queued",

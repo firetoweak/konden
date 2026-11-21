@@ -7,7 +7,6 @@ import json
 
 from thinllm.errors import InvalidLLMResponse
 
-
 ContentDeltaSink = Callable[[str], Awaitable[None] | None]
 
 

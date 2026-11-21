@@ -8,9 +8,9 @@ from unittest.mock import patch
 import httpx
 
 from konden.config import write_json
+from konden.llm.api import LLMAuthenticationError
 from konden.llm.config import initial_connections
 from konden.llm.connections import ModelConnections
-from konden.llm.api import LLMAuthenticationError
 
 
 class ConnectionsTest(unittest.IsolatedAsyncioTestCase):

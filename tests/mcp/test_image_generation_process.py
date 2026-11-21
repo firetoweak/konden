@@ -5,11 +5,10 @@ import pytest
 
 from konden.config import write_json
 from konden.llm.config import initial_connections
-from konden.media.images import ImageConfig, ImageGeneration
 from konden.mcp.bundled import IMAGE_SERVER_ID
 from konden.mcp.composition import build_mcp
+from konden.media.images import ImageConfig, ImageGeneration
 from konden.paths import KondenHome
-
 
 pytestmark = pytest.mark.process
 

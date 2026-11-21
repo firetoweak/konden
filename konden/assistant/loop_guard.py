@@ -5,7 +5,6 @@ import json
 from konden.assistant.loop_guard_strategies import ConsecutiveActions
 from konden.runtime import StepCommitted
 
-
 NOTICE = "loop_guard_notice"
 
 

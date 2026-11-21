@@ -7,8 +7,8 @@ manifest 源不下载任何二进制——注册 = 解析 resolved_path + 体检
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
+import shutil
 
 from konden.cli.errors import CliInputError, CliSourceError
 from konden.execution.local.child_env import latest_persistent_path

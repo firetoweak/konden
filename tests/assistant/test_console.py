@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import ClassVar
 import unittest
 from unittest.mock import AsyncMock, patch
 
 from PIL import Image
+
 from konden.assistant.attachments import AttachmentGateway
 from konden.assistant.compact.store import ConversationStatus
-
 from konden.channels.tui.images import ConsoleMessage, ImagePaste
 
 
@@ -34,7 +35,7 @@ class ConsoleInputTests(unittest.IsolatedAsyncioTestCase):
                 current_buffer = type(
                     "Buffer", (), {"insert_text": staticmethod(inserted.append)}
                 )()
-                key_sequence = [type("Key", (), {"key": "c-v"})()]
+                key_sequence: ClassVar[list] = [type("Key", (), {"key": "c-v"})()]
                 data = ""
 
             with patch(

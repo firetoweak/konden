@@ -23,7 +23,6 @@ from konden.tools.control import (
 )
 from konden.tools.spec import ToolArgumentsError
 
-
 CONTROL_SOURCE = "assistant.control"
 CONTROL_REQUEST_METADATA = "control_request"
 

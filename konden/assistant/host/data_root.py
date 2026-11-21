@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
+import os
+import sys
 
 from konden.file_lock import try_lock, unlock
 from konden.paths import KondenHome

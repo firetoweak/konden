@@ -26,6 +26,7 @@ from thinllm.types import (
     LLMUsage,
     ToolCall,
 )
+
 _NORMALIZED_DELTA_FIELDS = frozenset({"role", "content", "tool_calls"})
 _TRANSIENT_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
 _RETRY_DELAYS = (0.5, 1.0, 2.0)
@@ -79,7 +80,7 @@ class ChatCompletionsClient:
             auth=auth,
         )
 
-    async def __aenter__(self) -> "ChatCompletionsClient":
+    async def __aenter__(self) -> ChatCompletionsClient:
         return self
 
     async def __aexit__(self, exc_type, exc, traceback) -> None:

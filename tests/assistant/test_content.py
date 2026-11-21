@@ -10,10 +10,21 @@ from konden.assistant.artifacts import (
     ARTIFACT_BLOCK_CHARS,
     FileArtifactStore,
 )
-from tests.fixtures.artifacts import MemoryArtifactGateway, MemoryArtifactStore
 from konden.assistant.content import read_content_result
-from konden.assistant.context.projection import ModelContextProjector, externalize_payload
-from konden.runtime import AgentRuntime, InvokeTool, ModelDecision, StateProjector, ToolBinding, CommandOutcome, OutcomeStatus
+from konden.assistant.context.projection import (
+    ModelContextProjector,
+    externalize_payload,
+)
+from konden.runtime import (
+    AgentRuntime,
+    CommandOutcome,
+    InvokeTool,
+    ModelDecision,
+    OutcomeStatus,
+    StateProjector,
+    ToolBinding,
+)
+from tests.fixtures.artifacts import MemoryArtifactGateway, MemoryArtifactStore
 from tests.fixtures.memory_journal import MemoryJournal
 from tests.session_scheduler import settle_session
 

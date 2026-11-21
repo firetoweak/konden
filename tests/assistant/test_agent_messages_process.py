@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from io import BytesIO
 import json
@@ -14,26 +14,57 @@ from unittest.mock import patch
 import pytest
 
 from konden.assistant.agent_messages import SEND_GROUP_MESSAGE, SEND_MESSAGE
-from konden.assistant.attachments import AttachmentGateway
-from konden.assistant.context.memory import memory_observations, SHARED_MEMORY, PERSONAL_MEMORY
 from konden.assistant.agents import (
-    AGENT_CREATED, COLLEAGUE_JOINED, GROUP_ATTENTION, PRIVATE_MESSAGE, parse_agent_fact,
+    AGENT_CREATED,
+    COLLEAGUE_JOINED,
+    GROUP_ATTENTION,
+    PRIVATE_MESSAGE,
+    parse_agent_fact,
+)
+from konden.assistant.attachments import AttachmentGateway
+from konden.assistant.context.memory import (
+    PERSONAL_MEMORY,
+    SHARED_MEMORY,
+    memory_observations,
+)
+from konden.assistant.external_messages import (
+    EXTERNAL_MESSAGE,
+    USER_SOURCE,
+    PostExternal,
 )
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
-from konden.assistant.external_messages import EXTERNAL_MESSAGE, USER_SOURCE, PostExternal
-from konden.assistant.shared_memory import READ_SHARED_MEMORY, UPDATE_SHARED_MEMORY, SharedMemoryStore
-from konden.assistant.personal_memory import READ_PERSONAL_MEMORY, UPDATE_PERSONAL_MEMORY, UpdatePersonalMemory, personal_memory_store
 from konden.assistant.memory_review import REVIEW_FACT
+from konden.assistant.personal_memory import (
+    READ_PERSONAL_MEMORY,
+    UPDATE_PERSONAL_MEMORY,
+    UpdatePersonalMemory,
+    personal_memory_store,
+)
+from konden.assistant.shared_memory import (
+    READ_SHARED_MEMORY,
+    UPDATE_SHARED_MEMORY,
+    SharedMemoryStore,
+)
 from konden.automation.routines import RoutineFire
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
 from konden.paths import KondenHome
-from konden.runtime import AgentRuntime, CommandPhase, DomainFactCommitted, InvokeTool, ModelDecision, SqliteJournal, StepCommitted, ToolBinding, UserMessageReceived, replay
+from konden.runtime import (
+    AgentRuntime,
+    CommandPhase,
+    DomainFactCommitted,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
+    StepCommitted,
+    ToolBinding,
+    UserMessageReceived,
+    replay,
+)
 from tests.assistant.test_runner import ScriptedDecisionMaker
 from tests.assistant.test_supervisor import until
 from tests.fixtures.agent_messages import interrupted_send_config
 from tests.fixtures.session_worker import ProcessLlm, config_for
-
 
 pytestmark = pytest.mark.process
 
@@ -87,9 +118,8 @@ class MessagingLlm(ProcessLlm):
                 calls = (ToolCall("colleagues", "list_colleagues", "{}"),)
             elif SEND_MESSAGE not in called:
                 calls = (ToolCall("send", SEND_MESSAGE, json.dumps({"recipient": "Lin", "text": "请核对接口"})),)
-        elif "Kai" in text:
-            if "list_colleagues" not in called:
-                calls = (ToolCall("colleagues", "list_colleagues", "{}"),)
+        elif "Kai" in text and "list_colleagues" not in called:
+            calls = (ToolCall("colleagues", "list_colleagues", "{}"),)
         return LLMCallResult(LLMResponse(content="" if calls else "done", calls=calls),
                              LLMUsage(input_tokens=10, output_tokens=5))
 
@@ -151,7 +181,7 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
         before = await self.events(self.lin)
         await self.host.receive_user_message(self.ada.session_id, "只回复 done", delivery_id="plain")
         await self.settled(self.ada)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await self.host._deliver_routine(RoutineFire(
             fire_id="routine-fire", routine_id="routine", session_id=self.ada.session_id,
             name="检查", intent="报告状态", planned_at=now, fired_at=now))

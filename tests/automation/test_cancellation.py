@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 from konden.assistant.host.supervisor import HostSupervisor
@@ -12,8 +12,12 @@ from konden.automation.once import OneShotClock, OneShotSchedules
 from konden.automation.recovery import recover_schedule_attempts
 from konden.automation.tool import CANCEL_SCHEDULE, cancel_schedule_binding
 from konden.runtime import (
-    AgentRuntime, CommandOutcomeReceived, CommandPhase, InvokeTool,
-    ModelDecision, SqliteJournal,
+    AgentRuntime,
+    CommandOutcomeReceived,
+    CommandPhase,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
 )
 from konden.runtime.dispatcher import AttemptContext
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
@@ -90,7 +94,7 @@ class CancellationTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(host.schedule_changed_sink.await_count, 2)
             host.automation.register(
                 "sentinel", "session", 1, "end test",
-                started_at=datetime.now(timezone.utc) - timedelta(seconds=2),
+                started_at=datetime.now(UTC) - timedelta(seconds=2),
             )
             self.assertEqual(await asyncio.wait_for(delivered.get(), timeout=2), "sentinel")
             self.assertTrue(delivered.empty())

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import replace
+import time
 
 from konden.runtime.codec import EVENT_SCHEMA_VERSION, delivery_fingerprint
 from konden.runtime.events import (
@@ -18,13 +18,9 @@ from konden.runtime.events import (
     DomainFactCommitted,
     Event,
     EventDraft,
-    StepContinuationCancelled,
     StepCommitted,
+    StepContinuationCancelled,
     UserMessageReceived,
-)
-from konden.runtime.model import (
-    CanonicalState,
-    Command,
 )
 from konden.runtime.journal.api import (
     AppendResult,
@@ -33,6 +29,10 @@ from konden.runtime.journal.api import (
     LeaseLostError,
     StepClaimRequest,
     StepLease,
+)
+from konden.runtime.model import (
+    CanonicalState,
+    Command,
 )
 
 
@@ -186,9 +186,9 @@ class MemoryJournal:
             token_session_id = self._step_claim_tokens.get(token)
             if token_session_id is not None and token_session_id != request.session_id:
                 raise ValueError(f"duplicate step claim token: {token}")
-            if current is not None:
-                if self._step_claim_tokens.get(current.token) == request.session_id:
-                    self._step_claim_tokens.pop(current.token, None)
+            if (current is not None
+                    and self._step_claim_tokens.get(current.token) == request.session_id):
+                self._step_claim_tokens.pop(current.token, None)
             generation = current.generation + 1 if current is not None else 1
             lease = StepLease(
                 request=request,

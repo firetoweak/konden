@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-import unittest
 from tempfile import TemporaryDirectory
+import unittest
+
 from konden.assistant.assembly import build_assistant_assembly
 from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage
 from konden.paths import KondenHome
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.dispatcher import AttemptContext
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.fixtures.workspaces import workspace_record
 from tests.session_scheduler import SettlingScheduler
 

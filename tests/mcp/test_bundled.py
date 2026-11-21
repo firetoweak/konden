@@ -1,20 +1,25 @@
-import unittest
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 from unittest.mock import AsyncMock
 
 from mcp.types import Tool
 
+from konden.config import write_json
 from konden.llm.config import initial_connections
 from konden.mcp.approval import McpInstallProposalInput
-from konden.mcp.bundled import BROWSER_SERVER_IDS, BUILTIN_SERVER_IDS, DOCUMENT_SERVER_ID, OFFICECLI_SERVER_ID
+from konden.mcp.bundled import (
+    BROWSER_SERVER_IDS,
+    BUILTIN_SERVER_IDS,
+    DOCUMENT_SERVER_ID,
+    OFFICECLI_SERVER_ID,
+)
 from konden.mcp.client_manager import McpClientError
 from konden.mcp.composition import build_mcp
 from konden.mcp.errors import McpConfigurationError
 from konden.mcp.toolsets import ToolsetLoadError
 from konden.paths import KondenHome
-from konden.config import write_json
 from konden.search import SearchConfig, SearchSettings
 
 

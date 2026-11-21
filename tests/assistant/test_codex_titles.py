@@ -10,7 +10,6 @@ import pytest
 
 from konden.assistant.host.codex_titles import read_codex_titles
 
-
 IDENTITY = "1" * 32
 THREAD_ID = str(UUID(IDENTITY))
 

@@ -1,13 +1,13 @@
 """Owned process lifetime through the same Host port used by tools."""
 import asyncio
 from functools import partial
+from http.client import HTTPConnection
 import json
 import os
 from pathlib import Path
-import sys
-import shutil
 import shlex
-from http.client import HTTPConnection
+import shutil
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -145,7 +145,12 @@ def test_cancelled_worker_leaves_created_command_queryable(tmp_path):
 
 def test_human_input_is_answered_while_the_started_command_keeps_running(tmp_path):
     from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
-    from konden.runtime import CommandOutcomeReceived, DecisionCancelled, SqliteJournal, StepCommitted
+    from konden.runtime import (
+        CommandOutcomeReceived,
+        DecisionCancelled,
+        SqliteJournal,
+        StepCommitted,
+    )
 
     async def scenario():
         root = tmp_path / "project"
@@ -227,7 +232,8 @@ def test_human_input_is_answered_while_the_started_command_keeps_running(tmp_pat
 def test_host_port_survives_worker_retirement(tmp_path, completion):
     from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
     async def scenario():
-        root = tmp_path / "project"; root.mkdir()
+        root = tmp_path / "project"
+        root.mkdir()
         home = KondenHome(tmp_path / "home")
         store = SessionStore(home.runtime_sessions_root)
         workspace = WorkspaceRegistry.load(home.workspaces_path).register_path(root)
@@ -304,7 +310,8 @@ def test_host_server_observes_file_edits(tmp_path, launcher):
     npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
     assert npm is not None, "npm required for development server verification"
     async def scenario():
-        root = tmp_path / "project"; root.mkdir()
+        root = tmp_path / "project"
+        root.mkdir()
         (root / "value.txt").write_text("BASE")
         shutil.copyfile(Path(__file__).parents[1] / "fixtures" / "host_watch_server.cjs", root / "server.cjs")
         (root / "package.json").write_text(json.dumps({"scripts": {"dev": "node server.cjs"}}))

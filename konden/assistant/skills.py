@@ -4,16 +4,16 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from konden.assistant.artifacts import ArtifactGateway
+from konden.assistant.catalog import CatalogSkill
 from konden.assistant.context.projection import (
     ModelContextSettings,
     externalize_tool_result,
 )
+from konden.assistant.tool_results import runtime_tool_result
 from konden.runtime import ToolBinding
 from konden.runtime.dispatcher import AttemptContext
-from konden.assistant.tool_results import runtime_tool_result
-from konden.tools.spec import ToolArgumentsError
 from konden.skills.runtime import LOAD_SKILL, READ_SKILL_RESOURCE, SkillToolCatalog
-from konden.assistant.catalog import CatalogSkill
+from konden.tools.spec import ToolArgumentsError
 
 
 class SkillToolAdapter:

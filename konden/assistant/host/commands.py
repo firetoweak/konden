@@ -1,13 +1,18 @@
 """Host command ownership, durable completion, and Journal-backed delivery."""
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from konden.assistant.agent_git import identity as git_identity
-from konden.assistant.subagent.subagent import project_returned
-from konden.assistant.commands import COMMAND_FINISHED, SOURCE, background_commands, completed_commands
-from konden.assistant.host.ipc import WorkerFailed
+from konden.assistant.commands import (
+    COMMAND_FINISHED,
+    SOURCE,
+    background_commands,
+    completed_commands,
+)
 from konden.assistant.host.agent_roster import AgentDeletedError
+from konden.assistant.host.ipc import WorkerFailed
+from konden.assistant.subagent.subagent import project_returned
 from konden.execution.command import CommandStartError, ShellNotFoundError
 from konden.execution.processes import CommandManager
 from konden.runtime import CommandOutcomeReceived, SqliteJournal
@@ -16,7 +21,7 @@ from konden.runtime import CommandOutcomeReceived, SqliteJournal
 class CommandHost:
     def __init__(self, host):
         self.host = host
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
         self.manager = CommandManager(host.home.state_root / "commands", host.command_environment)
         self.deliveries: dict[str, asyncio.Task] = {}
 

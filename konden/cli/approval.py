@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Mapping, cast
+from collections.abc import Mapping
+from typing import cast
 
 from pydantic import BaseModel
 
@@ -18,7 +19,6 @@ from konden.tools.control import (
     ControlPreparationFailure,
 )
 from konden.tools.spec import PydanticParameters, ToolSpec
-
 
 CLI_INSTALL_ACTION = "cli.install"
 CLI_UNINSTALL_ACTION = "cli.uninstall"

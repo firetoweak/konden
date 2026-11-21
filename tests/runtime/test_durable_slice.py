@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
-from tests.fixtures.artifacts import MemoryArtifactGateway
 from konden.assistant.context.projection import ModelContextSettings
 from konden.assistant.management import ManagementSurface
 from konden.assistant.sessions import AssistantSessions
@@ -19,6 +18,7 @@ from konden.runtime import (
     ToolBinding,
 )
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.artifacts import MemoryArtifactGateway
 from tests.session_scheduler import RecordingScheduler, SettlingScheduler
 
 

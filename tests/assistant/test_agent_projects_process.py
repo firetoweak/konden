@@ -12,14 +12,13 @@ from konden.assistant.agent_tools import LAND, LINK, UNLINK, agent_git_bindings
 from konden.assistant.agents import PROJECT_LINKED, PROJECT_UNLINKED
 from konden.assistant.host.agent_projects import AgentProjects
 from konden.assistant.host.agent_roster import AgentNameTaken, AgentRoster
-from konden.runtime import SqliteJournal
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
 from konden.filesystem.registry import WorkspaceRegistry
 from konden.paths import KondenHome
+from konden.runtime import SqliteJournal
 from konden.runtime.dispatcher import AttemptContext
 from tests.assistant.test_agent_worktrees_process import git
-
 
 pytestmark = pytest.mark.process
 

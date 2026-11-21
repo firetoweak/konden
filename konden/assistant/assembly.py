@@ -4,33 +4,50 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 import sys
 
-from konden.assistant.host.session_store import SessionStore
-from konden.assistant.workspaces import bound_workspace
-from konden.filesystem.registry import WorkspaceRegistry
-
+from konden.assistant.agent_messages import (
+    MESSAGE_SCHEMAS,
+    SEND_MESSAGE,
+    message_bindings,
+)
+from konden.assistant.agent_tools import (
+    AGENT_GIT_SCHEMAS,
+    AGENT_GIT_TOOLS,
+    EXCLUSIVE_PROJECT_TOOLS,
+    agent_git_bindings,
+)
+from konden.assistant.agents import project_agent
 from konden.assistant.artifacts import FileArtifactGateway
 from konden.assistant.attachments import (
-    AttachmentGateway,
     READ_IMAGE_SCHEMA,
+    AttachmentGateway,
     read_image_binding,
 )
-from konden.assistant.compact.core import CompactContext, CompactBoundary, FIND_HISTORY, SUBMIT
-from konden.assistant.content import READ_CONTENT, READ_CONTENT_SCHEMA
-from konden.assistant.clarification import ASK_USER, Question, TimedQuestion, ask_user_schema, clarification_binding
-from konden.assistant.loop_guard import LoopGuard
-from konden.assistant.work_plan import UPDATE_PLAN, UPDATE_PLAN_SCHEMA, update_plan_binding
-from konden.assistant.agents import project_agent
-from konden.assistant.agent_messages import MESSAGE_SCHEMAS, SEND_MESSAGE, message_bindings
-from konden.automation.routine_tool import ROUTINE_SCHEMAS, ROUTINE_TOOLS, routine_bindings
-from konden.assistant.delivery import (
-    DELIVER_TOOL_NAME,
-    PreviewEmitter,
+from konden.assistant.builtin_tools import build_builtin_tools
+from konden.assistant.catalog import CapabilityCatalog
+from konden.assistant.clarification import (
+    ASK_USER,
+    Question,
+    TimedQuestion,
+    ask_user_schema,
+    clarification_binding,
 )
-from konden.assistant.context.prompt import BOT_PROMPT, DEFAULT_ASSISTANT_PROMPT, environment_prompt
-from konden.assistant.host.command_port import WorkerCommandPort
+from konden.assistant.cli import CliToolAdapter
+from konden.assistant.compact.core import (
+    FIND_HISTORY,
+    SUBMIT,
+    CompactBoundary,
+    CompactContext,
+)
+from konden.assistant.content import READ_CONTENT, READ_CONTENT_SCHEMA
+from konden.assistant.context.memory import MemoryContext
 from konden.assistant.context.projection import (
     ModelContextProjector,
     ModelContextSettings,
+)
+from konden.assistant.context.prompt import (
+    BOT_PROMPT,
+    DEFAULT_ASSISTANT_PROMPT,
+    environment_prompt,
 )
 from konden.assistant.control import AssistantControlPlane
 from konden.assistant.decision import (
@@ -38,9 +55,33 @@ from konden.assistant.decision import (
     bind_executor_tools,
     with_command_interrupts,
 )
+from konden.assistant.delivery import (
+    DELIVER_TOOL_NAME,
+    PreviewEmitter,
+)
+from konden.assistant.host.command_port import WorkerCommandPort
+from konden.assistant.host.session_store import SessionStore
+from konden.assistant.loop_guard import LoopGuard
+from konden.assistant.management import (
+    ManagementDomain,
+    ManagementSurface,
+    ResidentTool,
+)
+from konden.assistant.mcp import McpToolsetAdapter
+from konden.assistant.memory_review import MemoryReview
+from konden.assistant.personal_memory import (
+    PERSONAL_MEMORY_SCHEMAS,
+    personal_memory_bindings,
+    personal_memory_store,
+)
 from konden.assistant.runner import SessionScheduler
-from konden.assistant.agent_tools import AGENT_GIT_SCHEMAS, AGENT_GIT_TOOLS, EXCLUSIVE_PROJECT_TOOLS, agent_git_bindings
 from konden.assistant.sessions import AssistantSessions
+from konden.assistant.shared_memory import (
+    SHARED_MEMORY_SCHEMAS,
+    SharedMemoryStore,
+    shared_memory_bindings,
+)
+from konden.assistant.skills import SkillToolAdapter
 from konden.assistant.subagent.subagent import SubAgentHost, project_task
 from konden.assistant.toolsets import (
     LOAD_TOOLSET,
@@ -48,7 +89,17 @@ from konden.assistant.toolsets import (
     ToolSurface,
     load_toolset_binding,
 )
-from konden.runtime import AgentRuntime, ToolBinding
+from konden.assistant.work_plan import (
+    UPDATE_PLAN,
+    UPDATE_PLAN_SCHEMA,
+    update_plan_binding,
+)
+from konden.assistant.workspaces import bound_workspace
+from konden.automation.routine_tool import (
+    ROUTINE_SCHEMAS,
+    ROUTINE_TOOLS,
+    routine_bindings,
+)
 from konden.automation.tool import (
     CANCEL_SCHEDULE,
     CANCEL_SCHEDULE_SCHEMA,
@@ -57,30 +108,13 @@ from konden.automation.tool import (
     cancel_schedule_binding,
     schedule_once_binding,
 )
-from konden.assistant.builtin_tools import build_builtin_tools
-from konden.filesystem.registry import WorkspaceRecord
-from konden.filesystem.workspace import FileWorkspace
-from konden.assistant.cli import CliToolAdapter
-from konden.assistant.mcp import McpToolsetAdapter
-from konden.assistant.management import (
-    ManagementDomain,
-    ManagementSurface,
-    ResidentTool,
-)
-from konden.assistant.skills import SkillToolAdapter
-from konden.assistant.catalog import CapabilityCatalog
-from konden.assistant.shared_memory import (
-    SHARED_MEMORY_SCHEMAS, SharedMemoryStore, shared_memory_bindings,
-)
-from konden.assistant.personal_memory import (
-    PERSONAL_MEMORY_SCHEMAS, personal_memory_store, personal_memory_bindings,
-)
-from konden.assistant.context.memory import MemoryContext
-from konden.assistant.memory_review import MemoryReview
-from konden.config import AssistantConfig
-from konden.paths import KondenHome, runtime_data_root
 from konden.cli.composition import CliAssembly, build_cli
+from konden.config import AssistantConfig
+from konden.filesystem.registry import WorkspaceRecord, WorkspaceRegistry
+from konden.filesystem.workspace import FileWorkspace
 from konden.mcp.composition import McpAssembly, build_mcp
+from konden.paths import KondenHome, runtime_data_root
+from konden.runtime import AgentRuntime, ToolBinding
 from konden.skills.composition import SkillAssembly, build_skills
 from konden.skills.summarizer import LlmSkillDiffSummarizer
 
@@ -377,11 +411,11 @@ async def build_assistant_assembly(
     )
 
     async def before_advance():
-        if not compact_context.is_reader:
-            if not (await runtime.state(session_id)).waiting_command_ids:
-                await catalog.sync(runtime, session_id)
-                if memory is not None:
-                    await memory.observe(runtime, session_id)
+        if (not compact_context.is_reader
+                and not (await runtime.state(session_id)).waiting_command_ids):
+            await catalog.sync(runtime, session_id)
+            if memory is not None:
+                await memory.observe(runtime, session_id)
         return True if compact is None else await compact.before_advance()
 
     scheduler.before_advance = before_advance

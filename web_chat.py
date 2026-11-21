@@ -2,14 +2,13 @@ import argparse
 from copy import deepcopy
 import logging
 import os
-import subprocess
 from pathlib import Path
+import subprocess
 
 import uvicorn
 
-from konden.channels.web import create_web_app
 from konden.assistant.host.process_env import host_process_environment
-
+from konden.channels.web import create_web_app
 
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "dist"
 

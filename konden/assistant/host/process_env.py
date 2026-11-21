@@ -7,8 +7,8 @@ Workspace commands receive a separate launch snapshot captured before this step.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping
+import os
 from pathlib import Path
 
 
@@ -23,7 +23,7 @@ def host_process_environment(
     current: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     source = os.environ if current is None else current
-    result = {name: value for name, value in source.items()}
+    result = dict(source.items())
     session = user_session_environment()
     if session is None:
         result["PATH"] = _merge_path(os.pathsep.join(application_tool_paths()), result.get("PATH", ""))

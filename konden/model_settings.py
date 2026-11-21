@@ -1,15 +1,20 @@
 """候选模型、会话选择与页面可见的连接状态。"""
 from __future__ import annotations
+
 import asyncio
 import json
 from pathlib import Path
 
 from konden.config import config_path, load_app_config, parse_app_config, write_json
-from konden.llm.config import initial_connections, load_connections
-from konden.llm.config import ModelConfig
+from konden.llm.config import ModelConfig, initial_connections, load_connections
 from thinllm import (
-    PROVIDERS, InvalidLLMResponse, LLMProviderError, LLMTransientError,
-    MissingProviderSetting, list_models, resolve_endpoint,
+    PROVIDERS,
+    InvalidLLMResponse,
+    LLMProviderError,
+    LLMTransientError,
+    MissingProviderSetting,
+    list_models,
+    resolve_endpoint,
 )
 
 

@@ -6,13 +6,15 @@ import asyncio
 import getpass
 import sys
 
-from thinllm import PROVIDERS, MissingProviderSetting, resolve_endpoint
-
 from konden.config import AppConfig, config_path, load_app_config, write_json
 from konden.llm.config import (
-    ModelConfig, initial_connections, load_connections, parse_connections,
+    ModelConfig,
+    initial_connections,
+    load_connections,
+    parse_connections,
 )
 from konden.paths import KondenHome
+from thinllm import PROVIDERS, MissingProviderSetting, resolve_endpoint
 
 
 def initialize():

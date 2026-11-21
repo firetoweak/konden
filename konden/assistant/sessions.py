@@ -8,7 +8,7 @@ from konden.assistant.authorization import (
     AuthorizationConflict,
     AuthorizationTargetNotFound,
 )
-from konden.assistant.inputs import InputConflict
+from konden.assistant.catalog import CapabilityCatalog
 from konden.assistant.clarification import ANSWER_SOURCE, questions_by_id
 from konden.assistant.control import (
     CONTROL_SOURCE,
@@ -21,15 +21,15 @@ from konden.assistant.control import (
     project_control,
     project_control_message,
 )
+from konden.assistant.inputs import InputConflict
+from konden.assistant.management import ManagementSurface
 from konden.assistant.runner import (
     SessionScheduler,
     pending_authorization_ids,
     resume_session,
 )
-from konden.assistant.toolsets import ToolSurface
-from konden.assistant.management import ManagementSurface
-from konden.assistant.catalog import CapabilityCatalog
 from konden.assistant.subagent.subagent import SubAgentHost, project_pending
+from konden.assistant.toolsets import ToolSurface
 from konden.runtime import AgentRuntime, DeliveryConflictError, RuntimeStatus
 from konden.runtime.model import CanonicalState, CommandPhase
 

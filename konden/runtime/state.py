@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from hashlib import sha256
+import json
 
 from konden.runtime.codec import EVENT_SCHEMA_VERSION
 from konden.runtime.events import (
     AttemptOrphaned,
     CommandAuthorized,
-    CommandRejected,
     CommandOutcomeReceived,
+    CommandRejected,
     DecisionCancelled,
-    DomainFactCommitted,
     DispatchAttemptStarted,
+    DomainFactCommitted,
     Event,
-    StepContinuationCancelled,
     StepCommitted,
+    StepContinuationCancelled,
     UserMessageReceived,
 )
 from konden.runtime.model import (
@@ -127,9 +127,7 @@ class _StateBuilder:
             self._apply_outcome(event, payload)
         elif isinstance(payload, AttemptOrphaned):
             self._apply_orphaned(event, payload)
-        elif isinstance(payload, (DecisionCancelled, StepContinuationCancelled)):
-            pass
-        elif isinstance(payload, DomainFactCommitted):
+        elif isinstance(payload, (DecisionCancelled, StepContinuationCancelled, DomainFactCommitted)):
             pass
         else:
             raise TypeError(f"not a regular event: {type(payload).__name__}")
@@ -614,8 +612,8 @@ class StateProjector:
             if (sibling.issued_by_event_id == command_state.issued_by_event_id
                     and sibling.command.decision_on_outcome
                     and (later.event_id == sibling.canonical_outcome_event_id
-                         or isinstance(fact, AttemptOrphaned)
-                         and sibling.phase is CommandPhase.UNKNOWN)):
+                         or (isinstance(fact, AttemptOrphaned)
+                         and sibling.phase is CommandPhase.UNKNOWN))):
                 return False
         observed = issuing_observed[command_state.issued_by_event_id]
         for item in events:
@@ -676,14 +674,14 @@ class StateProjector:
             payload = event.payload
             if isinstance(payload, (StepCommitted, DecisionCancelled)):
                 continue
-            if _is_external_decision_fact(payload):
-                if event.event_id not in selected:
-                    continue
-            elif isinstance(payload, (CommandAuthorized, DispatchAttemptStarted,
-                                      CommandOutcomeReceived, AttemptOrphaned, CommandRejected)):
-                if not (_is_waited_follow_up(event, decision)
-                        or isinstance(payload, CommandRejected) and payload.command_id in decision.commands):
-                    continue
+            if _is_external_decision_fact(payload) and event.event_id not in selected:
+                continue
+            if (isinstance(payload, (CommandAuthorized, DispatchAttemptStarted,
+                                     CommandOutcomeReceived, AttemptOrphaned, CommandRejected))
+                    and not (_is_waited_follow_up(event, decision)
+                             or (isinstance(payload, CommandRejected)
+                                 and payload.command_id in decision.commands))):
+                continue
             decision.apply_regular(event)
             visible.add(event.event_id)
 

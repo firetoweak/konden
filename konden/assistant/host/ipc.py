@@ -14,7 +14,6 @@ from konden.assistant.authorization import (
 )
 from konden.assistant.inputs import InputConflict
 
-
 _REQUEST_ERRORS = {
     "authorization_target_not_found": AuthorizationTargetNotFound,
     "authorization_conflict": AuthorizationConflict,

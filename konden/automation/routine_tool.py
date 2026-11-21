@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from konden.automation.routines import ACTIVE, DELETED, PAUSED
 from konden.automation.tool import SessionTransport
@@ -16,7 +16,6 @@ from konden.runtime import (
 )
 from konden.runtime.dispatcher import AttemptContext
 from konden.runtime.model import CommandPhase
-
 
 SAVE_ROUTINE = "save_routine"
 SET_ROUTINE_STATE = "set_routine_state"
@@ -119,6 +118,6 @@ async def recover_routine_attempts(journal: SqliteJournal, session_id: str, tran
             session_id=session_id,
             payload=CommandOutcomeReceived(item.command.command_id, attempt.attempt_id,
                                            CommandOutcome(OutcomeStatus.SUCCEEDED, value=result)),
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
             causation_id=attempt.started_event_id,
         ))

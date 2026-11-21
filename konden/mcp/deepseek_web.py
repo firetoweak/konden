@@ -1,8 +1,8 @@
 """DeepSeek Search / Fetch 的只读 stdio MCP 适配。"""
 from __future__ import annotations
 
-import asyncio
 import argparse
+import asyncio
 from functools import partial
 import json
 from pathlib import Path
@@ -10,16 +10,26 @@ from pathlib import Path
 import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool, ToolAnnotations
+from mcp.types import (
+    CallToolResult,
+    ListToolsResult,
+    TextContent,
+    Tool,
+    ToolAnnotations,
+)
 from pydantic import ValidationError
 
 from konden.paths import KondenHome
-
 from konden.search.deepseek import (
-    BASE_URL, DeepSeekAuth, MissingApiKey, SearchInput, FetchInput,
-    SearchResponse, FetchResponse, request_web,
+    BASE_URL,
+    DeepSeekAuth,
+    FetchInput,
+    FetchResponse,
+    MissingApiKey,
+    SearchInput,
+    SearchResponse,
+    request_web,
 )
-
 
 INPUTS = {"web_search": SearchInput, "web_fetch": FetchInput}
 OUTPUTS = {"web_search": SearchResponse, "web_fetch": FetchResponse}

@@ -1,29 +1,35 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
+import os
 from pathlib import Path
-from thinllm import create_client
+import shutil
 
+from konden.assistant.conversations import AssistantQueries
 from konden.assistant.host.data_root import hold_data_root
 from konden.assistant.host.process_env import install_host_environment
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
-from konden.assistant.conversations import AssistantQueries
-from konden.config import AppConfig, assistant_config_from_app, load_app_config, config_path, write_json
-from konden.model_settings import ModelSettings
-from konden.llm.connections import ModelConnections
-from konden.paths import KondenHome
-from konden.mcp.composition import build_mcp
+from konden.config import (
+    AppConfig,
+    assistant_config_from_app,
+    config_path,
+    load_app_config,
+    write_json,
+)
 from konden.filesystem.registry import WorkspaceRecord, WorkspaceRegistry
+from konden.llm.connections import ModelConnections
+from konden.mcp.composition import build_mcp
+from konden.model_settings import ModelSettings
+from konden.paths import KondenHome
 from konden.skills.composition import build_skills
 from konden.skills.summarizer import LlmSkillDiffSummarizer
 from konden.timing import install_timing_logging
+from thinllm import create_client
 
 
 class DataRootHasAgents(RuntimeError):

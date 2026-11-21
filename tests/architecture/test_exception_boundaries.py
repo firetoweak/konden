@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 import unittest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 BROAD = {"Exception", "BaseException"}
 # 宽泛捕获且不再抛出，等于把未知异常降级为普通结果；只允许在登记的边界这样做。

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 
 from filelock import AsyncFileLock
 
@@ -23,8 +23,8 @@ from konden.cli.models import (
 from konden.cli.provision import provision_github_release, resolve_release_tag
 from konden.cli.registry import CliRegistry
 from konden.cli.runtime import CliToolCatalog
-from konden.paths import KondenHome
 from konden.execution.command import CommandExecutor
+from konden.paths import KondenHome
 
 
 @dataclass(frozen=True)

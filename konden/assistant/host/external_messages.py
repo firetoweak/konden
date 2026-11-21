@@ -3,22 +3,39 @@ from __future__ import annotations
 
 import asyncio
 from bisect import bisect_right, insort_right
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
-import json
 from itertools import islice
+import json
 from pathlib import Path
 
-from konden.assistant.attachments import AttachmentGateway, AttachmentRejected, is_file_attachment_id
+from konden.assistant.attachments import (
+    AttachmentGateway,
+    AttachmentRejected,
+    is_file_attachment_id,
+)
 from konden.assistant.external_messages import (
-    EXTERNAL_MESSAGE, USER_SOURCE, ConnectionStore, ExternalMessage, ExternalSession,
-    ExternalSessionStore, external_direction, parse_external,
+    EXTERNAL_MESSAGE,
+    USER_SOURCE,
+    ConnectionStore,
+    ExternalMessage,
+    ExternalSession,
+    ExternalSessionStore,
+    external_direction,
+    parse_external,
 )
 from konden.assistant.host.agent_messages import message_identity
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
-from konden.assistant.host.codex_continuation import CodexContinuationInvalid, CodexContinuations, continuation_status
-from konden.assistant.host.codex_titles import read_codex_titles, read_codex_threads
-from konden.assistant.host.external_attachments import describe_attachments, snapshot_files
+from konden.assistant.host.codex_continuation import (
+    CodexContinuationInvalid,
+    CodexContinuations,
+    continuation_status,
+)
+from konden.assistant.host.codex_titles import read_codex_threads, read_codex_titles
+from konden.assistant.host.external_attachments import (
+    describe_attachments,
+    snapshot_files,
+)
 from konden.runtime import AgentRuntime, DomainFactCommitted, Event, UserMessageReceived
 
 
@@ -232,7 +249,7 @@ class ExternalMessages:
             session = next((item for item in self.sessions.read().sessions if item.identity == identity), None)
             if session is None:
                 session = ExternalSession(connection_id=connection.connection_id, identity=identity,
-                                          created_at=datetime.now(timezone.utc), label=name)
+                                          created_at=datetime.now(UTC), label=name)
                 self.sessions.add(session)
                 await self._notify()
             elif session.connection_id != connection.connection_id or (name is not None and name != session.name):

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from copy import deepcopy
 import hashlib
 import re
-from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any
 
-from konden.tools.spec import JsonSchemaParameters, ToolSpec
-from konden.mcp.toolsets import ToolsetLoadError
 from jsonschema.exceptions import SchemaError, ValidationError
 from jsonschema.validators import validator_for
+
 from konden.mcp.models import sanitize_error_summary
+from konden.mcp.toolsets import ToolsetLoadError
+from konden.tools.spec import JsonSchemaParameters, ToolSpec
 
 if TYPE_CHECKING:
     from mcp.types import CallToolResult
@@ -26,7 +28,7 @@ def encode_tool_name(server_id: str, tool_name: str) -> str:
     cleaned = _SAFE_NAME.sub("_", raw)
     if len(cleaned) <= _MAX_TOOL_NAME_LENGTH:
         return cleaned
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
     keep = _MAX_TOOL_NAME_LENGTH - 9
     return f"{cleaned[:keep]}_{digest}"
 

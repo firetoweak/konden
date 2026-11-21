@@ -22,9 +22,9 @@ from konden.runtime import (
     ModelDecision,
     ToolBinding,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.dispatcher import AttemptContext
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.session_scheduler import settle_session
 
 

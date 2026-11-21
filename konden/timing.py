@@ -3,7 +3,6 @@
 import json
 import logging
 
-
 _FIELDS = ("stage", "operation", "attempt", "elapsed_ms", "outcome", "provider", "model")
 _LOGGERS = (
     "thinllm.chat_completions",

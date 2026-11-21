@@ -6,7 +6,6 @@ from unittest.mock import Mock
 
 import pytest
 
-
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="macOS process groups")
 
 

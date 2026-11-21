@@ -5,8 +5,13 @@ from hashlib import sha256
 
 from pydantic import Field
 
-from konden.assistant.memory import MEMORY_RULES, Memory, MemoryStore, UpdateMemory, memory_bindings
-
+from konden.assistant.memory import (
+    MEMORY_RULES,
+    Memory,
+    MemoryStore,
+    UpdateMemory,
+    memory_bindings,
+)
 
 READ_PERSONAL_MEMORY = "read_personal_memory"
 UPDATE_PERSONAL_MEMORY = "update_personal_memory"

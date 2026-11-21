@@ -1,30 +1,40 @@
-import json
 from concurrent.futures import ThreadPoolExecutor
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 
-from konden.assistant.context.memory import MemoryContext, memory_observations, SHARED_MEMORY, PERSONAL_MEMORY
-
-from konden.assistant.shared_memory import (
-    READ_SHARED_MEMORY, UPDATE_SHARED_MEMORY,
-    SharedMemoryStore, UpdateSharedMemory, shared_memory_bindings,
-)
-from konden.assistant.agents import AgentCreated, AgentRecord
-from konden.assistant.personal_memory import (
-    READ_PERSONAL_MEMORY, UPDATE_PERSONAL_MEMORY, personal_memory_store, personal_memory_bindings, UpdatePersonalMemory,
-)
-from konden.paths import KondenHome
-from konden.runtime import AgentRuntime, DomainFactCommitted, StateProjector
-from konden.assistant.context.projection import ModelContextProjector
-from tests.fixtures.artifacts import MemoryArtifactGateway
-from tests.fixtures.memory_journal import MemoryJournal
-from konden.assistant.agents import fact_arguments
+from konden.assistant.agents import AgentCreated, AgentRecord, fact_arguments
 from konden.assistant.assembly import build_assistant_assembly
+from konden.assistant.context.memory import (
+    PERSONAL_MEMORY,
+    SHARED_MEMORY,
+    MemoryContext,
+    memory_observations,
+)
+from konden.assistant.context.projection import ModelContextProjector
+from konden.assistant.personal_memory import (
+    READ_PERSONAL_MEMORY,
+    UPDATE_PERSONAL_MEMORY,
+    UpdatePersonalMemory,
+    personal_memory_bindings,
+    personal_memory_store,
+)
+from konden.assistant.shared_memory import (
+    READ_SHARED_MEMORY,
+    UPDATE_SHARED_MEMORY,
+    SharedMemoryStore,
+    UpdateSharedMemory,
+    shared_memory_bindings,
+)
 from konden.assistant.workspaces import directory_binding
 from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage
+from konden.paths import KondenHome
+from konden.runtime import AgentRuntime, DomainFactCommitted, StateProjector
+from tests.fixtures.artifacts import MemoryArtifactGateway
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.fixtures.workspaces import workspace_record
 from tests.session_scheduler import SettlingScheduler
 

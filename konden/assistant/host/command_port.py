@@ -2,9 +2,14 @@
 import asyncio
 from pathlib import Path
 
-from konden.execution.command import CapturedOutput, CommandResult, CommandStartError, ShellNotFoundError
-from konden.execution.processes import command_identity
 from konden.assistant.builtin_tools import current_command_id
+from konden.execution.command import (
+    CapturedOutput,
+    CommandResult,
+    CommandStartError,
+    ShellNotFoundError,
+)
+from konden.execution.processes import command_identity
 
 
 def execution_result(data: dict, *, background: bool = True, interrupted: bool = False) -> CommandResult:

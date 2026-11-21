@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import unittest
 from collections.abc import Awaitable, Callable
+import unittest
 
-from tests.fixtures.projection import project_chat_messages
 from konden.assistant.control import AssistantControlPlane
-from tests.fixtures.projection import decision_from_llm
 from konden.assistant.runner import SessionScheduler
-from konden.llm.api import InvalidLLMResponse, LLMProviderError
-from konden.llm.api import LLMResponse, ToolCall
+from konden.llm.api import InvalidLLMResponse, LLMProviderError, LLMResponse, ToolCall
 from konden.runtime import (
     AgentRuntime,
     CommandAuthorized,
@@ -19,11 +16,11 @@ from konden.runtime import (
     ToolBinding,
     UserMessageReceived,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.model import argument_rejection
 from konden.runtime.state import DecisionFrame, StateProjector
+from tests.fixtures.memory_journal import MemoryJournal
+from tests.fixtures.projection import decision_from_llm, project_chat_messages
 from tests.session_scheduler import SettlingScheduler
-
 
 DecisionScript = Callable[
     [DecisionFrame],
@@ -111,9 +108,11 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
             runtime, "session", control=AssistantControlPlane(())
         )
 
+        pending = []
+
         async def fail_then_wake(session_id, **kwargs):
             # Queue wake before asyncio schedules the task's completion callback.
-            asyncio.create_task(scheduler.wake(session_id))
+            pending.append(asyncio.create_task(scheduler.wake(session_id)))
             raise failure
 
         runtime.advance = fail_then_wake
@@ -122,6 +121,7 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
             observed = await asyncio.wait_for(scheduler.wait_failure(), timeout=1)
             self.assertIs(observed, failure)
             self.assertTrue(scheduler.idle)
+            await asyncio.gather(*pending, return_exceptions=True)
         finally:
             await scheduler.close()
 

@@ -2,15 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 from konden.assistant.context.projection import ModelContextProjector, outcome_text
-from tests.fixtures.artifacts import MemoryArtifactGateway
 from konden.assistant.control import AssistantControlPlane
 from konden.assistant.decision import with_command_interrupts
 from konden.assistant.runner import SessionScheduler
+from konden.execution.api import CommandEnvironment
+from konden.execution.command import CapturedOutput, CommandResult
+from konden.filesystem import FileAccess
+from konden.filesystem.workspace import (
+    FilesystemPermission,
+    PermissionBinding,
+    RootBinding,
+    WorkspaceScope,
+    WorkspaceViewSnapshot,
+)
 from konden.runtime import (
     AgentRuntime,
     CommandOutcomeReceived,
@@ -22,17 +31,6 @@ from konden.runtime import (
     StepContinuationCancelled,
     ToolBinding,
 )
-from tests.fixtures.memory_journal import MemoryJournal
-from konden.filesystem import FileAccess
-from konden.execution.api import CommandEnvironment
-from konden.execution.command import CapturedOutput, CommandResult
-from konden.filesystem.workspace import (
-    FilesystemPermission,
-    PermissionBinding,
-    RootBinding,
-    WorkspaceScope,
-    WorkspaceViewSnapshot,
-)
 from konden.tools.builtin.command_execution import (
     CommandInput,
     create_command_execution_spec,
@@ -42,6 +40,8 @@ from konden.tools.builtin.command_interrupts import (
     run_interruptible,
 )
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.artifacts import MemoryArtifactGateway
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.session_scheduler import SettlingScheduler
 
 

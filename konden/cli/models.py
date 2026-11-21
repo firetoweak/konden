@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import re
 from typing import Literal, cast
-
 
 _CLI_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
@@ -71,7 +70,7 @@ class CliSourceRef:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, object]) -> "CliSourceRef":
+    def from_dict(cls, value: dict[str, object]) -> CliSourceRef:
         _require_exact_keys(
             value,
             {"kind", "locator", "requested_version"},
@@ -113,7 +112,7 @@ class CliHealth:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, object]) -> "CliHealth":
+    def from_dict(cls, value: dict[str, object]) -> CliHealth:
         _require_exact_keys(
             value,
             {"help_ok", "version_ok", "help_mentions_json", "checked_at"},
@@ -178,7 +177,7 @@ class CliRecord:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, object]) -> "CliRecord":
+    def from_dict(cls, value: dict[str, object]) -> CliRecord:
         _require_exact_keys(
             value,
             {
@@ -221,14 +220,14 @@ class CliRecord:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _parse_datetime(value: object) -> datetime:
     if not isinstance(value, str) or not value:
         raise ValueError("datetime 必须是非空 ISO 8601 字符串")
     parsed = datetime.fromisoformat(value)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _require_aware_datetime(value: object, label: str) -> None:

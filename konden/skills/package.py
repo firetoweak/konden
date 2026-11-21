@@ -12,8 +12,8 @@ from konden.skills.models import (
     SkillFile,
     SkillPackageLimits,
     SkillSourceRef,
-    validate_skill_id,
     validate_skill_description,
+    validate_skill_id,
 )
 
 

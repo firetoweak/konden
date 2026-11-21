@@ -1,10 +1,10 @@
 """UTF-8 file operations on the caller's resolved file view."""
-from pathlib import Path
-from os.path import commonprefix
-from io import DEFAULT_BUFFER_SIZE
-import unicodedata
 import errno
+from io import DEFAULT_BUFFER_SIZE
+from os.path import commonprefix
+from pathlib import Path
 import stat
+import unicodedata
 
 from .lifecycle import settled
 

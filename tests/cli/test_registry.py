@@ -1,7 +1,7 @@
 import json
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 from konden.cli.models import CliHealth, CliRecord, CliSourceRef, utc_now
 from konden.cli.registry import CliRegistry

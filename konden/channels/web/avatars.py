@@ -6,7 +6,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from konden.assistant.attachments import AttachmentRejected, AttachmentStore, is_image_attachment_id
+from konden.assistant.attachments import (
+    AttachmentRejected,
+    AttachmentStore,
+    is_image_attachment_id,
+)
 from konden.config import write_json
 
 

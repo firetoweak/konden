@@ -10,17 +10,36 @@ from pydantic import ValidationError
 
 from konden.assistant.agent_messages import SEND_GROUP_MESSAGE
 from konden.assistant.agents import (
-    GROUP_ATTENTION, GROUP_CREATED, GROUP_MESSAGE, AgentCreated, GroupCreated, GroupMessage, Speaker, fact_arguments, identity_for_model, parse_agent_fact,
+    GROUP_ATTENTION,
+    GROUP_CREATED,
+    GROUP_MESSAGE,
+    AgentCreated,
+    GroupCreated,
+    GroupMessage,
+    Speaker,
+    fact_arguments,
+    identity_for_model,
+    parse_agent_fact,
 )
-from konden.assistant.host.agent_groups import AgentGroups, GroupDissolvedError, GroupNameTaken
+from konden.assistant.host.agent_groups import (
+    AgentGroups,
+    GroupDissolvedError,
+    GroupNameTaken,
+)
 from konden.assistant.host.agent_roster import AgentNotFound
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
 from konden.filesystem.registry import WorkspaceRegistry
 from konden.paths import KondenHome
-from konden.runtime import AgentRuntime, DomainFactCommitted, InvokeTool, ModelDecision, SqliteJournal, ToolBinding
+from konden.runtime import (
+    AgentRuntime,
+    DomainFactCommitted,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
+    ToolBinding,
+)
 from tests.assistant.test_runner import ScriptedDecisionMaker
-
 
 MEMBERS = ("Ada", "Lin", "Third")
 # A scripted speech quoting the message its speaker was last called to answer.
@@ -41,7 +60,7 @@ class AgentGroupsTest(unittest.IsolatedAsyncioTestCase):
         other.mkdir()
         self.workspace, self.other = registry.register_path(project), registry.register_path(other)
         self.host = HostSupervisor(self.store, None, self.home, None, llm=None, workspaces=registry)
-        for name, workspace in (*((name, self.workspace) for name in MEMBERS), ("Elsewhere", self.other)):
+        for name, _workspace in (*((name, self.workspace) for name in MEMBERS), ("Elsewhere", self.other)):
             await self.store.create(name, directory=project, initial_fact=fact_arguments(
                 AgentCreated(name=name, directory=str(project)), delivery_id="created"))
             # Each Agent has already introduced itself; later decisions answer group facts.
@@ -81,8 +100,8 @@ class AgentGroupsTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_existing_group_keeps_its_sidebar_entry_and_original_invitations_on_recovery(self):
         groups = self.host.agent_groups
-        invitation = dict(fact_type="bot.group_created", data={"group": "旧组", "members": ["Ada", "Lin"]},
-                          source="coding_bot", requests_decision=False)
+        invitation = {"fact_type": "bot.group_created", "data": {"group": "旧组", "members": ["Ada", "Lin"]},
+                          "source": "coding_bot", "requests_decision": False}
         await groups.store.create("old-group", initial_fact={**invitation, "delivery_id": "created"})
         for name in invitation["data"]["members"]:
             await AgentRuntime(self.journal(name), None, {}).receive_domain_fact(
@@ -560,8 +579,9 @@ class AgentGroupsTest(unittest.IsolatedAsyncioTestCase):
             if name == "Third":
                 await runtime.receive_user_message(name, "去群里说一声", delivery_id="human")
             commands[name] = (await runtime.advance(name)).step.commands[0].command_id
-        send = lambda name="Ada", **extra: self.host._route(SEND_GROUP_MESSAGE, name, {
-            "command_id": commands[name], "group": "开发组", "text": "好", "mention": [], "reply_to": None, **extra})
+        def send(name="Ada", **extra):
+            return self.host._route(SEND_GROUP_MESSAGE, name, {
+                    "command_id": commands[name], "group": "开发组", "text": "好", "mention": [], "reply_to": None, **extra})
         for extra, code in (({"group": "测试组"}, "GROUP_NOT_FOUND"), ({"mention": ["Ada"]}, "INVALID_MENTION"),
                             ({"mention": ["Third"]}, "INVALID_MENTION"), ({"reply_to": "missing"}, "INVALID_REPLY")):
             self.assertEqual((await send(**extra))["code"], code)

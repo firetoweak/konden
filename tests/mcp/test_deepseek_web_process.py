@@ -8,8 +8,7 @@ from konden.llm.config import initial_connections
 from konden.mcp.bundled import DEEPSEEK_SERVER_ID, OPENAI_SERVER_ID
 from konden.mcp.composition import build_mcp
 from konden.paths import KondenHome
-from konden.search import SearchSettings, SearchConfig
-
+from konden.search import SearchConfig, SearchSettings
 
 pytestmark = pytest.mark.process
 

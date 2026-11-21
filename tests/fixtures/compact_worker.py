@@ -9,7 +9,6 @@ from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
 from tests.fixtures.session_worker import is_subagent_request
 
-
 HANDOFF = """## 用户要什么
 用户要求讨论并保留 TAIL_KEEP。
 ## 目前做到哪里

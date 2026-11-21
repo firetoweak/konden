@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import codecs
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import hashlib
 import json
 import os
@@ -12,7 +12,12 @@ from pathlib import Path
 import sys
 from tempfile import NamedTemporaryFile
 
-from .command import BoundedTextCapture, CaptureLimit, CommandStartError, strip_terminal_control
+from .command import (
+    BoundedTextCapture,
+    CaptureLimit,
+    CommandStartError,
+    strip_terminal_control,
+)
 from .local.provider import create_host_command_runner
 
 
@@ -64,7 +69,7 @@ class OwnedCommand:
     monitor: asyncio.Task | None = None
 
     def status(self) -> dict:
-        ended = datetime.now(timezone.utc) if self.ended_at is None else datetime.fromisoformat(self.ended_at)
+        ended = datetime.now(UTC) if self.ended_at is None else datetime.fromisoformat(self.ended_at)
         return {"command_id": self.command_id, "pid": self.pid, "command": self.command, "cwd": self.cwd,
                 "started_at": self.started_at, "state": self.state, "exit_code": self.exit_code,
                 "duration_ms": round((ended - datetime.fromisoformat(self.started_at)).total_seconds() * 1000)}
@@ -102,7 +107,7 @@ class CommandManager:
             directory = self.root / command_id
             directory.mkdir(parents=True)
             entry = OwnedCommand(session_id, command_id, command, str(cwd),
-                                 datetime.now(timezone.utc).isoformat(), directory,
+                                 datetime.now(UTC).isoformat(), directory,
                                  finished=asyncio.get_running_loop().create_future())
             if command_id in self._interrupts:
                 for name in ("stdout", "stderr"):
@@ -150,7 +155,7 @@ class CommandManager:
         if entry.running is not None:
             await asyncio.to_thread(entry.running.close)
         entry.state, entry.exit_code = state, code
-        entry.ended_at = datetime.now(timezone.utc).isoformat()
+        entry.ended_at = datetime.now(UTC).isoformat()
         self._save_exit(entry)
         entry.finished.set_result(None)
 
@@ -168,7 +173,7 @@ class CommandManager:
                 temporary.unlink()
                 raise
         try:
-            os.replace(temporary, entry.log_dir / "exit.json")
+            temporary.replace(entry.log_dir / "exit.json")
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -208,7 +213,7 @@ class CommandManager:
                     or type(ended_at) is not str or datetime.fromisoformat(ended_at).tzinfo is None):
                     raise ValueError("invalid command exit result")
             else:
-                state, code, ended_at = "unknown", None, datetime.now(timezone.utc).isoformat()
+                state, code, ended_at = "unknown", None, datetime.now(UTC).isoformat()
             entry = OwnedCommand(session_id, identity, reference["command"], reference["cwd"],
                                  reference["started_at"], directory, pid=reference["pid"], state=state,
                                  exit_code=code, ended_at=ended_at, backgrounded=True)

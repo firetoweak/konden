@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from copy import deepcopy
 from contextlib import AsyncExitStack
+from copy import deepcopy
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -11,8 +11,8 @@ import secrets
 import time
 
 import tiktoken
-from konden.paths import runtime_data_root
 
+from konden.paths import runtime_data_root
 
 MANIFEST_SCHEMA = "decision-replay-manifest/v2"
 
@@ -142,8 +142,8 @@ def build_variants(
 
 async def run(args: argparse.Namespace) -> dict[str, object]:
     from konden.config import load_app_config
-    from thinllm import create_client
     from konden.llm.config import load_endpoint
+    from thinllm import create_client
 
     root = runtime_data_root()
     drawer = Path(args.drawer).resolve() if args.drawer else _default_drawer(root)

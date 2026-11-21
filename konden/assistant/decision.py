@@ -1,24 +1,34 @@
 from __future__ import annotations
 
-import json
-import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence, Set
 from copy import deepcopy
 from dataclasses import replace
+import json
+import logging
 from time import perf_counter
-from typing import AbstractSet, Protocol
+from typing import Protocol
 
-from konden.assistant.compact.core import (
-    CompactContext,
-    MODEL_USAGE,
-    FIND_HISTORY,
-    SUBMIT,
-)
 from konden.assistant.artifacts import ArtifactGateway
+from konden.assistant.clarification import (
+    CLARIFICATION_OPTIONS,
+    Question,
+    clarification_reply,
+)
+from konden.assistant.cli import CliToolAdapter
+from konden.assistant.compact.core import (
+    FIND_HISTORY,
+    MODEL_USAGE,
+    SUBMIT,
+    CompactContext,
+)
 from konden.assistant.content import READ_CONTENT
-from konden.assistant.clarification import CLARIFICATION_OPTIONS, Question, clarification_reply
-from konden.assistant.loop_guard import LoopGuard, NOTICE
-from konden.assistant.work_plan import WORK_PLAN_CONTEXT
+from konden.assistant.context.projection import (
+    MESSAGE_EXTENSIONS,
+    ModelContextProjector,
+    ModelContextSettings,
+    externalize_tool_result,
+)
+from konden.assistant.context.prompt import DEFAULT_ASSISTANT_PROMPT
 from konden.assistant.control import (
     CONTROL_REQUEST_METADATA,
     AssistantControlPlane,
@@ -29,35 +39,32 @@ from konden.assistant.delivery import (
     PreviewEmitter,
     ensure_deliver,
 )
-from konden.assistant.context.projection import (
-    MESSAGE_EXTENSIONS,
-    ModelContextProjector,
-    ModelContextSettings,
-    externalize_tool_result,
-)
-from konden.assistant.context.prompt import DEFAULT_ASSISTANT_PROMPT
-from konden.assistant.toolsets import ToolSurface
+from konden.assistant.loop_guard import NOTICE, LoopGuard
 from konden.assistant.management import ManagementSurface
-from konden.assistant.subagent.subagent import SubAgentHost
-from konden.runtime import (
-    InvokeTool,
-    ModelDecision,
-    RecordedDecision,
-    ToolBinding,
-)
-from konden.runtime.model import argument_rejection, rejected_tool_arguments
-from konden.runtime.model import AuthorizationPolicy
-from konden.runtime.dispatcher import AttemptContext
-from konden.tools.builtin import CommandInterrupts, run_interruptible
-from konden.runtime.state import DecisionFrame
-from konden.assistant.cli import CliToolAdapter
 from konden.assistant.skills import SkillToolAdapter
+from konden.assistant.subagent.subagent import SubAgentHost
+from konden.assistant.toolsets import ToolSurface
+from konden.assistant.work_plan import WORK_PLAN_CONTEXT
 from konden.llm.api import (
     InvalidLLMResponse,
     LLMApi,
     LLMResponse,
     ToolCall,
 )
+from konden.runtime import (
+    InvokeTool,
+    ModelDecision,
+    RecordedDecision,
+    ToolBinding,
+)
+from konden.runtime.dispatcher import AttemptContext
+from konden.runtime.model import (
+    AuthorizationPolicy,
+    argument_rejection,
+    rejected_tool_arguments,
+)
+from konden.runtime.state import DecisionFrame
+from konden.tools.builtin import CommandInterrupts, run_interruptible
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,8 +83,8 @@ class ToolRunner(Protocol):
 
 def _invoke_requests(
     calls: Sequence[ToolCall],
-    allowed_tool_names: AbstractSet[str],
-    exclusive_tool_names: AbstractSet[str] = frozenset(),
+    allowed_tool_names: Set[str],
+    exclusive_tool_names: Set[str] = frozenset(),
 ) -> tuple[InvokeTool, ...]:
     if len(calls) != 1 and any(call.name in exclusive_tool_names for call in calls):
         raise InvalidLLMResponse(
@@ -233,7 +240,7 @@ class JournalBackedLlmDecisionMaker:
         compact: CompactContext | None = None,
         loop_guard: LoopGuard,
         preview: PreviewEmitter,
-        exclusive_tool_names: AbstractSet[str] = frozenset(),
+        exclusive_tool_names: Set[str] = frozenset(),
         question_model: type[Question] = Question,
         explicit_messages: bool = False,
     ) -> None:
@@ -322,15 +329,14 @@ class JournalBackedLlmDecisionMaker:
             if override is not None:
                 # 子使用独立提示词；能力目录仍由自己的 Journal 提供。
                 prompt = override
-        prompt = f"{prompt}\n\n{self._environment}"
-        return prompt
+        return f"{prompt}\n\n{self._environment}"
 
     def _decision_from_response(
         self,
         frame: DecisionFrame,
         response: LLMResponse,
-        allowed_tool_names: AbstractSet[str],
-        control_names: AbstractSet[str],
+        allowed_tool_names: Set[str],
+        control_names: Set[str],
     ) -> ModelDecision:
         control_calls = tuple(
             call for call in response.calls if call.name in control_names

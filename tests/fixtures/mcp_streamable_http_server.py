@@ -4,7 +4,6 @@ import argparse
 
 from mcp.server import MCPServer
 
-
 server = MCPServer("konden-streamable-http-fixture", log_level="ERROR")
 
 

@@ -13,8 +13,8 @@ from konden.assistant.host.ipc import PipePeer
 from konden.assistant.inputs import InputConflict
 from konden.assistant.sessions import AssistantSessions
 from konden.runtime import InvokeTool, ModelDecision, SqliteJournal
-from tests.fixtures.memory_journal import MemoryJournal
 from tests.assistant.test_runner import ScriptedDecisionMaker
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.runtime.test_boundary_slice import RecordingTool, runtime_for
 
 

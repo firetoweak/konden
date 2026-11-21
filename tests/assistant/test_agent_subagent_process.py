@@ -8,11 +8,14 @@ import sys
 
 import pytest
 
-from konden.assistant.conversations import AssistantQueries
 from konden.assistant.commands import COMMAND_FINISHED
+from konden.assistant.conversations import AssistantQueries
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
-from konden.assistant.subagent.subagent import project_delegate_intents, project_reclaimed
+from konden.assistant.subagent.subagent import (
+    project_delegate_intents,
+    project_reclaimed,
+)
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
 from konden.paths import KondenHome
 from konden.runtime import StepCommitted

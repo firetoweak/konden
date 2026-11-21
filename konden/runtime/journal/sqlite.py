@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
+from dataclasses import replace
+from datetime import UTC, datetime
 import json
+from pathlib import Path
 import sqlite3
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import replace
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import TypeVar
 
 from konden.runtime.codec import (
@@ -32,8 +32,8 @@ from konden.runtime.events import (
     DomainFactCommitted,
     Event,
     EventDraft,
-    StepContinuationCancelled,
     StepCommitted,
+    StepContinuationCancelled,
     UserMessageReceived,
 )
 from konden.runtime.journal.api import (
@@ -47,7 +47,6 @@ from konden.runtime.journal.api import (
 from konden.runtime.model import (
     CanonicalState,
 )
-
 
 _T = TypeVar("_T")
 SCHEMA_VERSION = 7
@@ -208,7 +207,7 @@ class SqliteJournal:
                     started[payload.attempt_id] = event
                 elif isinstance(payload, (CommandOutcomeReceived, AttemptOrphaned)):
                     started.pop(payload.attempt_id, None)
-            occurred_at = datetime.now(timezone.utc)
+            occurred_at = datetime.now(UTC)
             for attempt_id, event in started.items():
                 self._append_tx(
                     connection,

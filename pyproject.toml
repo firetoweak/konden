@@ -1,0 +1,65 @@
+[tool.ruff]
+extend-exclude = ["konden-env", ".tools"]
+
+# 静态约束按成本分层：这里承载不需要人判断的那一层。
+# 只有代码表达不了、且重复出现的取舍才升格为配置豁免。
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9",       # 导入与语句层面的确定错误
+    "F",                    # 未定义名、未使用导入
+    "I",                    # 导入排序
+    "UP",                   # 已被标准库替代的旧语法
+    "B",                    # 可变默认值、循环闭包、异常链
+    "C4",                   # 多余的容器构造
+    "SIM",                  # 等价但更直接的写法
+    "RET",                  # 冗余 return
+    "PERF",                 # 明显低效的写法
+    "PTH",                  # pathlib 替代 os.path
+    "BLE",                  # 盲捕获
+    "DTZ",                  # 缺失时区的日期时间
+    "RUF",                  # ruff 维护的正确性问题
+    # bandit 只取凭据、反序列化与弱哈希。进程与路径类规则与本项目
+    # 有意跨越的执行边界冲突，不在此列。
+    "S105", "S106", "S107", "S108", "S301", "S302", "S307", "S324", "S506",
+]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # 中文标点按全角书写是有意的
+    "SIM117",                      # 合并嵌套 with 只改变排版
+    "UP040",                       # 保留 TypeAlias 的运行时取值，type 语句会惰性求值
+    "UP047",                       # 保留跨函数共用的 TypeVar，泛型函数的新语法会创建局部类型参数
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+
+# BLE001 在这里按模块登记。tests/architecture/test_exception_boundaries.py
+# 进一步检查每个吞下宽泛异常的函数，依据见 docs/架构/运行语义规约.md。
+[tool.ruff.lint.per-file-ignores]
+# 测试使用示例凭据、临时路径和夹具默认值。循环闭包在同一轮迭代内消费。
+"tests/**" = ["S105", "S106", "S107", "S108", "B008", "B023"]
+"konden/assistant/decision.py" = ["BLE001"]
+"konden/assistant/host/agent_projects.py" = ["BLE001"]
+"konden/assistant/host/agent_worktrees.py" = ["BLE001"]
+"konden/assistant/host/llm_port.py" = ["BLE001"]
+"konden/assistant/host/supervisor.py" = ["BLE001"]
+"konden/assistant/host/worker.py" = ["BLE001"]
+"konden/assistant/runner.py" = ["BLE001"]
+"konden/filesystem/lifecycle.py" = ["BLE001"]
+"konden/mcp/application.py" = ["BLE001"]
+"konden/mcp/client_manager.py" = ["BLE001"]
+"konden/skills/application.py" = ["BLE001"]
+"konden/skills/installer.py" = ["BLE001"]
+"konden/tools/builtin/command_interrupts.py" = ["BLE001"]
+"konden/tools/executor.py" = ["BLE001"]
+# 等待被取消的子任务时须完整传播异常组，suppress 会从组内移除匹配的子异常。
+"konden/assistant/compact/host.py" = ["SIM105"]
+"konden/channels/tui/console.py" = ["SIM105"]
+"konden/channels/web/app.py" = ["B008"]      # File(...) 是 FastAPI 的依赖声明
+"konden/execution/processes.py" = ["B008"]   # CaptureLimit 是不可变默认值
+# UP042 会改变已有枚举的 str() 和 f-string 输出。这些模块保留带类型名的表示。
+"konden/filesystem/workspace.py" = ["UP042"]
+"konden/runtime/model.py" = ["UP042"]
+"konden/mcp/models.py" = ["UP042", "S105"]    # QUERY_SECRET_KEY 是凭据的逻辑名
+"konden/runtime/events.py" = ["S105"]        # claim_token 默认值 "local" 是哨兵
+"konden/skills/package.py" = ["S506"]        # _UniqueKeyLoader 继承 SafeLoader
+"konden/filesystem/text.py" = ["RUF071"]     # 逐字节比较公共前缀是意图

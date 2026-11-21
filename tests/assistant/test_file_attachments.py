@@ -8,19 +8,19 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from konden.assistant.attachments import (
+    MAX_SOURCE_BYTES,
     AttachmentGateway,
     AttachmentRejected,
-    MAX_SOURCE_BYTES,
 )
 from konden.assistant.builtin_tools import build_builtin_tools
-from tests.fixtures.projection import project_chat_messages
 from konden.assistant.conversations import project_conversation
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.sessions import SessionView
-from konden.runtime import AgentRuntime, StateProjector
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.filesystem.registry import WorkspaceRecord
+from konden.runtime import AgentRuntime, StateProjector
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.memory_journal import MemoryJournal
+from tests.fixtures.projection import project_chat_messages
 
 
 def _save(store, data: bytes, name: str):

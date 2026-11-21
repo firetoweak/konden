@@ -74,8 +74,7 @@ class ResponsesClient(ChatCompletionsClient):
                 else:
                     content = [self._content_part(part, role) for part in content]
                 items.append({"role": role, "content": content})
-            for call in message.get("tool_calls", []):
-                items.append(self._function_call(call))
+            items.extend(self._function_call(call) for call in message.get("tool_calls", []))
         payload = {
             **self._request_options,
             "model": model.partition("/")[2], "instructions": "\n\n".join(instructions),

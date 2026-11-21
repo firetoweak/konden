@@ -13,8 +13,8 @@ from konden.runtime import (
     OutcomeStatus,
     ToolBinding,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.memory_journal import MemoryJournal
 
 
 class AttemptOutcomeRaceTest(unittest.IsolatedAsyncioTestCase):

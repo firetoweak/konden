@@ -1,7 +1,7 @@
 """测试用的投影与决策辅助：直接观察协议消息和工具调用请求。"""
 from __future__ import annotations
 
-from typing import AbstractSet
+from collections.abc import Set
 
 from konden.assistant.attachments import AttachmentStore
 from konden.assistant.context.projection import (
@@ -43,8 +43,8 @@ def parse_tool_result_meta(content: object) -> tuple[bool, str | None]:
 
 def decision_from_llm(
     response: LLMResponse,
-    allowed_tool_names: AbstractSet[str],
-    exclusive_tool_names: AbstractSet[str] = frozenset(),
+    allowed_tool_names: Set[str],
+    exclusive_tool_names: Set[str] = frozenset(),
 ) -> ModelDecision:
     return ModelDecision(
         content=response.content,

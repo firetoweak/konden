@@ -2,32 +2,31 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable
-import unittest
 from types import SimpleNamespace
+import unittest
 
+from konden.assistant.context.projection import ModelContextProjector
 from konden.assistant.control import AssistantControlPlane
 from konden.assistant.decision import JournalBackedLlmDecisionMaker
-from konden.assistant.context.projection import ModelContextProjector
 from konden.assistant.delivery import PreviewEmitter, ensure_deliver
 from konden.assistant.loop_guard import LoopGuard
-from tests.fixtures.artifacts import MemoryArtifactGateway
 from konden.assistant.subagent.subagent import (
+    CLOSED_FACT,
     DELEGATE,
     INSTRUCT,
     LIST_SUBAGENTS,
+    RECLAIM,
     REPLY_FACT,
     RETURN_FACT,
-    reply_arguments,
-    instruction_arguments,
-    instructed_result,
-    RECLAIM,
-    CLOSED_FACT,
     SubAgentHost,
+    closed_arguments,
+    instructed_result,
+    instruction_arguments,
     project_delegations,
     project_failed_delegations,
     project_pending,
     project_reclaimed,
-    closed_arguments,
+    reply_arguments,
     return_data,
 )
 from konden.runtime import (
@@ -40,10 +39,11 @@ from konden.runtime import (
     RuntimeStatus,
     ToolBinding,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.dispatcher import AttemptContext
 from konden.runtime.state import DecisionFrame
 from tests.assistant.test_runner import SequentialIds
+from tests.fixtures.artifacts import MemoryArtifactGateway
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.session_scheduler import SettlingScheduler
 
 
@@ -199,26 +199,27 @@ def local_transport(runtime, scheduler, host):
             await runtime.receive_domain_fact(session_id, **arguments)
             await scheduler.wake(session_id)
             return {"ok": True}
-        elif operation == "instruct_child":
+        if operation == "instruct_child":
             await runtime.receive_domain_fact(session_id, **instruction_arguments(arguments["parent_session_id"], arguments["command_id"], arguments["text"]))
             await scheduler.wake(session_id)
             return instructed_result(session_id)
-        elif operation == "child_message":
+        if operation == "child_message":
             parent = host._parents[session_id]
             await runtime.receive_domain_fact(parent, **reply_arguments(session_id, arguments["command_id"], arguments["text"]))
             await scheduler.wake(parent)
             return {"ok": True}
-        elif operation == "reclaim_child":
+        if operation == "reclaim_child":
             await host._reclaim(session_id, arguments["parent_session_id"], failure=None, reason=arguments.get("reason"))
-            return
-        elif operation == "fact":
+            return None
+        if operation == "fact":
             await runtime.receive_domain_fact(session_id, **arguments)
             await host.refresh_activity(session_id)
             if await host.note_returned(session_id):
-                return
+                return None
         elif operation != "resume":
             raise AssertionError(operation)
         await scheduler.wake(session_id)
+        return None
 
     return route
 
@@ -260,7 +261,7 @@ class SubAgentDelegationTest(unittest.IsolatedAsyncioTestCase):
         def child(frame):
             return frame.trigger_event.payload.data["child_session_id"]
 
-        host, model, runtime, router = self.build((
+        _host, _model, runtime, router = self.build((
             lambda _: ModelDecision(command_requests=(InvokeTool(DELEGATE, (("task", "分批交稿"),)),)),
             lambda f: ModelDecision(command_requests=(InvokeTool(INSTRUCT, (("child_session_id", child(f)), ("text", "补充第二批"))),)),
             lambda _: ModelDecision(content="第二批指令已发送"),
@@ -287,7 +288,7 @@ class SubAgentDelegationTest(unittest.IsolatedAsyncioTestCase):
             await router.close()
 
     async def test_reply_then_idle_is_open_and_survives_rehydrate(self):
-        host, model, runtime, router = self.build((
+        _host, model, runtime, router = self.build((
             lambda _: ModelDecision(command_requests=(InvokeTool(DELEGATE, (("task", "写第一批后等待"),)),)),
             lambda _: ModelDecision(content="收到，稍后继续"),
         ), (lambda _: ModelDecision(content="第一批正文，等你回复"),))

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from konden.mcp.client_manager import McpClientError, McpClientManager
 from konden.mcp.bundled import BUILTIN_SERVER_IDS
+from konden.mcp.client_manager import McpClientError, McpClientManager
 from konden.mcp.content import McpContentService
 from konden.mcp.errors import (
     McpConfigurationError,
@@ -215,7 +215,7 @@ class McpApplicationService:
                     raise BaseExceptionGroup(
                         "MCP Registry 写入失败且 Secret 回滚失败",
                         [registry_error, rollback_error],
-                    )
+                    ) from rollback_error
             raise
         await self.client_manager.invalidate(server_id)
         return stored

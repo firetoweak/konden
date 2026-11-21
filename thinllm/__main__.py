@@ -9,7 +9,12 @@ from urllib.parse import parse_qs, urlsplit
 
 from oauth_cli_kit import login_oauth_interactive
 
-from thinllm.auth import CodexTokenStorage, codex_auth_path, load_codex_auth, thinllm_auth_path
+from thinllm.auth import (
+    CodexTokenStorage,
+    codex_auth_path,
+    load_codex_auth,
+    thinllm_auth_path,
+)
 from thinllm.errors import LLMProviderError, LLMTransientError, MissingProviderSetting
 
 

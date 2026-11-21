@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import os
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 from konden.assistant.catalog import CatalogSkill
 from konden.assistant.context.projection import ModelContextSettings
@@ -139,7 +138,7 @@ class SkillToolAdapterTest(unittest.IsolatedAsyncioTestCase):
         linked = Path(self.temporary.name) / "linked"
         (linked / ".claude").mkdir(parents=True)
         try:
-            os.symlink(outside, linked / ".claude" / "skills", target_is_directory=True)
+            (linked / ".claude" / "skills").symlink_to(outside, target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest("current platform cannot create symlinks")
         linked_adapter = SkillToolAdapter(

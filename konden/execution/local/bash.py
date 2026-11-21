@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping, Sequence
 import os
-import shutil
 from pathlib import Path
-from typing import Mapping, Sequence
+import shutil
 
 from konden.execution.command import (
     CaptureLimit,
@@ -14,7 +14,6 @@ from konden.execution.command import (
 from konden.execution.local.child_env import (
     CHILD_ENV_OVERLAY,
 )
-
 
 DEFAULT_ENV_NAMES = (
     "HOME",

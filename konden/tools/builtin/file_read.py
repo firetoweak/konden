@@ -1,27 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
-from pathlib import Path
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 import shutil
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from konden.filesystem import FileAccess
-from konden.tools.results import environment_error
+from konden.filesystem import FileAccess, read_text
 from konden.filesystem.workspace import (
     EnvironmentInputError,
     InvalidEnvironmentPath,
     ResolvedEnvironmentPath,
     WorkspacePathResolver,
 )
-from konden.filesystem import read_text
-from konden.tools.results import file_error_message
+from konden.tools.results import environment_error, file_error_message
 from konden.tools.spec import PydanticParameters, ToolSpec
-
 
 RG_NOT_FOUND_HINT = "本机缺少 ripgrep，grep 暂不可用；已知路径时改用 read_file，并告诉用户需要安装 ripgrep。"
 FD_NOT_FOUND_HINT = "本机缺少 fd，glob 暂不可用；已知路径时改用 read_file，并告诉用户需要安装 fd。"
@@ -397,20 +394,16 @@ def create_file_read_specs(binding: FileAccess) -> list[ToolSpec]:
 
         async def stop_process() -> str:
             if proc.returncode is None:
-                try:
+                with contextlib.suppress(ProcessLookupError):
                     proc.terminate()
-                except ProcessLookupError:
-                    pass
                 try:
                     await asyncio.wait_for(
                         proc.wait(),
                         GREP_SHUTDOWN_TIMEOUT_SECONDS,
                     )
                 except TimeoutError:
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         proc.kill()
-                    except ProcessLookupError:
-                        pass
                     await proc.wait()
             return await stderr_task
 

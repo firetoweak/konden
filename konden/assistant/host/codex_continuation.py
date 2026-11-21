@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import os
 from pathlib import Path
 import shutil
@@ -13,7 +13,6 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from konden.config import write_json
-
 
 WAKE_MESSAGE = (
     "konden 有新消息。请通过 MCP 的 read_messages 读取当前聊天的新消息，"
@@ -74,7 +73,7 @@ def default_codex_executable() -> str:
 
 
 async def queue_codex(target: CodexTarget, message_id: str) -> QueueAttempt:
-    attempted_at = datetime.now(timezone.utc)
+    attempted_at = datetime.now(UTC)
     try:
         process = await asyncio.create_subprocess_exec(
             target.executable, "queue", "--thread", target.thread_id, "--message", WAKE_MESSAGE,
@@ -143,7 +142,7 @@ class CodexContinuations:
             if not retry and binding.attempt is not None and binding.attempt.message_id == message_id:
                 return False
             pending = binding.model_copy(update={"attempt": QueueAttempt(
-                message_id=message_id, attempted_at=datetime.now(timezone.utc), status="unknown",
+                message_id=message_id, attempted_at=datetime.now(UTC), status="unknown",
                 detail="正在提醒 Codex，尚未确认提示是否已入队。若长时间未确认，可检查原聊天或重试提醒。",
             )})
             saved.bindings[identity] = pending

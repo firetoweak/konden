@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import sys
 from functools import partial
+import json
 from pathlib import Path
+import sys
 
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor

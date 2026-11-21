@@ -11,8 +11,8 @@ from konden.assistant.attachments import (
     AttachmentRejected,
     is_valid_attachment_id,
 )
-from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
 from konden.assistant.clarification import ANSWER_SOURCE
+from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
 from konden.assistant.personal_memory import personal_memory_store
 from konden.automation.once import SOURCE as AUTOMATION_SOURCE

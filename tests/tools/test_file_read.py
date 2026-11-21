@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-import unittest
-from pathlib import Path
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -42,8 +42,7 @@ def _binding(root: Path) -> FileAccess:
 
 
 def _handlers(root: Path):
-    specs = {spec.name: spec for spec in create_file_read_specs(_binding(root))}
-    return specs
+    return {spec.name: spec for spec in create_file_read_specs(_binding(root))}
 
 
 class FileSearchContractTest(unittest.TestCase):
@@ -188,8 +187,7 @@ class FileSearchIgnoreTest(unittest.IsolatedAsyncioTestCase):
             ["git", "init"],
             cwd=self.root,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
         (self.root / ".gitignore").write_text("ignored/\n", encoding="utf-8")
         (self.root / "src").mkdir()

@@ -10,11 +10,16 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from konden.assistant.context.prompt import SUBAGENT_PROMPT
-from konden.assistant.delivery import DELIVER_TOOL_NAME, DeliverySink, deliver_binding, emit_delivery
+from konden.assistant.delivery import (
+    DELIVER_TOOL_NAME,
+    DeliverySink,
+    deliver_binding,
+    emit_delivery,
+)
 from konden.assistant.host.ipc import ProcessFailure
 from konden.runtime import (
     AgentRuntime,
@@ -28,14 +33,13 @@ from konden.runtime import (
     InvokeTool,
     LeaseLostError,
     OutcomeStatus,
-    StepCommitted,
     StateProjector,
+    StepCommitted,
     ToolBinding,
 )
 from konden.runtime.dispatcher import AttemptContext
 from konden.runtime.events import DeliveryIdentity, EventDraft
 from konden.runtime.journal.api import Journal
-
 
 DELEGATE = "delegate"
 RECLAIM = "reclaim"
@@ -161,33 +165,33 @@ def closed_arguments(
 ) -> dict[str, object]:
     """Only failures wake the parent; it already knows its own close decision."""
 
-    return dict(
-        fact_type=CLOSED_FACT,
-        data=dict(data),
-        delivery_id=f"{session_id}:closed",
-        source=FACT_SOURCE,
-        requests_decision=data["failure"] is not None,
-    )
+    return {
+        "fact_type": CLOSED_FACT,
+        "data": dict(data),
+        "delivery_id": f"{session_id}:closed",
+        "source": FACT_SOURCE,
+        "requests_decision": data["failure"] is not None,
+    }
 
 
 def instruction_arguments(parent_session_id: str, command_id: str, text: str) -> dict[str, object]:
-    return dict(
-        fact_type=INSTRUCTION_FACT,
-        data={"parent_session_id": parent_session_id, "text": text},
-        delivery_id=f"{command_id}:instruction",
-        source=FACT_SOURCE,
-        requests_decision=True,
-    )
+    return {
+        "fact_type": INSTRUCTION_FACT,
+        "data": {"parent_session_id": parent_session_id, "text": text},
+        "delivery_id": f"{command_id}:instruction",
+        "source": FACT_SOURCE,
+        "requests_decision": True,
+    }
 
 
 def reply_arguments(child_id: str, command_id: str, text: str) -> dict[str, object]:
-    return dict(
-        fact_type=REPLY_FACT,
-        data={"child_session_id": child_id, "text": text},
-        delivery_id=f"{child_id}:{command_id}:reply",
-        source=FACT_SOURCE,
-        requests_decision=True,
-    )
+    return {
+        "fact_type": REPLY_FACT,
+        "data": {"child_session_id": child_id, "text": text},
+        "delivery_id": f"{child_id}:{command_id}:reply",
+        "source": FACT_SOURCE,
+        "requests_decision": True,
+    }
 
 
 def instructed_result(child_id: str) -> dict[str, object]:
@@ -235,7 +239,7 @@ async def persist_return(
                 event_id=f"event_{uuid4().hex}",
                 session_id=session_id,
                 payload=DomainFactCommitted(RETURN_FACT, dict(data)),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 delivery=DeliveryIdentity(FACT_SOURCE, f"{session_id}:return"),
             )
         )

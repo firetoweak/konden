@@ -23,7 +23,6 @@ from konden.runtime.model import DecisionState
 from konden.tools.control import ControlOperation
 from konden.tools.spec import ToolArgumentsError, ToolSpec
 
-
 LOAD_MANAGEMENT_TOOLS = "load_management_tools"
 
 

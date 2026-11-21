@@ -10,8 +10,8 @@ from konden.assistant.attachments import AttachmentGateway
 from konden.assistant.host.codex_titles import ThreadSummary
 from konden.assistant.host.external_messages import ExternalMessages
 from konden.runtime import StateProjector
-from tests.fixtures.projection import project_chat_messages
 from tests.channels.test_collaboration import collaboration as collaboration
+from tests.fixtures.projection import project_chat_messages
 
 
 def png():
@@ -41,7 +41,8 @@ def test_web_shares_images_and_ordinary_files_with_scoped_mcp_read_and_download(
     assert c.user_inputs[0][2]["artifact_refs"] == (image, file)
     incoming = c.read()["messages"][0]
     assert incoming["attachments"] == message["attachments"]
-    read = lambda ref, **extra: c.call("read_attachment", {"message_id": message["message_id"], "attachment_id": ref}, **extra)
+    def read(ref, **extra):
+        return c.call("read_attachment", {"message_id": message["message_id"], "attachment_id": ref}, **extra)
     assert b64decode(read(image)["content"][1]["data"]) == png()
     ordinary = read(file)["structuredContent"]
     assert Path(ordinary["path"]).read_bytes() == data

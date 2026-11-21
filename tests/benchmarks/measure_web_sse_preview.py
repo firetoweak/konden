@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from itertools import pairwise
 import json
 import time
-from itertools import pairwise
 
 import uvicorn
 
@@ -146,7 +146,7 @@ async def _run_interval(
     await asyncio.sleep(0.05)
 
     await hub.preview("measure", "started", "output-1", None, "user")
-    for index in range(count):
+    for _index in range(count):
         text = "字"
         emits.append((time.perf_counter(), "preview.delta", len(text)))
         await hub.preview("measure", "delta", "output-1", text, "user")
@@ -247,17 +247,16 @@ async def main(argv: list[str] | None = None) -> None:
         if not server.started:
             raise RuntimeError("uvicorn did not start")
 
-        results = []
-        for interval in intervals:
-            results.append(
-                await _run_interval(
-                    hub,
-                    args.host,
-                    args.port,
-                    interval,
-                    args.count,
-                )
+        results = [
+            await _run_interval(
+                hub,
+                args.host,
+                args.port,
+                interval,
+                args.count,
             )
+            for interval in intervals
+        ]
         print(json.dumps({"results": results}, ensure_ascii=False, indent=2))
         print()
         print("interval  emit_gap  recv_gap  lag_p95  same_tick  max_read  clusters  max_cluster")

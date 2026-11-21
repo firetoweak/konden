@@ -9,14 +9,23 @@ from datetime import datetime
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from konden.assistant.agent_messages import (
-    MAX_GROUP_REPLIES, MAX_GROUP_ROUNDS,
+    MAX_GROUP_REPLIES,
+    MAX_GROUP_ROUNDS,
 )
 from konden.assistant.agents import (
-    GROUP_CREATED, GROUP_DISSOLVED, GROUP_MESSAGE, GroupAttention, GroupCreated, GroupDissolved, GroupMessage, Speaker,
-    fact_arguments, parse_agent_fact,
+    GROUP_CREATED,
+    GROUP_DISSOLVED,
+    GROUP_MESSAGE,
+    GroupAttention,
+    GroupCreated,
+    GroupDissolved,
+    GroupMessage,
+    Speaker,
+    fact_arguments,
+    parse_agent_fact,
 )
-from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
+from konden.assistant.host.session_store import SessionStore
 from konden.assistant.runner import SessionNotFoundError
 from konden.runtime import AgentRuntime, DomainFactCommitted
 from konden.runtime.json_values import thaw_value
@@ -132,11 +141,11 @@ class AgentGroups:
     async def _save(self, drive: _Drive, *, receipt: tuple[str, bool] | None = None) -> None:
         # One durable group fact accepts both the speech and its scheduling effects.
         # Public/member copies can then be completed using their original delivery id.
-        data = dict(replies=dict(drive.replies), pending=[(name, asdict(call)) for name, call in drive.pending.items()],
-                    batch=[(name, asdict(call)) for name, call in drive.batch.items()], active=drive.active,
-                    answering=[(name, asdict(call)) for (name, _), call in drive.answering.items()],
-                    outbox=[message.model_dump(mode="json", exclude_defaults=True) for message in drive.outbox.values()],
-                    receipt=None if receipt is None else list(receipt))
+        data = {"replies": dict(drive.replies), "pending": [(name, asdict(call)) for name, call in drive.pending.items()],
+                    "batch": [(name, asdict(call)) for name, call in drive.batch.items()], "active": drive.active,
+                    "answering": [(name, asdict(call)) for (name, _), call in drive.answering.items()],
+                    "outbox": [message.model_dump(mode="json", exclude_defaults=True) for message in drive.outbox.values()],
+                    "receipt": None if receipt is None else list(receipt)}
         await AgentRuntime(self._journal(drive.group.group_id), None, {}).receive_domain_fact(
             drive.group.group_id, _DRIVE, data, source="group", delivery_id=uuid4().hex)
 
@@ -280,8 +289,8 @@ class AgentGroups:
                         sessions[name] = (await self.host.agents.resolve(name)).session_id
                 created = created.model_copy(update={"member_sessions": sessions})
                 await self.store.create(group_id, initial_fact=fact_arguments(created, delivery_id="created"),
-                    additional_facts=(dict(fact_type=_FAVORITE, data={"favorite": favorite}, source="group",
-                                           delivery_id="initial", requests_decision=False),))
+                    additional_facts=({"fact_type": _FAVORITE, "data": {"favorite": favorite}, "source": "group",
+                                           "delivery_id": "initial", "requests_decision": False},))
             elif existing.group_id != group_id:
                 raise GroupNameTaken(f"已有群：{created.group}")
             elif existing.name != created.group or existing.members[1:] != created.members[1:]:

@@ -2,16 +2,21 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from thinllm.auth import CodexAuth, codex_auth_path
-from thinllm.errors import InvalidLLMResponse, LLMAuthenticationError, LLMProviderError, LLMTransientError
+from thinllm.errors import (
+    InvalidLLMResponse,
+    LLMAuthenticationError,
+    LLMProviderError,
+    LLMTransientError,
+)
 from thinllm.http_errors import describe_transport_error
-from thinllm.providers import PROVIDERS, resolve_endpoint
 from thinllm.model_metadata import openai_conversation_model, openai_metadata
+from thinllm.providers import PROVIDERS, resolve_endpoint
 
 # The catalog endpoint requires the Codex catalog protocol's client version.
 # https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/endpoint/models.rs
@@ -143,7 +148,7 @@ async def list_models(provider: str, connection: Mapping[str, str], *,
         raise InvalidLLMResponse("invalid_model_catalog", f"{provider} 模型目录格式不符合约定。") from error
     result = []
     for item in catalog.data:
-        if item.shutdown_date is not None and date.fromisoformat(item.shutdown_date) <= date.today():
+        if item.shutdown_date is not None and date.fromisoformat(item.shutdown_date) <= datetime.now().astimezone().date():
             continue
         if item.output_modalities is not None and "text" not in item.output_modalities:
             continue

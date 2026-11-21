@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from konden.assistant.attachments import AttachmentRejected, MAX_SOURCE_BYTES, is_file_attachment_id
-
+from konden.assistant.attachments import (
+    MAX_SOURCE_BYTES,
+    AttachmentRejected,
+    is_file_attachment_id,
+)
 
 IMAGE_MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                ".webp": "image/webp", ".gif": "image/gif"}

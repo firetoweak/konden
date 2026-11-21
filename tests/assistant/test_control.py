@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import json
 import asyncio
-import unittest
 from functools import partial
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+import unittest
 
-import pytest
 from pydantic import BaseModel, ConfigDict
+import pytest
 
-from tests.fixtures.artifacts import MemoryArtifactGateway, MemoryArtifactStore
 from konden.assistant.context.projection import ModelContextProjector
-from tests.fixtures.projection import project_chat_messages
 from konden.assistant.control import (
     CONTROL_APPROVED,
     CONTROL_CONCLUDED,
@@ -44,7 +42,6 @@ from konden.runtime import (
     RuntimeStatus,
     StepCommitted,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.json_values import thaw_value
 from konden.tools.control import (
     ControlApprovalExecution,
@@ -53,8 +50,10 @@ from konden.tools.control import (
     ControlPreparationFailure,
 )
 from konden.tools.spec import PydanticParameters, ToolSpec
+from tests.fixtures.artifacts import MemoryArtifactGateway, MemoryArtifactStore
+from tests.fixtures.memory_journal import MemoryJournal
+from tests.fixtures.projection import project_chat_messages
 from tests.session_scheduler import settle_session
-
 
 SESSION_ID = "control-session"
 PROPOSAL_NAME = "propose_test_control"
@@ -527,7 +526,7 @@ class ConversationalControlTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_approved_without_started_is_recovered_once(self):
         handler = ApprovalHandler()
-        journal, runtime, control, request = await _build_pending(handler=handler)
+        journal, runtime, _control, request = await _build_pending(handler=handler)
         await runtime.receive_domain_fact(
             SESSION_ID,
             CONTROL_APPROVED,

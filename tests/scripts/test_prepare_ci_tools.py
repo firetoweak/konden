@@ -30,6 +30,7 @@ def test_ci_release_download_is_installed_only_after_pinned_hash_verification(tm
         assert command[command.index("--pattern") + 1] == "tool.zip"
         destination = Path(command[command.index("--dir") + 1]) / "tool.zip"
         destination.write_bytes(data if valid else b"corrupt release")
+        return None
 
     def open_local(url, **kwargs):
         source = urlsplit(url)

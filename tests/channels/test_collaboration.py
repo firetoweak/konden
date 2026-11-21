@@ -1,22 +1,27 @@
 """External conversation behavior at the MCP and human Web boundaries."""
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import json
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
-import pytest
 from fastapi.testclient import TestClient
+import pytest
 
 from konden.assistant.agents import AgentCreated, fact_arguments
 from konden.assistant.attachments import AttachmentGateway
 from konden.assistant.conversations import project_conversation
-from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL, USER_SOURCE, SendToExternal
-from konden.assistant.external_messages import parse_external
-from konden.assistant.host.external_messages import ExternalMessages
+from konden.assistant.external_messages import (
+    LIST_EXTERNAL,
+    SEND_EXTERNAL,
+    USER_SOURCE,
+    SendToExternal,
+    parse_external,
+)
 from konden.assistant.host.codex_continuation import QueueAttempt
+from konden.assistant.host.external_messages import ExternalMessages
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
 from konden.assistant.sessions import session_view
@@ -28,8 +33,9 @@ from konden.runtime import AgentRuntime, SqliteJournal, UserMessageReceived, rep
 
 
 @pytest.fixture
-def collaboration(tmp_path):
-    home = KondenHome(tmp_path / "home")
+def collaboration(tmp_path, tmp_path_factory):
+    # Keep attachment paths within the Windows limit even for long test names.
+    home = KondenHome(tmp_path_factory.mktemp("home"))
     store = SessionStore(home.runtime_sessions_root)
     host = HostSupervisor(store, None, home, None, llm=None)
 
@@ -82,24 +88,24 @@ def collaboration(tmp_path):
 
             def send(**changes):
                 chat = changes.pop("identity", identity)
-                arguments = dict(recipient="协调员", text="你好，来讨论一下需求。", delivery_id="hello")
+                arguments = {"recipient": "协调员", "text": "你好，来讨论一下需求。", "delivery_id": "hello"}
                 arguments.update(changes)
                 return call("send_message", arguments, chat=chat)["structuredContent"]
 
             def reply(command="reply-1", session_id="coordinator", **changes):
-                arguments = dict(identity=identity, text="收到，我们可以继续讨论。", reply_to=None)
+                arguments = {"identity": identity, "text": "收到，我们可以继续讨论。", "reply_to": None}
                 arguments.update(changes)
                 parsed = SendToExternal(**arguments).model_dump()
                 return client.portal.call(host._route, SEND_EXTERNAL, session_id, {"command_id": command, **parsed})
 
             def read(chat_identity=identity, credential=token, **options):
-                arguments = dict(wait_seconds=0)
+                arguments = {"wait_seconds": 0}
                 arguments.update(options)
                 return call("read_messages", arguments, credential, chat=chat_identity)["structuredContent"]
 
             def post(**changes):
-                arguments = dict(connection_id=human.connection_id, bot_session_id="coordinator",
-                                 text="请在这里讨论这个问题。", target="bot", delivery_id="human-1")
+                arguments = {"connection_id": human.connection_id, "bot_session_id": "coordinator",
+                                 "text": "请在这里讨论这个问题。", "target": "bot", "delivery_id": "human-1"}
                 arguments.update(changes)
                 return client.post(f"/api/external-sessions/{identity}/messages", json=arguments)
 
@@ -453,7 +459,7 @@ def test_codex_binding_is_human_owned_and_scoped_to_one_chat(collaboration):
         assert binding.thread_id == str(UUID(c.identity))
         received = await c.service.read(c.connection, c.identity, 0, 50, 0)
         assert any(message["message_id"] == message_id for message in received["messages"])
-        return QueueAttempt(message_id=message_id, attempted_at=datetime.now(timezone.utc),
+        return QueueAttempt(message_id=message_id, attempted_at=datetime.now(UTC),
                             status="queued", detail="已入队，尚未确认处理。")
 
     with patch("konden.assistant.host.codex_continuation.queue_codex", side_effect=queued) as queue:
@@ -480,7 +486,7 @@ def test_codex_failure_preserves_messages_and_can_be_retried(collaboration):
         "executable": sys.executable}).raise_for_status()
 
     async def attempt(binding, message_id):
-        return QueueAttempt(message_id=message_id, attempted_at=datetime.now(timezone.utc),
+        return QueueAttempt(message_id=message_id, attempted_at=datetime.now(UTC),
                             status="failed", detail="Codex 没有运行")
 
     with patch("konden.assistant.host.codex_continuation.queue_codex", side_effect=attempt) as queue:
@@ -490,7 +496,7 @@ def test_codex_failure_preserves_messages_and_can_be_retried(collaboration):
         assert view["codex"]["status"] == "failed" and view["codex"]["detail"] == "Codex 没有运行"
         assert c.client.post(path + "/retry", json={"connection_id": "inactive"}).status_code == 409
         queue.side_effect = lambda binding, message_id: QueueAttempt(message_id=message_id,
-            attempted_at=datetime.now(timezone.utc), status="queued", detail="已入队")
+            attempted_at=datetime.now(UTC), status="queued", detail="已入队")
         retried = c.client.post(path + "/retry", json={"connection_id": c.human_connection})
         assert retried.status_code == 200 and retried.json()["codex"]["status"] == "queued"
         assert len(c.read()["messages"]) == 1
@@ -510,7 +516,7 @@ def test_slow_codex_does_not_block_reading_or_reenable_a_removed_binding(collabo
     async def queue(binding, message_id):
         entered.set()
         await release.wait()
-        return QueueAttempt(message_id=message_id, attempted_at=datetime.now(timezone.utc), status="queued", detail="已入队")
+        return QueueAttempt(message_id=message_id, attempted_at=datetime.now(UTC), status="queued", detail="已入队")
 
     with patch("konden.assistant.host.codex_continuation.queue_codex", side_effect=queue):
         sending = c.client.portal.start_task_soon(c.service.send_from_bot, "coordinator",

@@ -11,8 +11,8 @@ from uuid import uuid4
 from filelock import FileLock
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from konden.config import write_json
 from konden.assistant.attachments import is_valid_attachment_id
+from konden.config import write_json
 from konden.runtime import DomainFactCommitted
 from konden.runtime.json_values import thaw_value
 
@@ -202,8 +202,8 @@ EXTERNAL_ROUTES = {
 
 def external_direction(sender: str, target: str) -> str:
     return next(direction for direction, (source, recipients) in EXTERNAL_ROUTES.items()
-                if source == sender and (target == "both" and len(recipients) == 2
-                                         or target != "both" and recipients == (target,)))
+                if source == sender and ((target == "both" and len(recipients) == 2)
+                                         or (target != "both" and recipients == (target,))))
 
 
 class ExternalMessage(MessageInput, ExternalIdentity):

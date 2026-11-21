@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
+from konden.assistant.catalog import CapabilityCatalog
 from konden.assistant.control import CONTROL_SOURCE, AssistantControlPlane
 from konden.assistant.delivery import PreviewEmitter
 from konden.assistant.failures import assistant_failure_message
 from konden.assistant.management import ManagementSurface
 from konden.assistant.toolsets import ToolSurface
-from konden.assistant.catalog import CapabilityCatalog
 from konden.runtime import (
     AgentRuntime,
     CommandOutcome,
@@ -198,25 +198,24 @@ class SessionScheduler:
             return
         state = await self._runtime.state(session_id)
         pending = pending_authorization_ids(state)
-        if pending:
-            if self.authorization_required is not None:
-                by_id = {
-                    command_state.command.command_id: command_state
-                    for command_state in state.commands
-                }
-                for command_id in pending:
-                    command_state = by_id.get(command_id)
-                    if command_state is None:
-                        continue
-                    effect = command_state.command.effect
-                    observed = self.authorization_required(
-                        session_id,
-                        command_id,
-                        effect.name,
-                        effect.argument_dict(),
-                    )
-                    if isinstance(observed, Awaitable):
-                        await observed
+        if pending and self.authorization_required is not None:
+            by_id = {
+                command_state.command.command_id: command_state
+                for command_state in state.commands
+            }
+            for command_id in pending:
+                command_state = by_id.get(command_id)
+                if command_state is None:
+                    continue
+                effect = command_state.command.effect
+                observed = self.authorization_required(
+                    session_id,
+                    command_id,
+                    effect.name,
+                    effect.argument_dict(),
+                )
+                if isinstance(observed, Awaitable):
+                    await observed
         if self._on_quiesced is None:
             return
         observed = self._on_quiesced(session_id, state)

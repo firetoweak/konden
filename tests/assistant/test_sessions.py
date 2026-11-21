@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import unittest
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock
 
 from konden.assistant.context.projection import ModelContextSettings
@@ -10,7 +10,7 @@ from konden.assistant.delivery import DELIVER_TOOL_NAME, deliver_binding
 from konden.assistant.management import ManagementSurface
 from konden.assistant.runner import SessionNotFoundError
 from konden.assistant.sessions import AssistantSessions, SessionView
-from konden.assistant.subagent.subagent import DELEGATE, CLOSED_FACT, child_session_id
+from konden.assistant.subagent.subagent import CLOSED_FACT, DELEGATE, child_session_id
 from konden.assistant.toolsets import (
     LOAD_TOOLSET,
     ToolSurface,

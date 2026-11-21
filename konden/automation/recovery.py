@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from konden.automation.tool import (
     CANCEL_SCHEDULE,
@@ -62,7 +62,7 @@ async def recover_schedule_attempts(
                     attempt.attempt_id,
                     CommandOutcome(OutcomeStatus.SUCCEEDED, value=result),
                 ),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 causation_id=attempt.started_event_id,
             )
         )

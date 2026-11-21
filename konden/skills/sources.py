@@ -11,11 +11,11 @@ import zipfile
 
 import httpx
 
+from konden.skills.errors import SkillInputError
 from konden.skills.models import (
     SkillBundle,
     SkillSourceRef,
 )
-from konden.skills.errors import SkillInputError
 from konden.skills.package import (
     LocalSkillPackageReader,
     SkillPackageError,
@@ -174,7 +174,7 @@ class SkillSourceRouter:
                     if request_error is not None and close_error is not request_error:
                         raise BaseExceptionGroup(
                             "Skill 下载失败且关闭失败", [request_error, close_error]
-                        )
+                        ) from close_error
                     raise
         except httpx.HTTPError as exc:
             host = urlparse(url).hostname or "unknown host"

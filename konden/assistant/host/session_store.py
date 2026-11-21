@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
+from hashlib import sha256
 import json
 import os
-from datetime import datetime, timezone
-from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 
 from konden.assistant.runner import SessionNotFoundError
-from konden.assistant.workspaces import workspace_binding, directory_binding
+from konden.assistant.workspaces import directory_binding, workspace_binding
 from konden.runtime import CanonicalState, Event, SqliteJournal, StateProjector
 from konden.runtime.events import (
     DeliveryIdentity,
@@ -101,7 +101,7 @@ class SessionStore:
                     event_id=f"event_{uuid4().hex}",
                     session_id=session_id,
                     payload=directory_binding(directory) if directory is not None else workspace_binding(workspace_id),
-                    occurred_at=datetime.now(timezone.utc),
+                    occurred_at=datetime.now(UTC),
                     delivery=DeliveryIdentity("workspace", uuid4().hex),
                 )
             )
@@ -116,7 +116,7 @@ class SessionStore:
                         initial_fact["data"],
                         requests_decision=initial_fact["requests_decision"],
                     ),
-                    occurred_at=datetime.now(timezone.utc),
+                    occurred_at=datetime.now(UTC),
                     delivery=DeliveryIdentity(
                         initial_fact["source"], initial_fact["delivery_id"]
                     ),
@@ -126,7 +126,7 @@ class SessionStore:
             (staging / "agent-creation.json").write_text(json.dumps({"colleagues": agent_colleagues}), encoding="utf-8")
         for attempt in range(10):
             try:
-                os.rename(staging, path.parent)
+                staging.rename(path.parent)
                 return
             except PermissionError as error:
                 # Windows denies a directory rename while a reader holds a file

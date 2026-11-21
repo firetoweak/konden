@@ -11,7 +11,6 @@ from konden.paths import KondenHome
 from konden.skills.application import SkillApplicationService
 from konden.skills.models import SkillSourceRef
 
-
 SOURCE = SkillSourceRef(
     "github",
     "https://github.com/openai/skills/tree/main/skills/.curated/pdf",

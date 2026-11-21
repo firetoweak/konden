@@ -13,7 +13,6 @@ import tempfile
 from urllib.request import urlopen
 import zipfile
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -49,7 +48,7 @@ def supported_node() -> bool:
         return False
     version = subprocess.check_output([node, "--version"], text=True).strip()
     major, minor, _ = map(int, version.removeprefix("v").split("."))
-    return major == 24 or major == 22 and minor >= 13
+    return major == 24 or (major == 22 and minor >= 13)
 
 
 def install_package(root: Path, name: str, package: dict) -> None:
@@ -134,7 +133,7 @@ def prepare(root: Path, *, include_browser: bool = True) -> None:
         elif name == "node":
             ready = supported_node() and shutil.which("npm.cmd" if os.name == "nt" else "npm")
         else:
-            ready = shutil.which(name) or name == "fd" and shutil.which("fdfind")
+            ready = shutil.which(name) or (name == "fd" and shutil.which("fdfind"))
         if not ready:
             install_package(root, name, package)
             activate(root)

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
-from tests.session_scheduler import build_settling_assistant as build_stress_assistant
 from konden.config import assistant_config_from_app, load_app_config
-from thinllm import create_client
+from konden.filesystem.registry import WorkspaceRegistry
 from konden.llm.config import load_endpoint
 from konden.paths import KondenHome
-from konden.filesystem.registry import WorkspaceRegistry
 from konden.runtime import (
     CommandOutcomeReceived,
     InvokeTool,
@@ -19,7 +17,8 @@ from konden.runtime import (
     StepCommitted,
     UserMessageReceived,
 )
-
+from tests.session_scheduler import build_settling_assistant as build_stress_assistant
+from thinllm import create_client
 
 TASKS = (
     """
@@ -63,7 +62,7 @@ async def main() -> None:
         create_client(load_endpoint(app_config.default)),
     )
     delivered: list[str] = []
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     journal_path = workspace_root / ".runtime" / f"stress-{run_id}.sqlite"
     journal_path.parent.mkdir(parents=True, exist_ok=True)
     journal = SqliteJournal(journal_path)

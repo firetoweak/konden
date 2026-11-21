@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
+import os
 from pathlib import Path
-
 
 HOME_PATH_ENV = "KONDEN_HOME"
 
@@ -18,7 +17,7 @@ class KondenHome:
         object.__setattr__(self, "root", self.root.resolve())
 
     @classmethod
-    def default(cls) -> "KondenHome":
+    def default(cls) -> KondenHome:
         if HOME_PATH_ENV in os.environ:
             return cls(Path(os.environ[HOME_PATH_ENV]))
         return cls(Path.home() / ".konden")

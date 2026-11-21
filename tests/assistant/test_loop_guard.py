@@ -1,9 +1,9 @@
-import unittest
 from copy import deepcopy
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 from unittest.mock import AsyncMock, patch
 
 from konden.assistant.assembly import build_assistant_assembly
@@ -41,7 +41,7 @@ def event(sequence, names=("read",), notice=None):
     return Event(
         event_id=f"event-{sequence}", session_id="s", sequence=sequence,
         payload=StepCommitted(step, None if notice is None else {NOTICE: notice}),
-        occurred_at=datetime.now(timezone.utc), causation_id=None, correlation_id=None,
+        occurred_at=datetime.now(UTC), causation_id=None, correlation_id=None,
         schema_version=EVENT_SCHEMA_VERSION, artifact_refs=(),
     )
 
@@ -114,8 +114,8 @@ class LoopGuardTest(unittest.TestCase):
             with self.subTest(fact=kind):
                 trigger = replace(event(4), payload=DomainFactCommitted(kind, {}, requests_decision=True))
                 before = (event(1), event(2))
-                self.assertIsNone(LoopGuard().inspect(before + (trigger, event(5), event(6)), 6))
-                fresh = LoopGuard().inspect(before + (trigger, event(5), event(6), event(7)), 7)
+                self.assertIsNone(LoopGuard().inspect((*before, trigger, event(5), event(6)), 6))
+                fresh = LoopGuard().inspect((*before, trigger, event(5), event(6), event(7)), 7)
                 self.assertEqual(fresh["evidence"][0]["new_count"], 3)
 
     def test_multiple_hits_merge_and_old_text_is_replayed_verbatim(self):

@@ -10,7 +10,6 @@ from konden.mcp.client_manager import McpClientManager
 from konden.mcp.secrets import McpSecretStore
 from konden.paths import KondenHome
 
-
 pytestmark = pytest.mark.process
 
 

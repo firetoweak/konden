@@ -7,10 +7,10 @@
 
 from __future__ import annotations
 
-import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+import unittest
 from unittest.mock import patch
 
 from konden.assistant.assembly import build_assistant_assembly
@@ -19,7 +19,6 @@ from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage
 from konden.paths import KondenHome
 from tests.fixtures.memory_journal import MemoryJournal
 from tests.fixtures.workspaces import workspace_record
-
 
 TOOLS_WITH_DELIBERATE_TITLES: frozenset[str] = frozenset()
 """允许出现 `title` 的工具。

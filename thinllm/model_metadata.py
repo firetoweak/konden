@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 
-
 _LEVELS = ("low", "medium", "high", "xhigh", "max")
 _OPENAI = {
     "gpt-6.1-terra": (("none", *_LEVELS), "medium", 1_050_000),

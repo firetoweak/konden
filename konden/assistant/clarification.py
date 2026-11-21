@@ -1,22 +1,37 @@
 """A clarification is an assistant reply with optional choices, answered once in its session."""
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+import json
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+)
 
 from konden.automation.once import MAX_DELAY_SECONDS
 from konden.runtime import (
-    CommandOutcome, CommandOutcomeReceived, CommandPhase, Event, EventDraft, InvokeTool, ModelDecision,
-    OutcomeStatus, StepCommitted, UserMessageReceived, replay,
+    CommandOutcome,
+    CommandOutcomeReceived,
+    CommandPhase,
+    Event,
+    EventDraft,
+    InvokeTool,
+    ModelDecision,
+    OutcomeStatus,
+    StepCommitted,
+    UserMessageReceived,
+    replay,
 )
 from konden.runtime.dispatcher import ToolBinding
 from konden.runtime.model import argument_rejection, rejected_tool_arguments
-
 
 ASK_USER = "ask_user"
 CLARIFICATION_OPTIONS = "clarification_options"
@@ -148,7 +163,7 @@ async def recover_clarification_attempts(journal, session_id, transport):
             event_id=f"clarification-recovered:{item.command.command_id}", session_id=session_id,
             payload=CommandOutcomeReceived(item.command.command_id, attempt.attempt_id,
                                            CommandOutcome(OutcomeStatus.SUCCEEDED, value=result)),
-            occurred_at=datetime.now(timezone.utc), causation_id=attempt.started_event_id,
+            occurred_at=datetime.now(UTC), causation_id=attempt.started_event_id,
         ))
 
 

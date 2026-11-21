@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+import json
 from pathlib import Path
 
 from konden.assistant.tool_results import runtime_tool_result
@@ -11,8 +11,8 @@ from konden.execution.local.provider import create_local_command_environment
 from konden.filesystem import FileAccess
 from konden.filesystem.registry import WorkspaceRecord, workspace_view
 from konden.filesystem.workspace import (
-    FileWorkspace,
     FilesystemPermission,
+    FileWorkspace,
     PermissionBinding,
     RootBinding,
     WorkspaceScope,
@@ -22,9 +22,9 @@ from konden.runtime.model import AuthorizationPolicy, rejected_tool_arguments
 from konden.tools.builtin import (
     CommandInterrupts,
     command_result,
-    current_command_id,
     create_command_specs,
     create_workspace_tool_specs,
+    current_command_id,
 )
 from konden.tools.executor import ToolsExecutor
 from konden.tools.registry import BUILTIN_TOOL_REGISTRY
@@ -151,4 +151,4 @@ async def build_builtin_tools(
 
 
 
-__all__ = ["build_builtin_tools", "BuiltinToolRunner", "command_result", "current_command_id"]
+__all__ = ["BuiltinToolRunner", "build_builtin_tools", "command_result", "current_command_id"]

@@ -1,8 +1,8 @@
 import hashlib
 import io
 import os
-import platform
 from pathlib import Path
+import platform
 import shutil
 import zipfile
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field, replace
+import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Mapping, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import anyio
 
@@ -341,7 +342,7 @@ class _OwnedSdkSession:
 
     def __init__(
         self,
-        owner: "_SdkConnectionOwner",
+        owner: _SdkConnectionOwner,
         *,
         protocol_version: str,
         server_capabilities: Any,
@@ -443,7 +444,7 @@ class _SdkConnectionOwner:
                     raise BaseExceptionGroup(
                         "MCP owner 启动失败且清理又失败",
                         [start_error, owner_error],
-                    )
+                    ) from owner_error
             raise
 
     async def call(self, method: str, *args: Any, **kwargs: Any) -> Any:
@@ -568,7 +569,7 @@ class _SdkConnectionOwner:
                 if run_error is not None and close_error is not run_error:
                     raise BaseExceptionGroup(
                         "MCP owner 运行失败且关闭失败", [run_error, close_error]
-                    )
+                    ) from close_error
                 raise
 
     async def _open_facade(self, stack: AsyncExitStack) -> _SdkClientFacade:
@@ -663,7 +664,7 @@ class McpClientManager:
         self._lock = asyncio.Lock()
         self._closed = False
 
-    async def __aenter__(self) -> "McpClientManager":
+    async def __aenter__(self) -> McpClientManager:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-import unittest
 from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 from unittest.mock import patch
 
 from konden.assistant.assembly import build_assistant_assembly
 from konden.assistant.subagent.subagent import (
-    CLOSED_FACT, RETURN_FACT, DelegateIntent, child_session_id, task_fact_arguments,
+    CLOSED_FACT,
+    RETURN_FACT,
+    DelegateIntent,
+    child_session_id,
+    task_fact_arguments,
 )
 from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage

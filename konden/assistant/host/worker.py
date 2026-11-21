@@ -7,22 +7,25 @@ import os
 from pathlib import Path
 import threading
 
-from konden.automation.recovery import recover_schedule_attempts
-from konden.assistant.clarification import recover_clarification_attempts
-from konden.automation.routine_tool import recover_routine_attempts
 from konden.assistant.agent_git import identity as git_identity
 from konden.assistant.agent_messages import recover_message_attempts
-from konden.assistant.commands import recover_command_attempts
 from konden.assistant.assembly import build_assistant_assembly
+from konden.assistant.clarification import recover_clarification_attempts
+from konden.assistant.commands import recover_command_attempts
 from konden.assistant.host.ipc import PipePeer, ProcessFailure
 from konden.assistant.host.llm_port import WorkerLlmPort
 from konden.assistant.subagent.subagent import (
-    project_parent, project_task, record_interrupted_return, record_unexpected_return,
+    project_parent,
+    project_task,
+    record_interrupted_return,
+    record_unexpected_return,
 )
 from konden.assistant.workspaces import bound_workspace
+from konden.automation.recovery import recover_schedule_attempts
+from konden.automation.routine_tool import recover_routine_attempts
+from konden.filesystem.registry import WorkspaceRegistry
 from konden.paths import KondenHome
 from konden.runtime import SqliteJournal
-from konden.filesystem.registry import WorkspaceRegistry
 from konden.timing import install_timing_logging
 
 

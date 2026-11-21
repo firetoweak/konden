@@ -1,6 +1,6 @@
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 from konden.cli.application import CliApplicationService
 from konden.cli.management_tools import (

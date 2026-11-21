@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from konden.runtime import ToolBinding
 
-
 MEMORY_RULES = (
     "记忆只保留短小、常用的长期工作约束，包括用户对某类工作的明确长期要求。"
     "完整操作方法、技术知识、技能和文档应归档后按需检索。"

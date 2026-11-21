@@ -1,26 +1,43 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from konden.assistant.agent_messages import SEND_FILE
 from konden.assistant.agents import ROUTINES_UNWATCHED
+from konden.assistant.delivery import DELIVER_TOOL_NAME
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
-from konden.assistant.agent_messages import SEND_FILE
-from konden.assistant.delivery import DELIVER_TOOL_NAME
-from konden.automation.absence import ASK_GRACE, UNREAD_REPORTS, counts_since, next_absence_action
-from konden.automation.routines import ACTIVE, PAUSED_BY_USER, PAUSED_UNWATCHED, ROUTINE_DUE, RoutineStore
+from konden.automation.absence import (
+    ASK_GRACE,
+    UNREAD_REPORTS,
+    counts_since,
+    next_absence_action,
+)
+from konden.automation.routines import (
+    ACTIVE,
+    PAUSED_BY_USER,
+    PAUSED_UNWATCHED,
+    ROUTINE_DUE,
+    RoutineStore,
+)
 from konden.paths import KondenHome
-from konden.runtime import AgentRuntime, DomainFactCommitted, InvokeTool, ModelDecision, SqliteJournal, ToolBinding
+from konden.runtime import (
+    AgentRuntime,
+    DomainFactCommitted,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
+    ToolBinding,
+)
 from tests.assistant.test_runner import ScriptedDecisionMaker
 from tests.fixtures.memory_journal import MemoryJournal
 from tests.session_scheduler import settle_session
 
-
-NOW = datetime(2026, 10, 19, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 19, tzinfo=UTC)
 
 
 class AbsenceDecisionTest(unittest.TestCase):

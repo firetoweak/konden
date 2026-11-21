@@ -1,6 +1,6 @@
 import os
-import unittest
 from pathlib import Path
+import unittest
 from unittest.mock import patch
 
 from konden.paths import KondenHome

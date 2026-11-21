@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 from pathlib import PurePath
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from konden.tools.control import ControlApprovalExecution, ControlApprovalProposal
-from konden.tools.spec import PydanticParameters, ToolSpec
 from konden.mcp.application import McpApplicationService
 from konden.mcp.bundled import BUILTIN_SERVER_IDS
 from konden.mcp.errors import McpInputError, McpRecoveryPreconditionError
-
+from konden.tools.control import ControlApprovalExecution, ControlApprovalProposal
+from konden.tools.spec import PydanticParameters, ToolSpec
 
 MCP_INSTALL_ACTION = "mcp.install"
 MCP_RECOVER_ACTION = "mcp.recover"
@@ -60,7 +60,7 @@ class McpInstallProposalInput(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_transport(self) -> "McpInstallProposalInput":
+    def validate_transport(self) -> McpInstallProposalInput:
         if self.server_id in BUILTIN_SERVER_IDS:
             raise ValueError("此 ID 属于产品内置能力，请为外部 MCP 选择其他 ID。")
         if self.transport == "stdio":
@@ -144,7 +144,7 @@ class McpInstallProposalInput(BaseModel):
             if self.env:
                 lines.append(
                     "环境变量：" + json.dumps(
-                        {key: "***" for key in self.env},
+                        dict.fromkeys(self.env, "***"),
                         ensure_ascii=False,
                     )
                 )
@@ -153,7 +153,7 @@ class McpInstallProposalInput(BaseModel):
             if self.headers:
                 lines.append(
                     "请求头：" + json.dumps(
-                        {key: "***" for key in self.headers},
+                        dict.fromkeys(self.headers, "***"),
                         ensure_ascii=False,
                     )
                 )

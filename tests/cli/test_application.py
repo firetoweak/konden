@@ -1,7 +1,7 @@
 import os
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from konden.cli.application import CliApplicationService
@@ -167,7 +167,7 @@ class CliApplicationTest(unittest.IsolatedAsyncioTestCase):
                 expected_revision=record.revision,
             )
 
-        self.assertTrue(os.path.samefile(repaired.resolved_path, moved))
+        self.assertTrue(Path(repaired.resolved_path).samefile(moved))
         self.assertEqual(repaired.revision, 2)
 
     async def test_uninstall_removes_registration_only(self):
