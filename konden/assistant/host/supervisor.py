@@ -62,7 +62,12 @@ from konden.assistant.host.agent_worktrees import AgentWorktrees, GitWorktree
 from konden.assistant.host.auto_authorize import AutoAuthorizeStore
 from konden.assistant.host.commands import CommandHost
 from konden.assistant.host.external_messages import ExternalMessages
-from konden.assistant.host.ipc import PipePeer, ProcessFailure, WorkerFailed
+from konden.assistant.host.ipc import (
+    PipePeer,
+    ProcessFailure,
+    WorkerFailed,
+    finish_on_cancel,
+)
 from konden.assistant.host.llm_port import complete_llm_chat
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.spawn import start_worker
@@ -152,28 +157,6 @@ class Worker:
 async def _emit(emitted) -> None:
     if isawaitable(emitted):
         await emitted
-
-
-async def _settle(awaitable):
-    """Wait for Git work even when the caller is cancelled.
-
-    A cancelled request must not release Git ownership (a lock or a pending
-    identity fact) while the work it started is still running.
-    """
-    work = asyncio.ensure_future(awaitable)
-    try:
-        return await asyncio.shield(work)
-    except asyncio.CancelledError as cancelled:
-        try:
-            while not work.done():
-                try:
-                    await asyncio.shield(work)
-                except asyncio.CancelledError:
-                    continue
-            work.result()
-        except BaseException as error:
-            raise BaseExceptionGroup("Git work failed during cancellation", [cancelled, error]) from None
-        raise
 
 
 class HostSupervisor:
@@ -378,10 +361,10 @@ class HostSupervisor:
     async def link_project_by_user(self, session_id: str, *, workspace_id: str | None, path: str | None):
         """The person links from the Web; no approval because the person is the one acting."""
         project = self.agent_projects.resolve(workspace_id=workspace_id, path=path)
-        return await _settle(self.agent_projects.link(session_id, project, f"link:user:{uuid4().hex}"))
+        return await finish_on_cancel(self.agent_projects.link(session_id, project, f"link:user:{uuid4().hex}"))
 
     async def unlink_project_by_user(self, session_id: str, name: str):
-        return await _settle(self.agent_projects.unlink(session_id, name, f"unlink:user:{uuid4().hex}"))
+        return await finish_on_cancel(self.agent_projects.unlink(session_id, name, f"unlink:user:{uuid4().hex}"))
 
     async def _route(self, operation, session_id, arguments, *, worker=None):
         if operation == LIST_COLLEAGUES:
@@ -405,7 +388,7 @@ class HostSupervisor:
             return {"attachment": attachment}
         if operation in {"agent_land", "agent_sync", "agent_link", "agent_unlink"}:
             try:
-                return await _settle(self._project_operation(operation, session_id, arguments))
+                return await finish_on_cancel(self._project_operation(operation, session_id, arguments))
             except ProjectLinkRefused as refused:
                 return refused.result()
         if operation in {"command_execute", "command_query", "command_read", "command_stop", "command_list", "command_interrupt"}:
@@ -539,7 +522,7 @@ class HostSupervisor:
             self._track(session_id, activation)
             return {"ok": True}
         if operation == "reclaim_child":
-            await _settle(self._reclaim_child(session_id, arguments))
+            await finish_on_cancel(self._reclaim_child(session_id, arguments))
             return None
         if operation == "instruct_child":
             return await self._instruct_child(session_id, arguments)
@@ -1158,7 +1141,7 @@ class HostSupervisor:
             worker.transition.clear()
             await worker.peer.send(("stop", worker.idle_revision))
 
-    async def request(self, operation, session_id, arguments):
+    async def request(self, operation, session_id, arguments, *, settle_dispatched=False):
         assert not self.closed
         if await self.lifecycle.is_deleted(session_id):
             raise AgentDeletedError(session_id)
@@ -1191,7 +1174,12 @@ class HostSupervisor:
                         session_id,
                         {"enabled": self.auto_authorize()},
                     )
-            return await worker.peer.request(operation, session_id, arguments)
+            exchange = worker.peer.request(operation, session_id, arguments)
+            # Only the exchange can still commit the caller's resources. Waiting
+            # for a stopping Worker above must remain cancellable by its own peer.
+            if settle_dispatched:
+                return await finish_on_cancel(exchange)
+            return await exchange
         except (EOFError, ConnectionResetError, BrokenPipeError):
             # The lifecycle reader drains the Worker's original failure before exit.
             await worker.exited.wait()
@@ -1276,14 +1264,14 @@ class HostSupervisor:
                 if not entry.deleted and name in entry.names:
                     pending = self.store.require(entry.session_id).parent / "agent-creation.json"
                     if pending.exists() and entry.name == name:
-                        return await _settle(self._finish_agent_creation(entry))
+                        return await finish_on_cancel(self._finish_agent_creation(entry))
                     raise AgentNameTaken(f"已有 Agent：{name}")
             # A cancelled request must not leave a worktree without its identity fact.
             if path is not None:
                 project = self.agent_projects.resolve(path=path)
             identity = AgentCreated(name=name, directory=str(directory),
                                     reused_name=any(name in entry.names for entry in entries))
-            return await _settle(self._create_agent(project, session_id, identity))
+            return await finish_on_cancel(self._create_agent(project, session_id, identity))
 
     async def _create_agent(self, project, session_id, identity) -> AgentRecord:
         colleagues = tuple(entry.session_id for entry in await self.agents.list())
@@ -1332,7 +1320,7 @@ class HostSupervisor:
 
     async def rename_agent(self, session_id: str, name: str) -> AgentRecord:
         async with self._agent_creation_lock:
-            return await _settle(self._rename_agent(session_id, name))
+            return await finish_on_cancel(self._rename_agent(session_id, name))
 
     async def _rename_agent(self, session_id: str, name: str) -> AgentRecord:
         agent = await self.agents.by_session(session_id)
@@ -1371,10 +1359,10 @@ class HostSupervisor:
 
     async def delete_agent(self, session_id: str) -> None:
         async with self._agent_creation_lock:
-            await _settle(self.lifecycle.delete(session_id))
+            await finish_on_cancel(self.lifecycle.delete(session_id))
 
     async def dissolve_group(self, group_id: str) -> None:
-        await _settle(self.agent_groups.dissolve(group_id))
+        await finish_on_cancel(self.agent_groups.dissolve(group_id))
 
     async def select(self, owner, session_id):
         async with self.selection_locks.setdefault(owner, asyncio.Lock()):

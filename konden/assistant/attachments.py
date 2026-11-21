@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from dataclasses import dataclass
 from hashlib import sha256
 from io import BytesIO
@@ -118,6 +119,39 @@ def _admit(data: bytes, declared_mime: str) -> tuple[bytes, str, tuple[int, int]
         return buffer.getvalue(), mime, size, source_size
 
 
+def _pin_image(path: Path) -> Path:
+    # The Worker can read a committed fact before the Host receives its reply.
+    # Give every reader the stable name, even during that window.
+    if not path.is_file():
+        try:
+            path.with_suffix(".snapshot").rename(path)
+        except FileNotFoundError:
+            pass
+        except (FileExistsError, PermissionError):
+            if not path.is_file():
+                raise
+    return path
+
+
+class AttachmentSnapshot:
+    """Files owned by one external send while its message is being accepted."""
+
+    def __init__(self):
+        self._rollback = ExitStack()
+        self._images: list[Path] = []
+
+    def discard(self) -> None:
+        self._rollback.close()
+
+    def publish(self) -> None:
+        self._rollback.pop_all()
+        for image in self._images:
+            target = _pin_image(image.with_suffix(""))
+            if not target.is_file():
+                raise FileNotFoundError(target)
+            image.unlink(missing_ok=True)
+
+
 class AttachmentStore:
     """单个 Session 的附件抽屉。"""
 
@@ -127,9 +161,9 @@ class AttachmentStore:
             self._root / "files", self._root.parent / ".materials",
         )
 
-    def save_file_stream(self, stream, name: str) -> FileAttachment:
+    def save_file_stream(self, stream, name: str, *, snapshot: AttachmentSnapshot | None = None) -> FileAttachment:
         try:
-            return self.files.save_stream(stream, name)
+            return self.files.save_stream(stream, name, rollback=snapshot._rollback if snapshot is not None else None)
         except InvalidAttachmentName as error:
             raise AttachmentRejected(str(error)) from error
 
@@ -148,15 +182,28 @@ class AttachmentStore:
                 else str(error)
             ) from error
 
-    def save_image(self, data: bytes, declared_mime: str) -> AttachmentRef:
+    def save_image(self, data: bytes, declared_mime: str, *, snapshot: AttachmentSnapshot | None = None) -> AttachmentRef:
         stored, mime, size, source_size = _admit(data, declared_mime)
         digest = sha256(stored).hexdigest()
         path = self._root / digest
-        if not path.is_file():
+        # A share can discard only its private name. Another writer of the same
+        # digest always acquires the durable name before returning its reference.
+        target = _pin_image(path) if snapshot is None else path.with_suffix(".snapshot")
+        if not path.is_file() and not target.is_file():
             self._root.mkdir(parents=True, exist_ok=True)
             staging = self._root / f".staging-{uuid4().hex}"
-            staging.write_bytes(stored)
-            staging.replace(path)
+            try:
+                staging.write_bytes(stored)
+                staging.replace(target)
+                if snapshot is not None:
+                    snapshot._rollback.callback(target.unlink, missing_ok=True)
+                    snapshot._images.append(target)
+            except BaseException as error:
+                try:
+                    staging.unlink(missing_ok=True)
+                except OSError as cleanup_error:
+                    raise BaseExceptionGroup("image write and cleanup failed", [error, cleanup_error]) from None
+                raise
         return AttachmentRef(
             f"{_ATTACHMENT_ID_PREFIX}{digest}",
             mime,
@@ -171,7 +218,7 @@ class AttachmentStore:
             return self.files.source(attachment_id)
         if not is_valid_attachment_id(attachment_id):
             raise ValueError("attachment id 格式无效")
-        return self._root / attachment_id[len(_ATTACHMENT_ID_PREFIX) :]
+        return _pin_image(self._root / attachment_id[len(_ATTACHMENT_ID_PREFIX) :])
 
     def owns(self, attachment_id: str) -> bool:
         """只检查本会话登记，不检查挂入的外部路径是否仍存在。"""
