@@ -9,10 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from konden.assistant.workspaces import bound_directory
 from konden.runtime import (
-    AttemptOrphaned, CommandOutcomeReceived, CommandRejected, DomainFactCommitted, replay,
+    AttemptOrphaned,
+    CommandOutcomeReceived,
+    CommandRejected,
+    DomainFactCommitted,
+    replay,
 )
 from konden.runtime.json_values import thaw_value
-
 
 AGENT_CREATED = "bot.agent_created"
 AGENT_RENAMED = "bot.agent_renamed"
@@ -220,8 +223,8 @@ def fact_arguments(fact: _Fact, *, delivery_id: str) -> dict:
         if type(fact) is model
     )
     # Existing group invitations must retain their original payload on redelivery.
-    return dict(fact_type=kind, data=fact.model_dump(exclude_defaults=True), source=SOURCE,
-                delivery_id=delivery_id, requests_decision=requests_decision)
+    return {"fact_type": kind, "data": fact.model_dump(exclude_defaults=True), "source": SOURCE,
+                "delivery_id": delivery_id, "requests_decision": requests_decision}
 
 
 def parse_agent_fact(payload: DomainFactCommitted) -> _Fact:

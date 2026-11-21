@@ -8,7 +8,6 @@ from contextvars import ContextVar
 
 from konden.tools.builtin.command_execution import COMMAND_INTERRUPTED
 
-
 _current: ContextVar[asyncio.Event | None] = ContextVar(
     "command_interrupt",
     default=None,

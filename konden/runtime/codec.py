@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
-from konden.runtime.json_values import thaw_value
 from hashlib import sha256
+import json
 
 from konden.runtime.events import (
     AttemptOrphaned,
@@ -10,14 +9,15 @@ from konden.runtime.events import (
     CommandOutcomeReceived,
     CommandRejected,
     DecisionCancelled,
-    DomainFactCommitted,
     DispatchAttemptStarted,
+    DomainFactCommitted,
     EventDraft,
     EventPayload,
-    StepContinuationCancelled,
     StepCommitted,
+    StepContinuationCancelled,
     UserMessageReceived,
 )
+from konden.runtime.json_values import thaw_value
 from konden.runtime.model import (
     AttemptPhase,
     AttemptState,
@@ -33,7 +33,6 @@ from konden.runtime.model import (
     Step,
     StepState,
 )
-
 
 EVENT_SCHEMA_VERSION = 6
 DELIVERY_FINGERPRINT_VERSION = 3

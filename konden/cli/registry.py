@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
-from konden.file_lock import exclusive
 from konden.cli.models import CliRecord, utc_now
+from konden.file_lock import exclusive
 
 
 class CliRegistry:
@@ -119,4 +118,4 @@ class CliRegistry:
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        os.replace(temporary, self._path)
+        temporary.replace(self._path)

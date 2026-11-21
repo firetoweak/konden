@@ -12,17 +12,36 @@ import unittest
 
 from konden.assistant.agents import AgentCreated, fact_arguments
 from konden.assistant.context.memory import (
-    MemoryContext, PERSONAL_MEMORY, SHARED_MEMORY, memory_observations,
+    PERSONAL_MEMORY,
+    SHARED_MEMORY,
+    MemoryContext,
+    memory_observations,
 )
-from konden.assistant.memory_review import MemoryReview, REVIEW_FACT
+from konden.assistant.memory_review import REVIEW_FACT, MemoryReview
 from konden.assistant.personal_memory import (
-    PersonalMemoryStore, UPDATE_PERSONAL_MEMORY, personal_memory_bindings,
+    UPDATE_PERSONAL_MEMORY,
+    PersonalMemoryStore,
+    personal_memory_bindings,
 )
 from konden.assistant.shared_memory import (
-    SharedMemoryStore, UPDATE_SHARED_MEMORY, UpdateSharedMemory, shared_memory_bindings,
+    UPDATE_SHARED_MEMORY,
+    SharedMemoryStore,
+    UpdateSharedMemory,
+    shared_memory_bindings,
 )
-from konden.llm.api import LLMCallResult, LLMProviderError, LLMResponse, LLMUsage, ToolCall
-from konden.runtime import AgentRuntime, DomainFactCommitted, ModelDecision, RuntimeStatus
+from konden.llm.api import (
+    LLMCallResult,
+    LLMProviderError,
+    LLMResponse,
+    LLMUsage,
+    ToolCall,
+)
+from konden.runtime import (
+    AgentRuntime,
+    DomainFactCommitted,
+    ModelDecision,
+    RuntimeStatus,
+)
 from konden.runtime.json_values import thaw_value
 from tests.fixtures.artifacts import MemoryArtifactGateway
 from tests.fixtures.memory_journal import MemoryJournal

@@ -75,7 +75,7 @@ class RootBinding:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, str]) -> "RootBinding":
+    def from_dict(cls, value: dict[str, str]) -> RootBinding:
         if set(value) != {"root_id", "scope", "path"} or any(
             type(value[field]) is not str
             for field in ("root_id", "scope", "path")
@@ -129,7 +129,7 @@ class WorkspaceViewSnapshot:
     def from_dict(
         cls,
         value: dict[str, list[dict[str, str]]],
-    ) -> "WorkspaceViewSnapshot":
+    ) -> WorkspaceViewSnapshot:
         if set(value) != {"roots"} or not isinstance(value["roots"], list):
             raise ValueError("Workspace View 格式无效")
         if any(not isinstance(root, dict) for root in value["roots"]):
@@ -163,7 +163,7 @@ class PermissionBinding:
     def read_write(
         cls,
         view: WorkspaceViewSnapshot,
-    ) -> "PermissionBinding":
+    ) -> PermissionBinding:
         return cls(tuple(
             (root.root_id, FilesystemPermission.READ_WRITE)
             for root in view.roots
@@ -191,7 +191,7 @@ class EnvironmentLocation:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, str]) -> "EnvironmentLocation":
+    def from_dict(cls, value: dict[str, str]) -> EnvironmentLocation:
         if set(value) != {"environment_id", "path"} or any(
             type(value[field]) is not str
             for field in ("environment_id", "path")

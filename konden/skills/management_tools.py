@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from konden.tools.spec import PydanticParameters, ToolSpec
 from konden.skills.application import SkillApplicationService
 from konden.skills.errors import SkillInputError, SkillNotFoundError
-
+from konden.tools.spec import PydanticParameters, ToolSpec
 
 LIST_INSTALLED_SKILLS = "list_installed_skills"
 TEST_INSTALLED_SKILL = "test_installed_skill"

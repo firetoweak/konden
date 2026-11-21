@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import uuid4
 
@@ -140,7 +140,7 @@ class StepRunner:
                 event_id=self._id_factory("event"),
                 session_id=frame.trigger_event.session_id,
                 payload=StepCommitted(step, decision_metadata),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 causation_id=frame.trigger_event.event_id,
                 artifact_refs=artifact_refs,
             ),

@@ -7,17 +7,28 @@ import pytest
 from konden.assistant.agents import AgentCreated, fact_arguments
 from konden.assistant.assembly import build_assistant_assembly
 from konden.assistant.clarification import (
-    ANSWER_SOURCE, ASK_USER, CLARIFICATION_OPTIONS, TimedQuestion, clarification_binding,
-    clarification_reply, recover_clarification_attempts,
+    ANSWER_SOURCE,
+    ASK_USER,
+    CLARIFICATION_OPTIONS,
+    TimedQuestion,
+    clarification_binding,
+    clarification_reply,
+    recover_clarification_attempts,
 )
 from konden.assistant.conversations import project_conversation
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.inputs import InputConflict
+from konden.automation.once import OneShotSchedules
 from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
 from konden.paths import KondenHome
-from konden.automation.once import OneShotSchedules
-from konden.runtime import AgentRuntime, CommandOutcomeReceived, InvokeTool, ModelDecision, SqliteJournal
+from konden.runtime import (
+    AgentRuntime,
+    CommandOutcomeReceived,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
+)
 from konden.runtime.step import RecordedDecision
 from tests.assistant.test_runner import ScriptedDecisionMaker
 from tests.fixtures.workspaces import workspace_record

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from mcp.server import MCPServer
-
 
 server = MCPServer("konden-test-server")
 counter = 0
@@ -26,7 +26,7 @@ def increment_counter() -> dict[str, int]:
 @server.tool()
 def read_working_directory() -> dict[str, str]:
     """返回 MCP Server 进程的当前工作目录。"""
-    return {"cwd": os.getcwd()}
+    return {"cwd": str(Path.cwd())}
 
 
 if __name__ == "__main__":

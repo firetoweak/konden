@@ -7,12 +7,17 @@ import json
 from pathlib import Path
 import re
 
-from konden.assistant.agents import AgentRecord, ProjectLinked, ProjectUnlinked, fact_arguments, project_agent
+from konden.assistant.agents import (
+    AgentRecord,
+    ProjectLinked,
+    ProjectUnlinked,
+    fact_arguments,
+    project_agent,
+)
 from konden.assistant.host.agent_worktrees import AgentProjectRequired, GitWorktree
-from konden.filesystem.registry import WorkspaceRecord, WorkspaceRegistryError
-from konden.runtime import DomainFactCommitted, SqliteJournal
-from konden.runtime import AgentRuntime
 from konden.config import write_json
+from konden.filesystem.registry import WorkspaceRecord, WorkspaceRegistryError
+from konden.runtime import AgentRuntime, DomainFactCommitted, SqliteJournal
 
 _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -126,7 +131,7 @@ class AgentProjects:
                     raise RuntimeError("unaccepted project link could not be removed without losing changes")
                 pending.unlink()
                 continue
-            elif operation["kind"] == "link":
+            if operation["kind"] == "link":
                 await asyncio.to_thread(self.host.agent_worktrees.link, project, session_id, Path(linked.worktree))
                 fact = linked
             elif operation["kind"] == "unlink":
@@ -160,7 +165,7 @@ class AgentProjects:
             pending = self._pending(session_id)
             if pending.exists():
                 raise RuntimeError("project operation requires recovery")
-            write_json(pending, dict(kind="link", linked=linked.model_dump(), delivery_id=delivery_id))
+            write_json(pending, {'kind': "link", 'linked': linked.model_dump(), 'delivery_id': delivery_id})
             try:
                 async with self._landing.setdefault(project.workspace_id, asyncio.Lock()):
                     linked = await asyncio.to_thread(self.prepare, agent.directory, session_id, project, agent.projects,
@@ -179,7 +184,7 @@ class AgentProjects:
                                      and event.delivery.source == arguments["source"]
                                      and event.delivery.delivery_id == delivery_id), None)
                     if accepted is None:
-                        write_json(pending, dict(kind="rollback_link", linked=linked.model_dump(), delivery_id=delivery_id))
+                        write_json(pending, {'kind': "rollback_link", 'linked': linked.model_dump(), 'delivery_id': delivery_id})
                         await asyncio.to_thread(self.host.agent_worktrees.remove, project,
                                                 GitWorktree(Path(linked.worktree), linked.branch))
                     else:
@@ -207,7 +212,7 @@ class AgentProjects:
             pending = self._pending(session_id)
             if pending.exists():
                 raise RuntimeError("project operation requires recovery")
-            write_json(pending, dict(kind="unlink", linked=linked.model_dump(), delivery_id=delivery_id))
+            write_json(pending, {'kind': "unlink", 'linked': linked.model_dump(), 'delivery_id': delivery_id})
             async with self._landing.setdefault(linked.workspace_id, asyncio.Lock()):
                 blocked = await asyncio.to_thread(self.host.agent_worktrees.unlink, project, linked)
             if blocked is not None:

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 
 from konden.assistant.conversations import AssistantQueries
 from konden.assistant.host.session_store import SessionStore
@@ -12,6 +12,7 @@ from konden.assistant.workspaces import (
     bound_workspace,
     bound_workspace_id,
 )
+from konden.filesystem.registry import WorkspaceRegistry
 from konden.runtime import (
     DeliveryIdentity,
     DomainFactCommitted,
@@ -19,7 +20,6 @@ from konden.runtime import (
     SqliteJournal,
     UserMessageReceived,
 )
-from konden.filesystem.registry import WorkspaceRegistry
 
 
 async def _append_user_message(store, session_id: str, text: str) -> None:
@@ -28,7 +28,7 @@ async def _append_user_message(store, session_id: str, text: str) -> None:
             event_id=f"user-{text}",
             session_id=session_id,
             payload=UserMessageReceived(text),
-            occurred_at=datetime(2026, 9, 18, tzinfo=timezone.utc),
+            occurred_at=datetime(2026, 9, 18, tzinfo=UTC),
             delivery=DeliveryIdentity("web", f"delivery-{text}"),
         )
     )

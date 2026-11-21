@@ -1,8 +1,8 @@
 import json
 import os
-import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 from unittest.mock import patch
 
 from konden.config import INITIAL_CONFIG, load_app_config

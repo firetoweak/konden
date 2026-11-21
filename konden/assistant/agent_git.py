@@ -15,7 +15,6 @@ from typing import Literal, NoReturn
 
 from konden.config import write_json
 
-
 AUTHOR_EMAIL = "bot@konden.local"
 
 
@@ -87,8 +86,8 @@ class Git:
         if self.merging(root):
             return MergeResult("in_progress", self.oid(root, "HEAD"))
         pending = self._merge_path(root)
-        write_json(pending, dict(head=self.oid(root, "HEAD"), source=source, author=author,
-                                 message=message, keep_conflict=keep_conflict))
+        write_json(pending, {"head": self.oid(root, "HEAD"), "source": source, "author": author,
+                                 "message": message, "keep_conflict": keep_conflict})
         result = self._merge(root, source, author=author, message=message, keep_conflict=keep_conflict)
         pending.unlink()
         return result
@@ -174,7 +173,7 @@ class Git:
         fork = self.run(root, "merge-base", base, version).stdout.decode("ascii").strip()
         fields = self.run(root, "diff", "--no-renames", "--name-status", "-z", fork, version, "--"
                           ).stdout.decode("utf-8").split("\0")[:-1]
-        result = {"files": [dict(status=fields[i], path=fields[i + 1]) for i in range(0, len(fields), 2)]}
+        result = {"files": [{"status": fields[i], "path": fields[i + 1]} for i in range(0, len(fields), 2)]}
         if paths:
             patch = self.run(root, "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
                              fork, version, "--", *paths).stdout.decode("utf-8", errors="replace")

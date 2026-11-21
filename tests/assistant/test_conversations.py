@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import unittest
 from unittest.mock import AsyncMock, patch
-from datetime import datetime, timezone
 
+from konden.assistant.compact.core import MODEL_USAGE, WINDOW
 from konden.assistant.conversations import (
     UNKNOWN_TOOL_ERROR,
     project_conversation,
 )
-from konden.assistant.work_plan import UPDATE_PLAN, project_work_plan_updates
-from konden.assistant.compact.core import MODEL_USAGE, WINDOW
 from konden.assistant.sessions import SessionView
+from konden.assistant.work_plan import UPDATE_PLAN, project_work_plan_updates
 from konden.runtime import (
     Command,
     CommandOutcome,
@@ -35,7 +35,7 @@ def event(sequence, event_id, payload, causation_id=None, artifact_refs=()):
         session_id="session-1",
         sequence=sequence,
         payload=payload,
-        occurred_at=datetime(2026, 9, 15, sequence, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 9, 15, sequence, tzinfo=UTC),
         causation_id=causation_id,
         correlation_id=None,
         schema_version=6,
@@ -246,24 +246,7 @@ class ConversationProjectionTest(unittest.TestCase):
         self.assertEqual(queued.items[0].tools[0].status, "queued")
         self.assertIsNone(queued.items[0].tools[0].error)
 
-        ran = events + (
-            event(
-                2,
-                "attempt-1",
-                DispatchAttemptStarted("att-1", "cmd-search"),
-                causation_id="step-1",
-            ),
-            event(
-                3,
-                "out-1",
-                CommandOutcomeReceived(
-                    "cmd-search",
-                    "att-1",
-                    CommandOutcome(OutcomeStatus.FAILED, error_message="boom"),
-                ),
-                causation_id="attempt-1",
-            ),
-        )
+        ran = (*events, event(2, "attempt-1", DispatchAttemptStarted("att-1", "cmd-search"), causation_id="step-1"), event(3, "out-1", CommandOutcomeReceived("cmd-search", "att-1", CommandOutcome(OutcomeStatus.FAILED, error_message="boom")), causation_id="attempt-1"))
         failed = project_conversation(
             "session-1", ran, timeline(ran), session=view
         )
@@ -369,9 +352,7 @@ class ConversationProjectionTest(unittest.TestCase):
         self.assertEqual(waiting.items[0].tools[0].status, "awaiting_authorization")
         self.assertEqual(waiting.items[0].tools[0].arguments, {"path": "a.md", "content": "x"})
 
-        turned_down = events + (
-            event(2, "reject-1", CommandRejected("cmd-write"), causation_id="step-1"),
-        )
+        turned_down = (*events, event(2, "reject-1", CommandRejected("cmd-write"), causation_id="step-1"))
         rejected = project_conversation(
             "session-1",
             turned_down,
@@ -432,13 +413,22 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
         from konden.assistant.agents import AGENT_CREATED
         from konden.assistant.compact.core import MODEL_USAGE
         from konden.assistant.control import (
-            CONTROL_PROPOSED, CONTROL_REQUEST_METADATA, CONTROL_SOURCE,
+            CONTROL_PROPOSED,
+            CONTROL_REQUEST_METADATA,
+            CONTROL_SOURCE,
         )
         from konden.assistant.conversations import AssistantQueries
         from konden.assistant.host.session_store import SessionStore
         from konden.runtime import (
-            Command, DomainFactCommitted, InvokeTool, ModelDecision, SqliteJournal,
-            StateProjector, Step, StepClaimRequest, StepCommitted,
+            Command,
+            DomainFactCommitted,
+            InvokeTool,
+            ModelDecision,
+            SqliteJournal,
+            StateProjector,
+            Step,
+            StepClaimRequest,
+            StepCommitted,
         )
         from konden.runtime.events import DeliveryIdentity, EventDraft
 
@@ -448,7 +438,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                     event_id=f"wake-{session_id}",
                     session_id=session_id,
                     payload=payload,
-                    occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+                    occurred_at=datetime(2026, 9, 16, tzinfo=UTC),
                     delivery=DeliveryIdentity(source, f"wake-{session_id}"),
                 )
             )
@@ -492,7 +482,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                             },
                         },
                     ),
-                    occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+                    occurred_at=datetime(2026, 9, 16, tzinfo=UTC),
                     causation_id=frame.trigger_event.event_id,
                 ),
             )
@@ -512,7 +502,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                             "risk": "high",
                         },
                     ),
-                    occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+                    occurred_at=datetime(2026, 9, 16, tzinfo=UTC),
                     delivery=DeliveryIdentity(CONTROL_SOURCE, f"{request_id}:proposed"),
                 )
             )
@@ -619,10 +609,18 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
         from tempfile import TemporaryDirectory
 
         from konden.assistant.agent_messages import LIMIT_NOTICE
-        from konden.assistant.agents import AGENT_CREATED, CommunicationLimitReached, fact_arguments
+        from konden.assistant.agents import (
+            AGENT_CREATED,
+            CommunicationLimitReached,
+            fact_arguments,
+        )
         from konden.assistant.conversations import AssistantQueries
         from konden.assistant.host.session_store import SessionStore
-        from konden.runtime import DomainFactCommitted, SqliteJournal, UserMessageReceived
+        from konden.runtime import (
+            DomainFactCommitted,
+            SqliteJournal,
+            UserMessageReceived,
+        )
         from konden.runtime.events import DeliveryIdentity, EventDraft
 
         with TemporaryDirectory() as directory:
@@ -635,7 +633,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                     payload=DomainFactCommitted(
                         AGENT_CREATED, {"name": name, "directory": str(Path(directory).resolve())},
                         requests_decision=True),
-                    occurred_at=datetime(2026, 10, 19, tzinfo=timezone.utc),
+                    occurred_at=datetime(2026, 10, 19, tzinfo=UTC),
                     delivery=DeliveryIdentity("coding_bot", f"created-{session_id}"),
                 ))
             journal = SqliteJournal(store.require("limited"))
@@ -645,13 +643,13 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                     **{key: fact_arguments(
                         CommunicationLimitReached(recipient="Lin", text=LIMIT_NOTICE), delivery_id="limit-1",
                     )[key] for key in ("fact_type", "data", "requests_decision")}),
-                occurred_at=datetime(2026, 10, 19, 1, tzinfo=timezone.utc),
+                occurred_at=datetime(2026, 10, 19, 1, tzinfo=UTC),
                 delivery=DeliveryIdentity("coding_bot", "limit-1"),
             ))
             await SqliteJournal(store.require("pending")).accept_delivery(EventDraft(
                 event_id="user-pending", session_id="pending",
                 payload=UserMessageReceived("还有事"),
-                occurred_at=datetime(2026, 10, 19, 1, tzinfo=timezone.utc),
+                occurred_at=datetime(2026, 10, 19, 1, tzinfo=UTC),
                 delivery=DeliveryIdentity("web", "user-pending"),
             ))
             inbox = await queries.list_inbox()
@@ -705,7 +703,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                     event_id="user-1",
                     session_id="spoken",
                     payload=UserMessageReceived("删掉它"),
-                    occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+                    occurred_at=datetime(2026, 9, 16, tzinfo=UTC),
                     delivery=DeliveryIdentity("web", "d1"),
                 )
             )
@@ -750,7 +748,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                                           "output_tokens": 10, "cached_input_tokens": 1000},
                         },
                     ),
-                    occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+                    occurred_at=datetime(2026, 9, 16, tzinfo=UTC),
                     causation_id=frame.trigger_event.event_id,
                 ),
             )
@@ -768,7 +766,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                             "risk": "high",
                         },
                     ),
-                    occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+                    occurred_at=datetime(2026, 9, 16, tzinfo=UTC),
                     delivery=DeliveryIdentity(CONTROL_SOURCE, "req-1:proposed"),
                 )
             )

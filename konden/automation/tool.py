@@ -6,7 +6,6 @@ from konden.automation.once import MAX_DELAY_SECONDS
 from konden.runtime import ToolBinding
 from konden.runtime.dispatcher import AttemptContext
 
-
 SCHEDULE_ONCE = "schedule_once"
 CANCEL_SCHEDULE = "cancel_schedule"
 

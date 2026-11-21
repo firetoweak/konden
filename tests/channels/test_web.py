@@ -1,57 +1,67 @@
 from __future__ import annotations
 
-from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
-from konden.assistant.personal_memory import personal_memory_store, UpdatePersonalMemory
-
 import asyncio
-import json
-import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from io import BytesIO
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from urllib.parse import unquote
+import unittest
 from unittest.mock import AsyncMock, patch
+from urllib.parse import unquote
 
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from konden.assistant.agents import AgentCreated, AgentRecord, GroupCreated
 from konden.assistant.attachments import AttachmentGateway
-from konden.assistant.authorization import AuthorizationConflict, AuthorizationTargetNotFound
-from konden.assistant.host.ipc import ProcessFailure, WorkerFailed
-from konden.assistant.host.supervisor import HostSupervisor
-from konden.automation.routines import RoutineClock, RoutineStore
-from konden.assistant.agents import AgentCreated, AgentRecord
+from konden.assistant.authorization import (
+    AuthorizationConflict,
+    AuthorizationTargetNotFound,
+)
 from konden.assistant.conversations import (
     AgentProjectView,
     AgentRosterEntry,
     AuthorizationInboxItem,
-    ConversationView,
     ControlInboxItem,
+    ConversationView,
     UserItem,
     project_agent_status,
 )
-from konden.assistant.host.agent_groups import GroupNameTaken, GroupNotFound, GroupRecord
-from konden.assistant.agents import GroupCreated
-from konden.assistant.host.agent_roster import AgentNameTaken, AgentNotFound
+from konden.assistant.host.agent_groups import (
+    GroupNameTaken,
+    GroupNotFound,
+    GroupRecord,
+)
 from konden.assistant.host.agent_projects import ProjectLinkRefused
-from konden.assistant.runner import SessionNotFoundError
-from konden.model_settings import ModelSettings
-from konden.config import write_json
-from konden.llm.api import LLMAuthenticationError, LLMCallResult, LLMResponse, LLMUsage, LLMTransientError
-from konden.paths import KondenHome
+from konden.assistant.host.agent_roster import AgentNameTaken, AgentNotFound
+from konden.assistant.host.ipc import ProcessFailure, WorkerFailed
+from konden.assistant.host.supervisor import HostSupervisor
 from konden.assistant.inputs import InputConflict
+from konden.assistant.personal_memory import UpdatePersonalMemory, personal_memory_store
+from konden.assistant.runner import SessionNotFoundError
 from konden.assistant.sessions import SessionView
+from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
+from konden.automation.routines import RoutineClock, RoutineStore
 from konden.channels.web import app as web_app
 from konden.channels.web.app import create_web_app, report_worker_failures
-from konden.channels.web.channel import WebChannel
 from konden.channels.web.avatars import AvatarStore
+from konden.channels.web.channel import WebChannel
 from konden.channels.web.directory_picker import DirectoryPickerUnavailable
 from konden.channels.web.hub import WebEventHub
+from konden.config import write_json
 from konden.filesystem.registry import WorkspaceRegistry
-
+from konden.llm.api import (
+    LLMAuthenticationError,
+    LLMCallResult,
+    LLMResponse,
+    LLMTransientError,
+    LLMUsage,
+)
+from konden.model_settings import ModelSettings
+from konden.paths import KondenHome
 
 MODEL_CONFIG = {"model": {"default": "deepseek/test-model", "candidates": [
     {"model": "deepseek/test-model", "compact_threshold_tokens": 64000},
@@ -260,7 +270,7 @@ class _Queries:
                 "user",
                 f"user-{index}",
                 text,
-                datetime(2026, 9, 15, tzinfo=timezone.utc),
+                datetime(2026, 9, 15, tzinfo=UTC),
             )
             for index, (item_session, text) in enumerate(self.accepted)
             if item_session == session_id
@@ -901,7 +911,7 @@ class WebFirstSliceTest(unittest.TestCase):
         self.sessions.dissolve_group.assert_awaited_once_with("team")
 
     def test_group_endpoints_check_human_input_and_map_known_failures(self):
-        activity = datetime.now(timezone.utc)
+        activity = datetime.now(UTC)
         record = GroupRecord("group-1", GroupCreated(group="开发组", members=["Ada", "Lin"]), {"Ada": "a", "Lin": "b"}, activity, False)
 
         async def create(*, name, members, favorite):
@@ -934,9 +944,10 @@ class WebFirstSliceTest(unittest.TestCase):
         self.assertEqual(self.client.post("/api/groups", json={
             **create_body, "members": ["Ada", "Nobody"]}).status_code, 404)
 
-        post = lambda group_id="group-1", **body: self.client.post(
-            f"/api/groups/{group_id}/messages", json={"connection_id": connection, "text": "大家好",
-                                                       "delivery_id": "human-message", **body})
+        def post(group_id="group-1", **body):
+            return self.client.post(
+                    f"/api/groups/{group_id}/messages", json={"connection_id": connection, "text": "大家好",
+                                                               "delivery_id": "human-message", **body})
         self.assertEqual(post(mention=["Lin"]).status_code, 200)
         groups.post.assert_awaited_once_with("group-1", "大家好", ["Lin"], delivery_id="human-message")
         self.assertEqual(post(mention=["Elsewhere"]).status_code, 422)
@@ -963,10 +974,10 @@ class WebFirstSliceTest(unittest.TestCase):
         routine_id = saved["data"]["routine_id"]
         with patch("konden.automation.routines.datetime") as frozen:
             frozen.fromisoformat = datetime.fromisoformat
-            frozen.now.return_value = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
+            frozen.now.return_value = datetime(2026, 10, 20, 10, 0, tzinfo=UTC)
             first = clock.store.fire(clock.store.list("session-old")[0])
             clock.store.delivered(first.fire_id)
-            frozen.now.return_value = datetime(2026, 10, 20, 10, 10, tzinfo=timezone.utc)
+            frozen.now.return_value = datetime(2026, 10, 20, 10, 10, tzinfo=UTC)
             second = clock.store.fire(clock.store.list("session-old")[0])
 
         async def record():
@@ -982,7 +993,7 @@ class WebFirstSliceTest(unittest.TestCase):
                     "planned_at": first.planned_at.isoformat(),
                     "fired_at": first.fired_at.isoformat(),
                 }, True),
-                occurred_at=datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc),
+                occurred_at=datetime(2026, 10, 20, 10, 0, tzinfo=UTC),
                 delivery=DeliveryIdentity(AUTOMATION_SOURCE, first.fire_id),
             ))
             return store
@@ -1015,8 +1026,9 @@ class WebFirstSliceTest(unittest.TestCase):
         routine_id = host.routines.store.save("cmd-routine", "session-old", routine_id=None, name="检查 PR",
                                               intent="看看有没有新评审。", schedule="@every 10m")["data"]["routine_id"]
         url = f"/api/sessions/session-old/routines/{routine_id}/state"
-        put = lambda state, connection_id=self.connection.connection_id: self.client.put(
-            url, json={"connection_id": connection_id, "state": state})
+        def put(state, connection_id=self.connection.connection_id):
+            return self.client.put(
+                    url, json={"connection_id": connection_id, "state": state})
 
         listed, = self.client.get("/api/sessions/session-old/routines").json()
         self.assertEqual((listed["name"], listed["schedule"], listed["state"]), ("检查 PR", "@every 10m", "active"))
@@ -1078,8 +1090,8 @@ class WebFirstSliceTest(unittest.TestCase):
 
     def test_roster_status_uses_existing_worker_and_wait_facts(self):
         def status(**overrides):
-            facts = dict(activity="idle", pending_authorization=False,
-                         control_approval=False, waiting_for=(), last_error=None)
+            facts = {"activity": "idle", "pending_authorization": False,
+                         "control_approval": False, "waiting_for": (), "last_error": None}
             facts.update(overrides)
             return project_agent_status(**facts)
 

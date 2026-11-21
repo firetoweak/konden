@@ -1,46 +1,61 @@
 from __future__ import annotations
+
 from bisect import bisect_right
-
-from konden.assistant.external_messages import EXTERNAL_MESSAGE, USER_SOURCE, parse_external
-from konden.assistant.context.memory import MEMORY_FACTS, memory_message
-
-from konden.runtime.json_values import thaw_value
-
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime
 import json
 
-from konden.assistant.content import READ_CONTENT, CONTENT_HINT
-from konden.assistant.clarification import ANSWER_SOURCE, DEADLINE_REACHED, clarification_options, question_text, questions_by_id
-from konden.automation.routines import ROUTINE_DUE
-from konden.automation.once import TIME_REACHED
-from konden.assistant.commands import COMMAND_FINISHED
 from konden.assistant.agents import (
-    AGENT_CREATED, AGENT_FACT_TYPES, GROUP_MESSAGE, PRIVATE_MESSAGE, agent_fact_for_model,
+    AGENT_CREATED,
+    AGENT_FACT_TYPES,
+    GROUP_MESSAGE,
+    PRIVATE_MESSAGE,
+    agent_fact_for_model,
 )
-from konden.assistant.workspaces import SESSION_WORKSPACE_FACT, SESSION_DIRECTORY_FACT
 from konden.assistant.artifacts import (
     ArtifactGateway,
     ArtifactStore,
     is_valid_artifact_id,
 )
 from konden.assistant.attachments import AttachmentGateway, AttachmentStore
-from konden.assistant.file_attachments import is_file_attachment_id
-from konden.assistant.delivery import DELIVER_TOOL_NAME, USER_MESSAGE_SENT
-from konden.assistant.control import (
-    CONTROL_PROPOSED, CONTROL_EXECUTION_STARTED, CONTROL_SUCCEEDED, CONTROL_FAILED,
+from konden.assistant.clarification import (
+    ANSWER_SOURCE,
+    DEADLINE_REACHED,
+    clarification_options,
+    question_text,
+    questions_by_id,
 )
-from konden.assistant.subagent.subagent import TASK_FACT, INSTRUCTION_FACT, REPLY_FACT
-from konden.assistant.work_plan import WORK_PLAN_CONTEXT, render_work_plan
+from konden.assistant.commands import COMMAND_FINISHED
+from konden.assistant.content import CONTENT_HINT, READ_CONTENT
+from konden.assistant.context.memory import MEMORY_FACTS, memory_message
 from konden.assistant.context.prompt import DEFAULT_ASSISTANT_PROMPT
+from konden.assistant.control import (
+    CONTROL_EXECUTION_STARTED,
+    CONTROL_FAILED,
+    CONTROL_PROPOSED,
+    CONTROL_SUCCEEDED,
+)
+from konden.assistant.delivery import DELIVER_TOOL_NAME, USER_MESSAGE_SENT
+from konden.assistant.external_messages import (
+    EXTERNAL_MESSAGE,
+    USER_SOURCE,
+    parse_external,
+)
+from konden.assistant.file_attachments import is_file_attachment_id
+from konden.assistant.subagent.subagent import INSTRUCTION_FACT, REPLY_FACT, TASK_FACT
+from konden.assistant.work_plan import WORK_PLAN_CONTEXT, render_work_plan
+from konden.assistant.workspaces import SESSION_DIRECTORY_FACT, SESSION_WORKSPACE_FACT
+from konden.automation.once import TIME_REACHED
+from konden.automation.routines import ROUTINE_DUE
 from konden.runtime.events import (
     DomainFactCommitted,
     Event,
     StepCommitted,
     UserMessageReceived,
 )
+from konden.runtime.json_values import thaw_value
 from konden.runtime.model import (
     CommandOutcome,
     CommandPhase,
@@ -51,7 +66,6 @@ from konden.runtime.model import (
     StepState,
     argument_rejection,
 )
-
 
 PROJECTOR_VERSION = 28
 MESSAGE_EXTENSIONS = "message_extensions"
@@ -235,7 +249,7 @@ def _translate_visible_events(
     # Compact 只改变可见窗口；已经提交的材料仍属于此 Session。
     file_refs = {
         ref for event in events if isinstance(event.payload, UserMessageReceived)
-        or isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == EXTERNAL_MESSAGE
+        or (isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == EXTERNAL_MESSAGE)
         for ref in event.artifact_refs if is_file_attachment_id(ref)
     }
     if file_refs:

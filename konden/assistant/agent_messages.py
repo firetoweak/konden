@@ -1,19 +1,28 @@
 """Model tools and narrow recovery for durable peer and group messages."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Mapping
+from collections.abc import Mapping
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from konden.assistant.delivery import USER_MESSAGE_SENT, emit_delivery
 from konden.assistant.agents import CommunicationLimitReached, fact_arguments
-from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL, SendToExternal
-from konden.runtime import (
-    AgentRuntime, CommandOutcome, CommandOutcomeReceived, CommandPhase, EventDraft,
-    OutcomeStatus, ToolBinding, replay,
+from konden.assistant.delivery import USER_MESSAGE_SENT, emit_delivery
+from konden.assistant.external_messages import (
+    LIST_EXTERNAL,
+    SEND_EXTERNAL,
+    SendToExternal,
 )
-
+from konden.runtime import (
+    AgentRuntime,
+    CommandOutcome,
+    CommandOutcomeReceived,
+    CommandPhase,
+    EventDraft,
+    OutcomeStatus,
+    ToolBinding,
+    replay,
+)
 
 SEND_MESSAGE = "send_message"
 USER_RECIPIENT = "user"
@@ -296,5 +305,5 @@ async def recover_message_attempts(journal, session_id, transport, sink=None):
             event_id=f"message-recovered:{item.command.command_id}", session_id=session_id,
             payload=CommandOutcomeReceived(item.command.command_id, attempt.attempt_id,
                 CommandOutcome(OutcomeStatus.SUCCEEDED, value=result)),
-            occurred_at=datetime.now(timezone.utc), causation_id=by_id[attempt.started_event_id].event_id,
+            occurred_at=datetime.now(UTC), causation_id=by_id[attempt.started_event_id].event_id,
         ))

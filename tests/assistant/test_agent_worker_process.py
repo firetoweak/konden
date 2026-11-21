@@ -13,18 +13,17 @@ from unittest.mock import patch
 
 import pytest
 
+from konden.assistant.host.agent_roster import AgentDeletedError
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
-from konden.assistant.host.agent_roster import AgentDeletedError
 from konden.filesystem.registry import WorkspaceRegistry
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
 from konden.paths import KondenHome
 from konden.runtime import SqliteJournal, replay
 from konden.runtime.json_values import thaw_value
-from tests.fixtures.session_worker import ProcessLlm, config_for, is_subagent_request
-from tests.fixtures.compact_worker import HANDOFF
 from tests.assistant.test_agent_worktrees_process import tree
-
+from tests.fixtures.compact_worker import HANDOFF
+from tests.fixtures.session_worker import ProcessLlm, config_for, is_subagent_request
 
 pytestmark = pytest.mark.process
 

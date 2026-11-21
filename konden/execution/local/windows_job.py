@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import ctypes
+from ctypes import wintypes
 import os
 import time
-from ctypes import wintypes
-
 
 JOB_OBJECT_LIMIT_ACTIVE_PROCESS = 0x00000008
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
@@ -97,7 +96,7 @@ class WindowsJob:
         self._handle = handle
 
     @classmethod
-    def create(cls) -> "WindowsJob":
+    def create(cls) -> WindowsJob:
         if _kernel32 is None:
             raise OSError("Windows Job Object 只在 Windows 上可用")
         handle = _kernel32.CreateJobObjectW(None, None)

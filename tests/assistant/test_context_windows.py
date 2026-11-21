@@ -1,38 +1,46 @@
 import asyncio
-import json
 from dataclasses import replace
 from datetime import datetime, timedelta
 from io import BytesIO
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock
 
 from PIL import Image
 
 from konden.assistant.artifacts import FileArtifactGateway
-from tests.fixtures.artifacts import MemoryArtifactGateway
 from konden.assistant.attachments import AttachmentGateway
 from konden.assistant.compact.core import (
+    FIND_HISTORY_SCHEMA,
+    HANDOFF_PREFIX,
+    MODEL_USAGE,
+    TASK,
     CompactBoundary,
     CompactContext,
-    HANDOFF_PREFIX,
-    FIND_HISTORY_SCHEMA,
-    TASK,
-    MODEL_USAGE,
-    latest_input_tokens,
     frozen_bundle,
+    latest_input_tokens,
     save_document,
 )
 from konden.assistant.compact.host import CompactHost
 from konden.assistant.context.projection import ModelContextProjector
 from konden.assistant.host.session_store import SessionStore
-from konden.runtime import AgentRuntime, InvokeTool, ModelDecision, RecordedDecision, SqliteJournal, StateProjector, ToolBinding
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.assistant.toolsets import ToolSurface
 from konden.assistant.workspaces import SESSION_WORKSPACE_FACT
+from konden.runtime import (
+    AgentRuntime,
+    InvokeTool,
+    ModelDecision,
+    RecordedDecision,
+    SqliteJournal,
+    StateProjector,
+    ToolBinding,
+)
 from tests.assistant.test_toolsets import FakeEchoProvider
+from tests.fixtures.artifacts import MemoryArtifactGateway
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.session_scheduler import settle_session
 
 

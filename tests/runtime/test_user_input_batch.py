@@ -8,8 +8,16 @@ import unittest
 from unittest.mock import patch
 
 from konden.runtime import (
-    AgentRuntime, DecisionCancelled, InvokeTool, ModelDecision, RuntimeStatus,
-    SqliteJournal, StateProjector, StepClaimRequest, StepCommitted, StepContinuationCancelled,
+    AgentRuntime,
+    DecisionCancelled,
+    InvokeTool,
+    ModelDecision,
+    RuntimeStatus,
+    SqliteJournal,
+    StateProjector,
+    StepClaimRequest,
+    StepCommitted,
+    StepContinuationCancelled,
 )
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
 from tests.runtime.test_boundary_slice import RecordingTool, runtime_for

@@ -1,5 +1,6 @@
 """内置 Provider 的协议事实；调用方提供结构化连接设置。"""
 from __future__ import annotations
+
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path

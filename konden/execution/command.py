@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Protocol
-
 
 # 终端控制序列与有害控制字符。命令输出是 untrusted external data：
 # ANSI/OSC 可伪造界面、隐藏文本，进模型上下文前统一剥除。

@@ -5,7 +5,6 @@ import pytest
 
 from scripts import ci
 
-
 pytestmark = pytest.mark.process
 
 

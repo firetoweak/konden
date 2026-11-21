@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
-import os
 import asyncio
 from inspect import isawaitable
+import json
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -162,8 +162,8 @@ def interrupted_read_config(workspace: Path):
 
 
 def blocking_tool_config(workspace: Path):
-    from konden.assistant.host import worker
     from konden.assistant.assembly import _with_tool_progress
+    from konden.assistant.host import worker
     from konden.runtime import ToolBinding
 
     build = worker.build_assistant_assembly

@@ -1,5 +1,5 @@
-import platform
 from pathlib import Path
+import platform
 
 
 def environment_prompt(

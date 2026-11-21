@@ -1,18 +1,18 @@
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
+from konden.cli.application import CliApplicationService
 from konden.cli.approval import (
     CLI_INSTALL_ACTION,
     CLI_UNINSTALL_ACTION,
+    CliIdProposalInput,
     CliInstallApprovalHandler,
+    CliInstallProposalInput,
     CliUninstallApprovalHandler,
     create_cli_install_proposal_spec,
     create_cli_uninstall_proposal_spec,
-    CliInstallProposalInput,
-    CliIdProposalInput,
 )
-from konden.cli.application import CliApplicationService
 from konden.paths import KondenHome
 from konden.tools.control import ControlApprovalProposal, ControlPreparationFailure
 from tests.cli.fakes import FakeExecutor, make_result

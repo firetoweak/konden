@@ -1,5 +1,6 @@
 """个人模型配置；连接凭据单独管理。"""
 from __future__ import annotations
+
 from dataclasses import dataclass
 import json
 import os
@@ -59,7 +60,7 @@ def write_json(path: Path, data: dict) -> None:
             temporary.unlink()
             raise
     try:
-        os.replace(temporary, path)
+        temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
 

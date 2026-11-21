@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
+import os
 
+from konden.cli.application import CliApplicationService
 from konden.cli.approval import (
     CliInstallApprovalHandler,
     CliRepairApprovalHandler,
@@ -13,11 +14,10 @@ from konden.cli.approval import (
     create_cli_uninstall_proposal_spec,
     create_cli_update_proposal_spec,
 )
-from konden.cli.application import CliApplicationService
 from konden.cli.management_tools import create_cli_management_specs
 from konden.cli.runtime import CliToolCatalog
-from konden.paths import KondenHome
 from konden.execution.command import CommandExecutor
+from konden.paths import KondenHome
 from konden.tools.control import ControlOperation
 from konden.tools.spec import ToolSpec
 

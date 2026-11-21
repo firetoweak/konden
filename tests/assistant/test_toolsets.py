@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import unittest
 from collections.abc import Mapping
+import unittest
 
 from konden.assistant.delivery import DELIVER_TOOL_NAME, deliver_binding
-from tests.session_scheduler import settle_session
 from konden.assistant.toolsets import (
     LOAD_TOOLSET,
     LoadedTool,
     LoadedToolSnapshot,
-    ToolSurface,
     ToolsetDescriptor,
     ToolsetLoadError,
+    ToolSurface,
     load_toolset_binding,
 )
 from konden.runtime import (
@@ -22,9 +21,9 @@ from konden.runtime import (
     RuntimeStatus,
     StepCommitted,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
-
+from tests.fixtures.memory_journal import MemoryJournal
+from tests.session_scheduler import settle_session
 
 SESSION_ID = "toolset-session"
 

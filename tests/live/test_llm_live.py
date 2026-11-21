@@ -6,8 +6,8 @@ import unittest
 import pytest
 
 from konden.config import load_app_config
-from thinllm import create_client
 from konden.llm.config import load_endpoint
+from thinllm import create_client
 
 pytestmark = pytest.mark.live
 

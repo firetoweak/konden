@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
+import json
 
 from konden.runtime.dispatcher import Dispatcher, ToolBinding
 from konden.runtime.events import (
     CommandAuthorized,
     CommandRejected,
     DecisionCancelled,
+    DeliveryIdentity,
     DomainFactCommitted,
     Event,
     EventDraft,
-    DeliveryIdentity,
-    StepContinuationCancelled,
     StepCommitted,
+    StepContinuationCancelled,
     UserMessageReceived,
 )
 from konden.runtime.journal.api import Journal, LeaseLostError, StepClaimRequest
@@ -50,7 +50,7 @@ async def _cancel_task(task: asyncio.Task[object]) -> None:
     try:
         await task
     except asyncio.CancelledError:
-        pass
+        return
 
 
 async def _stop_heartbeat(task: asyncio.Task[None]) -> None:
@@ -59,7 +59,7 @@ async def _stop_heartbeat(task: asyncio.Task[None]) -> None:
     try:
         await task
     except (asyncio.CancelledError, LeaseLostError):
-        pass
+        return
 
 
 class AgentRuntime:
@@ -140,7 +140,7 @@ class AgentRuntime:
                 event_id=self._id_factory("event"),
                 session_id=session_id,
                 payload=payload,
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 causation_id=causation_id,
                 artifact_refs=artifact_refs,
                 delivery=delivery,
@@ -210,7 +210,7 @@ class AgentRuntime:
                         event_id=self._id_factory("event"),
                         session_id=session_id,
                         payload=DecisionCancelled(active.trigger_event_ids),
-                        occurred_at=datetime.now(timezone.utc),
+                        occurred_at=datetime.now(UTC),
                         causation_id=active.trigger_event_ids[0],
                     )
                 )
@@ -239,7 +239,7 @@ class AgentRuntime:
                         EventDraft(
                             event_id=self._id_factory("event"), session_id=session_id,
                             payload=StepContinuationCancelled(settled.event_id),
-                            occurred_at=datetime.now(timezone.utc), causation_id=settled.event_id,
+                            occurred_at=datetime.now(UTC), causation_id=settled.event_id,
                         )
                     )
                     return (*recorded, cancellation) if cancellation is not None else tuple(recorded)
@@ -251,7 +251,7 @@ class AgentRuntime:
                             event_id=self._id_factory("event"),
                             session_id=session_id,
                             payload=DecisionCancelled(frame.trigger_event_ids),
-                            occurred_at=datetime.now(timezone.utc),
+                            occurred_at=datetime.now(UTC),
                             causation_id=frame.trigger_event.event_id,
                         )
                     )
@@ -279,7 +279,7 @@ class AgentRuntime:
                             event_id=self._id_factory("event"),
                             session_id=session_id,
                             payload=StepContinuationCancelled(step_event_id),
-                            occurred_at=datetime.now(timezone.utc),
+                            occurred_at=datetime.now(UTC),
                             causation_id=step_event_id,
                         )
                     )
@@ -301,7 +301,7 @@ class AgentRuntime:
                 event_id=self._id_factory("event"),
                 session_id=session_id,
                 payload=CommandAuthorized(command_id),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
             )
         )
         if event is not None:
@@ -318,7 +318,7 @@ class AgentRuntime:
                 event_id=self._id_factory("event"),
                 session_id=session_id,
                 payload=CommandRejected(command_id),
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
             )
         )
 

@@ -1,11 +1,12 @@
 """Host 复用连接；每次调用读取新配置，在途请求持有自己的客户端。"""
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 
-from thinllm import create_client, Endpoint, resolve_endpoint, MissingProviderSetting
-from konden.llm.config import load_connections
 from konden.llm.api import LLMAuthenticationError
+from konden.llm.config import load_connections
+from thinllm import Endpoint, MissingProviderSetting, create_client, resolve_endpoint
 
 
 @dataclass

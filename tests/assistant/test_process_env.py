@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from konden.assistant.host.process_env import (

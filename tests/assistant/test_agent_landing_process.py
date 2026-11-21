@@ -17,7 +17,6 @@ from konden.paths import KondenHome
 from konden.runtime.dispatcher import AttemptContext
 from tests.assistant.test_agent_worktrees_process import git, tree
 
-
 pytestmark = pytest.mark.process
 
 

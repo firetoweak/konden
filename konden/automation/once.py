@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
+from collections.abc import Awaitable, Callable
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Awaitable, Callable
-
+import sqlite3
 
 MAX_DELAY_SECONDS = 365 * 24 * 60 * 60
 TIME_REACHED = "automation.time_reached"
@@ -80,9 +79,9 @@ class OneShotSchedules:
             raise ValueError("delay_seconds must be between 1 and 31536000")
         if type(purpose) is not str or not purpose.strip():
             raise ValueError("purpose must be a non-empty string")
-        if started_at is not None and started_at.tzinfo is not timezone.utc:
+        if started_at is not None and started_at.tzinfo is not UTC:
             raise ValueError("schedule started_at must use UTC")
-        due_at = (started_at or datetime.now(timezone.utc)) + timedelta(
+        due_at = (started_at or datetime.now(UTC)) + timedelta(
             seconds=delay_seconds
         )
         with closing(sqlite3.connect(self.path)) as connection:
@@ -172,11 +171,11 @@ class OneShotSchedules:
                 connection.execute(
                     "UPDATE schedules SET delivered_at = ? "
                     "WHERE schedule_id = ? AND delivered_at IS NULL",
-                    (datetime.now(timezone.utc).isoformat(), schedule_id),
+                    (datetime.now(UTC).isoformat(), schedule_id),
                 )
 
     def firing_time(self, schedule_id: str) -> datetime | None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with closing(sqlite3.connect(self.path)) as connection:
             with connection:
                 connection.execute(
@@ -194,14 +193,14 @@ class OneShotSchedules:
         if row[0] is None:
             return None
         fired_at = datetime.fromisoformat(row[0])
-        if fired_at.tzinfo is not timezone.utc:
+        if fired_at.tzinfo is not UTC:
             raise ValueError("schedule fired_at must use UTC")
         return fired_at
 
     @staticmethod
     def _from_row(row: sqlite3.Row) -> ScheduledCheck:
         due_at = datetime.fromisoformat(row["due_at"])
-        if due_at.tzinfo is not timezone.utc:
+        if due_at.tzinfo is not UTC:
             raise ValueError("schedule due_at must use UTC")
         return ScheduledCheck(
             row["schedule_id"],
@@ -253,7 +252,7 @@ class OneShotClock:
             if schedule is None:
                 await self.changed.wait()
                 continue
-            seconds = (schedule.due_at - datetime.now(timezone.utc)).total_seconds()
+            seconds = (schedule.due_at - datetime.now(UTC)).total_seconds()
             if seconds > 0:
                 try:
                     await asyncio.wait_for(self.changed.wait(), timeout=seconds)

@@ -2,31 +2,35 @@
 
 from __future__ import annotations
 
-from konden.runtime.json_values import thaw_value
-
-import json
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
+import json
 
 from konden.assistant.agents import identity_for_model
 from konden.assistant.artifacts import (
-    is_valid_artifact_id,
     ArtifactNotFoundError,
+    is_valid_artifact_id,
 )
 from konden.assistant.attachments import is_valid_attachment_id
 from konden.assistant.content import READ_CONTENT, read_content_result
-from konden.assistant.context.memory import memory_observations, memory_message
+from konden.assistant.context.memory import memory_message, memory_observations
 from konden.assistant.context.projection import (
+    PreparedModelContext,
     _translate_visible_events,
     catalog_for_model,
-    PreparedModelContext,
 )
 from konden.assistant.control import project_pending_approval
 from konden.assistant.subagent.subagent import project_parent, project_returned
-from konden.assistant.workspaces import SESSION_WORKSPACE_FACT, SESSION_DIRECTORY_FACT
+from konden.assistant.workspaces import SESSION_DIRECTORY_FACT, SESSION_WORKSPACE_FACT
 from konden.llm.api import InvalidLLMResponse
-from konden.runtime import DomainFactCommitted, StepCommitted, ToolBinding, RuntimeStatus
+from konden.runtime import (
+    DomainFactCommitted,
+    RuntimeStatus,
+    StepCommitted,
+    ToolBinding,
+)
+from konden.runtime.json_values import thaw_value
 from konden.runtime.state import StateProjector
 
 TASK = "compact.task"
@@ -381,7 +385,7 @@ class CompactContext:
         if offset > 0 and upto is None:
             return {"ok": False, "code": "INVALID_ARGUMENT", "error": "续查必须提供第一页返回的 upto"}
         try:
-            source, bundle, upto = await self._read_source(upto)
+            _source, bundle, upto = await self._read_source(upto)
         except HistoryPositionError as error:
             return {"ok": False, "code": "HISTORY_POSITION_OUT_OF_RANGE", "error": str(error)}
         end_sequence = upto if end_sequence is None else end_sequence

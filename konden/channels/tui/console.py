@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Callable, Mapping
+import json
 from pathlib import Path
 from uuid import uuid4
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.data_structures import Point
-from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout import HSplit, Layout, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.patch_stdout import patch_stdout
 
@@ -18,13 +18,12 @@ from konden.assistant.compact.store import ConversationStatus
 from konden.assistant.host.ipc import WorkerFailed
 from konden.assistant.sessions import SessionView
 from konden.bootstrap import bootstrap_assistant
-from konden.model_settings import ModelConfigurationError
 from konden.channels.tui.images import ConsoleMessage, ImagePaste
 from konden.mcp.console import McpCommandError, McpConsoleAdapter
 from konden.mcp.errors import McpInputError
+from konden.model_settings import ModelConfigurationError
 from konden.skills.console import SkillCommandError, SkillConsoleAdapter
 from konden.skills.errors import SkillInputError
-
 
 _INPUT_SEPARATOR = "─" * 72
 

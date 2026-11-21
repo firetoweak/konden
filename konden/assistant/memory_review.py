@@ -8,16 +8,27 @@ from uuid import uuid4
 from konden.assistant.agents import GROUP_MESSAGE, PRIVATE_MESSAGE, parse_agent_fact
 from konden.assistant.control import pending_approval_view
 from konden.assistant.external_messages import EXTERNAL_MESSAGE, parse_external
-from konden.assistant.personal_memory import PERSONAL_MEMORY_SCHEMAS, UPDATE_PERSONAL_MEMORY
+from konden.assistant.personal_memory import (
+    PERSONAL_MEMORY_SCHEMAS,
+    UPDATE_PERSONAL_MEMORY,
+)
 from konden.assistant.shared_memory import SHARED_MEMORY_SCHEMAS, UPDATE_SHARED_MEMORY
 from konden.llm.api import (
-    InvalidLLMResponse, LLMAuthenticationError, LLMContextLengthError,
-    LLMProviderError, LLMTransientError, encode_llm_result,
+    InvalidLLMResponse,
+    LLMAuthenticationError,
+    LLMContextLengthError,
+    LLMProviderError,
+    LLMTransientError,
+    encode_llm_result,
 )
-from konden.runtime import DomainFactCommitted, RuntimeStatus, StepCommitted, UserMessageReceived
+from konden.runtime import (
+    DomainFactCommitted,
+    RuntimeStatus,
+    StepCommitted,
+    UserMessageReceived,
+)
 from konden.runtime.dispatcher import AttemptContext
 from konden.runtime.events import DecisionCancelled, StepContinuationCancelled
-
 
 REVIEW_FACT = "bot.memory_review"
 REVIEW_INTERVAL = 5
@@ -142,7 +153,7 @@ class MemoryReview:
                    and event.payload.fact_type == REVIEW_FACT]
         through = max((item["through_sequence"] for item in reviews
                        if item["phase"] == "initialized" or
-                       item["phase"] == "finished" and item["status"] in {"updated", "unchanged"}), default=0)
+                       (item["phase"] == "finished" and item["status"] in {"updated", "unchanged"})), default=0)
         incoming = [event for event in events if event.sequence > through and _received(event) is not None]
         if len(incoming) < self.interval:
             return

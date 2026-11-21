@@ -7,7 +7,6 @@ from konden.cli.errors import CliInputError, CliNotFoundError
 from konden.cli.models import CliRecord
 from konden.tools.spec import EmptyInput, PydanticParameters, ToolSpec
 
-
 LIST_INSTALLED_CLIS = "list_installed_clis"
 INSPECT_CLI = "inspect_cli"
 TEST_CLI = "test_cli"

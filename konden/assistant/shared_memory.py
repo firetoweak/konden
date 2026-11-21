@@ -3,8 +3,13 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from konden.assistant.memory import MEMORY_RULES, Memory, MemoryStore, UpdateMemory, memory_bindings
-
+from konden.assistant.memory import (
+    MEMORY_RULES,
+    Memory,
+    MemoryStore,
+    UpdateMemory,
+    memory_bindings,
+)
 
 READ_SHARED_MEMORY = "read_shared_memory"
 UPDATE_SHARED_MEMORY = "update_shared_memory"

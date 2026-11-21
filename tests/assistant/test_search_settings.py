@@ -2,8 +2,8 @@ import asyncio
 import json
 
 import httpx
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from konden.config import write_json
 from konden.llm.config import initial_connections
@@ -32,7 +32,7 @@ def test_missing_connection_cannot_replace_saved_search_preferences(tmp_path):
     path = tmp_path / "connections.json"
     write_json(path, initial_connections())
     settings = SearchSettings(path)
-    with pytest.raises(ModelConfigurationError, match="openai.api_key"):
+    with pytest.raises(ModelConfigurationError, match=r"openai\.api_key"):
         settings.save(SearchConfig(provider="openai", openai_model="openai/gpt-6.1-terra"))
     assert not settings.path.exists()
     with pytest.raises(ValidationError, match="搜索模型"):

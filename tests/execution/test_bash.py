@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +16,6 @@ from konden.execution.local.bash import (
     BashCommandRunner,
 )
 from konden.execution.local.provider import create_local_command_environment
-
 
 BASH = shutil.which("bash") if os.name == "posix" else None
 

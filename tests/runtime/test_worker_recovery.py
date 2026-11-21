@@ -16,9 +16,9 @@ from konden.runtime import (
     SqliteJournal,
     ToolBinding,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.journal.api import LeaseLostError, StepClaimRequest
 from tests.assistant.test_runner import ScriptedDecisionMaker
+from tests.fixtures.memory_journal import MemoryJournal
 
 
 class WorkerRecoveryTest(unittest.IsolatedAsyncioTestCase):

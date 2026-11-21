@@ -3,21 +3,27 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
+from pydantic import ValidationError
 import pytest
 
-from pydantic import ValidationError
-
-from konden.filesystem import FileAccess
 from konden.execution.api import CommandEnvironment
 from konden.execution.command import (
-    CaptureLimit, CapturedOutput, CommandResult, ShellNotFoundError,
+    CapturedOutput,
+    CaptureLimit,
+    CommandResult,
+    ShellNotFoundError,
 )
+from konden.execution.local.powershell import (
+    CommandEnvironmentPolicy,
+    PowerShellCommandRunner,
+)
+from konden.filesystem import FileAccess
 from konden.filesystem.workspace import (
     FilesystemPermission,
     PermissionBinding,
@@ -25,19 +31,14 @@ from konden.filesystem.workspace import (
     WorkspaceScope,
     WorkspaceViewSnapshot,
 )
-from konden.tools.registry import ToolRegistry
-from konden.tools.executor import ToolsExecutor
 from konden.tools.builtin.command_execution import (
     CommandInput,
     create_command_execution_spec,
 )
+from konden.tools.executor import ToolsExecutor
+from konden.tools.registry import ToolRegistry
 from konden.tools.spec import EmptyInput, pydantic_tool_spec
-from konden.execution.local.powershell import (
-    CommandEnvironmentPolicy,
-    PowerShellCommandRunner,
-)
 from tests.execution.test_foreground_lifetime_process import gone
-
 
 POWERSHELL = shutil.which("pwsh.exe") or shutil.which("powershell.exe")
 

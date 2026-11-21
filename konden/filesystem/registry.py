@@ -15,8 +15,8 @@ from pathlib import Path
 import uuid
 
 from konden.filesystem.workspace import (
-    FileWorkspace,
     EnvironmentInputError,
+    FileWorkspace,
     RootBinding,
     WorkspaceScope,
     WorkspaceViewSnapshot,
@@ -82,7 +82,7 @@ class WorkspaceRecord:
         }
 
     @classmethod
-    def from_dict(cls, value: object) -> "WorkspaceRecord":
+    def from_dict(cls, value: object) -> WorkspaceRecord:
         if not isinstance(value, dict) or set(value) != {
             "workspace_id",
             "task_root",
@@ -119,7 +119,7 @@ class WorkspaceRegistry:
         return tuple(self._workspaces)
 
     @classmethod
-    def load(cls, path: Path) -> "WorkspaceRegistry":
+    def load(cls, path: Path) -> WorkspaceRegistry:
         if not path.exists():
             return cls(path)
         raw = json.loads(path.read_text(encoding="utf-8"))

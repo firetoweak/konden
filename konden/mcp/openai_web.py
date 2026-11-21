@@ -9,7 +9,13 @@ from pathlib import Path
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool, ToolAnnotations
+from mcp.types import (
+    CallToolResult,
+    ListToolsResult,
+    TextContent,
+    Tool,
+    ToolAnnotations,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from konden.model_settings import ModelConfigurationError

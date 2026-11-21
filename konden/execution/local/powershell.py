@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import codecs
 import asyncio
+import codecs
+from collections.abc import Mapping, Sequence
 import os
+from pathlib import Path
 import shutil
 import time
-from pathlib import Path
-from typing import Mapping, Sequence
 
 from konden.execution.command import (
     BoundedTextCapture,
@@ -21,7 +21,6 @@ from konden.execution.local.child_env import (
     latest_persistent_path,
 )
 from konden.execution.local.windows_job import WindowsJob
-
 
 DEFAULT_ENV_NAMES = (
     "ALLUSERSPROFILE",
@@ -238,7 +237,7 @@ class PowerShellCommandRunner:
                 if cleanup_error is not run_error:
                     raise BaseExceptionGroup(
                         "命令执行失败且清理失败", [run_error, cleanup_error]
-                    )
+                    ) from cleanup_error
                 raise
             raise
         else:
@@ -251,7 +250,7 @@ class PowerShellCommandRunner:
                 await cleanup
                 raise
 
-        result = CommandResult(
+        return CommandResult(
             exit_code=None if timed_out or interrupted else proc.returncode,
             stdout=stdout_capture.finish(),
             stderr=stderr_capture.finish(),
@@ -260,4 +259,3 @@ class PowerShellCommandRunner:
             io_errors=tuple(io_errors),
             interrupted=interrupted,
         )
-        return result

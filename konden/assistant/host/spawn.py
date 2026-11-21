@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
+import os
 
 from konden.assistant.host.process_env import install_host_environment
 
@@ -58,10 +58,10 @@ def _handle_owners(obj):
 
 @contextmanager
 def _windows_nul_stdio():
+    import _winapi
     import msvcrt
     import subprocess
     import threading
-    import _winapi
 
     original = _winapi.CreateProcess
     spawning_thread = threading.get_ident()

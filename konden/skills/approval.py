@@ -1,25 +1,25 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal, Mapping, cast
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field, model_validator
 
+from konden.skills.application import SkillApplicationService
+from konden.skills.errors import (
+    SkillAlreadyInstalledError,
+    SkillInputError,
+    SkillNotFoundError,
+)
+from konden.skills.models import SkillSourceRef
+from konden.skills.sources import SkillSourceError
 from konden.tools.control import (
     ControlApprovalExecution,
     ControlApprovalProposal,
     ControlPreparationFailure,
 )
 from konden.tools.spec import PydanticParameters, ToolSpec
-from konden.skills.application import SkillApplicationService
-from konden.skills.models import SkillSourceRef
-from konden.skills.sources import SkillSourceError
-from konden.skills.errors import (
-    SkillAlreadyInstalledError,
-    SkillInputError,
-    SkillNotFoundError,
-)
-
 
 SKILL_INSTALL_ACTION = "skill.install"
 SKILL_SET_ENABLED_ACTION = "skill.set_enabled"
@@ -58,7 +58,7 @@ class SkillInstallProposalInput(BaseModel):
     requested_ref: str | None = Field(default=None, description=REF_HELP)
 
     @model_validator(mode="after")
-    def validate_source(self) -> "SkillInstallProposalInput":
+    def validate_source(self) -> SkillInstallProposalInput:
         _validate_source(SkillSourceRef(
             self.source_kind, self.locator, self.requested_ref,
         ))
@@ -349,7 +349,7 @@ class SkillUpdateProposalInput(BaseModel):
     requested_ref: str | None = Field(default=None, description=REF_HELP)
 
     @model_validator(mode="after")
-    def validate_replacement(self) -> "SkillUpdateProposalInput":
+    def validate_replacement(self) -> SkillUpdateProposalInput:
         if (self.source_kind is None) != (self.locator is None):
             raise ValueError("replacement source_kind/locator 必须同时提供")
         if self.source_kind is None and self.requested_ref is not None:

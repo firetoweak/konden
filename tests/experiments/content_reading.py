@@ -13,18 +13,23 @@ import sys
 import time
 import types
 
-from thinllm import create_client
+from konden.assistant import content
+from konden.assistant.compact import core
+from konden.assistant.context import projection
 from konden.config import load_app_config
 from konden.llm.config import load_endpoint
-from tests.fixtures.artifacts import MemoryArtifactGateway
-from konden.assistant import content
-from konden.assistant.context import projection
-from konden.assistant.compact import core
-from konden.runtime import AgentRuntime, InvokeTool, ModelDecision, StateProjector, ToolBinding
-from tests.fixtures.memory_journal import MemoryJournal
+from konden.runtime import (
+    AgentRuntime,
+    InvokeTool,
+    ModelDecision,
+    StateProjector,
+    ToolBinding,
+)
 from konden.runtime.dispatcher import AttemptContext
+from tests.fixtures.artifacts import MemoryArtifactGateway
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.session_scheduler import settle_session
-
+from thinllm import create_client
 
 BASELINE_REVISION = "713aeb8d81aeb77c866b7cf72ad0cc9f94ea756b"
 

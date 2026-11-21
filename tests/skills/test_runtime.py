@@ -1,6 +1,6 @@
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 from konden.paths import KondenHome
 from konden.skills.application import SkillApplicationService

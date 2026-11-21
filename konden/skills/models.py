@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import re
-from typing import Literal
-from typing import Any, cast
-
+from typing import Any, Literal, cast
 
 _SKILL_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
@@ -62,7 +60,7 @@ class SkillSourceRef:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, object]) -> "SkillSourceRef":
+    def from_dict(cls, value: dict[str, object]) -> SkillSourceRef:
         _require_exact_keys(
             value,
             {"kind", "locator", "requested_ref"},
@@ -152,14 +150,14 @@ class SkillPackageLimits:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _parse_datetime(value: object) -> datetime:
     if not isinstance(value, str) or not value:
         raise ValueError("datetime 必须是非空 ISO 8601 字符串")
     parsed = datetime.fromisoformat(value)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _require_aware_datetime(value: object, label: str) -> None:
@@ -259,7 +257,7 @@ class SkillRecord:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, object]) -> "SkillRecord":
+    def from_dict(cls, value: dict[str, object]) -> SkillRecord:
         _require_exact_keys(
             value,
             {
@@ -348,7 +346,7 @@ class SkillManifestDiff:
         return payload
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "SkillManifestDiff":
+    def from_dict(cls, value: dict[str, Any]) -> SkillManifestDiff:
         _require_exact_keys(
             value,
             {
@@ -435,7 +433,7 @@ class SkillUpdateCandidate:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "SkillUpdateCandidate":
+    def from_dict(cls, value: dict[str, Any]) -> SkillUpdateCandidate:
         _require_exact_keys(
             value,
             {
@@ -551,7 +549,7 @@ class SkillInstallCandidate:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "SkillInstallCandidate":
+    def from_dict(cls, value: dict[str, Any]) -> SkillInstallCandidate:
         _require_exact_keys(
             value,
             {

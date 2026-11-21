@@ -10,7 +10,6 @@ import pytest
 from konden.llm.config import initial_connections
 from konden.mcp.deepseek_web import DeepSeekAuth, call_tool
 
-
 PAGE = {
     "title": "官方资料", "url": "https://example.com/source", "snippet": "短摘要",
     "summary": "可以核对的搜索摘要", "content": "", "date": None, "site_name": "Example",
@@ -143,7 +142,7 @@ def test_each_request_uses_the_current_connection_key_and_stops_after_it_is_clea
                 if not key:
                     assert "deepseek.api_key" in result.structured_content["error"]
             path.write_text("{}", encoding="utf-8")
-            with pytest.raises(ValueError, match="connections.json"):
+            with pytest.raises(ValueError, match=r"connections\.json"):
                 await call_tool(client, None, params)
 
     asyncio.run(scenario())

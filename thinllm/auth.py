@@ -14,7 +14,12 @@ import httpx
 from oauth_cli_kit.models import OAuthToken
 from oauth_cli_kit.providers import OPENAI_CODEX_PROVIDER
 
-from thinllm.errors import LLMAuthenticationError, LLMProviderError, LLMTransientError, MissingProviderSetting
+from thinllm.errors import (
+    LLMAuthenticationError,
+    LLMProviderError,
+    LLMTransientError,
+    MissingProviderSetting,
+)
 
 
 def thinllm_auth_path() -> Path:
@@ -110,7 +115,7 @@ class CodexTokenStorage:
                 json.dump(auth, temporary)
                 temporary.flush()
                 os.fsync(temporary.fileno())
-            os.replace(pending, self.path)
+            pending.replace(self.path)
         finally:
             pending.unlink(missing_ok=True)
 

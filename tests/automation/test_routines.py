@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import closing
+from datetime import timedelta
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
-from datetime import timedelta
 from unittest.mock import patch
 
-from konden.automation.routines import (
-    ACTIVE, PAUSED, PAUSED_BY_USER, RoutineStore,
-)
 from konden.assistant.host.supervisor import HostSupervisor
+from konden.automation.routines import (
+    ACTIVE,
+    PAUSED,
+    PAUSED_BY_USER,
+    RoutineStore,
+)
 from konden.runtime import AgentRuntime, SqliteJournal
 
 

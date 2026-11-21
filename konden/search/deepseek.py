@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from urllib.parse import urlsplit
+
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 from konden.llm.config import load_connections
 
 BASE_URL = "https://api.deepseek.com"

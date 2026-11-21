@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from base64 import b64encode
 from io import BytesIO
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import json
 import unittest
 
-from PIL import Image
 from mcp.types import CallToolResult, ImageContent, TextContent
+from PIL import Image
 
 from konden.assistant.attachments import AttachmentStore, is_valid_attachment_id
 from konden.assistant.mcp import extract_images

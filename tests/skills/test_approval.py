@@ -1,25 +1,25 @@
+from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from pathlib import Path
 
-from konden.tools.control import ControlApprovalProposal
 from konden.paths import KondenHome
 from konden.skills.application import SkillApplicationService
 from konden.skills.approval import (
-    SkillSetEnabledApprovalHandler,
-    SkillSetEnabledProposalInput,
     SkillInstallApprovalHandler,
     SkillInstallProposalInput,
+    SkillSetEnabledApprovalHandler,
+    SkillSetEnabledProposalInput,
     SkillUninstallApprovalHandler,
     SkillUninstallProposalInput,
-    create_skill_uninstall_proposal_spec,
     SkillUpdateApprovalHandler,
     SkillUpdateProposalInput,
-    create_skill_set_enabled_proposal_spec,
     create_skill_install_proposal_spec,
+    create_skill_set_enabled_proposal_spec,
+    create_skill_uninstall_proposal_spec,
     create_skill_update_proposal_spec,
 )
+from konden.tools.control import ControlApprovalProposal
 from tests.skills.test_package import write_skill
 
 

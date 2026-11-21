@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
-from pathlib import Path
 import unittest
 
 import pytest
@@ -91,6 +91,7 @@ class WorkerSpawnTest(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "需要 Windows 进程启动")
     def test_worker_stdio_redirect_does_not_capture_other_threads_subprocesses(self) -> None:
         from concurrent.futures import ThreadPoolExecutor
+
         from konden.assistant.host.spawn import _windows_nul_stdio
 
         with ThreadPoolExecutor(max_workers=1) as pool:

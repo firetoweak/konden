@@ -22,12 +22,12 @@ class ToolRegistry:
     def get_tools(self) -> list[dict[str, Any]]:
         return [spec.to_openai_tool() for spec in self._specs.values()]
 
-    def clone(self) -> "ToolRegistry":
+    def clone(self) -> ToolRegistry:
         registry = ToolRegistry()
         registry._specs = self._specs.copy()
         return registry
 
-    def select(self, names: set[str]) -> "ToolRegistry":
+    def select(self, names: set[str]) -> ToolRegistry:
         registry = ToolRegistry()
         registry._specs = {
             name: spec

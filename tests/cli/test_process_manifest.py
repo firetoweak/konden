@@ -6,10 +6,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import sys
 import tempfile
 import unittest
-from pathlib import Path
 
 import pytest
 

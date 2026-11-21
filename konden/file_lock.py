@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+import os
 from pathlib import Path
-
+import time
 
 # Windows 字节锁会挡住别人读被锁的区间；锁在文件内容之外的远端字节上。
 _LOCK_OFFSET = 1 << 30

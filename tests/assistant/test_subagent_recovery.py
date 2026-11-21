@@ -4,7 +4,11 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from konden.assistant.subagent.subagent import (
-    RETURN_FACT, TASK_FACT, persist_return, record_interrupted_return, return_data,
+    RETURN_FACT,
+    TASK_FACT,
+    persist_return,
+    record_interrupted_return,
+    return_data,
 )
 from konden.runtime import (
     AgentRuntime,
@@ -16,9 +20,8 @@ from konden.runtime import (
     StateProjector,
     ToolBinding,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from tests.assistant.test_runner import ScriptedDecisionMaker
-
+from tests.fixtures.memory_journal import MemoryJournal
 
 PARENT = "parent"
 COMMAND = "command-1"

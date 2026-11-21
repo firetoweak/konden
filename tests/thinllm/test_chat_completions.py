@@ -1,20 +1,20 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import unittest
-from copy import deepcopy
 from unittest.mock import patch
 
 import httpx
 
 from thinllm import (
     ChatCompletionsClient,
-    create_client,
     Endpoint,
     InvalidLLMResponse,
     LLMAuthenticationError,
     LLMContextLengthError,
     LLMTransientError,
+    create_client,
     resolve_endpoint,
 )
 

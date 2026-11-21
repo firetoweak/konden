@@ -1,27 +1,38 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import unittest
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
-from konden.assistant.context.projection import ModelContextProjector
-from tests.fixtures.artifacts import MemoryArtifactGateway
 from konden.assistant.compact.core import MODEL_USAGE
+from konden.assistant.context.projection import ModelContextProjector
 from konden.assistant.conversations import project_conversation
 from konden.assistant.sessions import SessionView
 from konden.assistant.work_plan import (
-    UPDATE_PLAN, WORK_PLAN_CONTEXT, project_work_plan, update_plan_binding,
+    UPDATE_PLAN,
+    WORK_PLAN_CONTEXT,
+    project_work_plan,
+    update_plan_binding,
 )
 from konden.runtime import (
-    Command, CommandOutcome, CommandOutcomeReceived, DispatchAttemptStarted,
-    Event, InvokeTool, ModelDecision, OutcomeStatus, StateProjector, Step,
-    StepCommitted, UserMessageReceived,
+    Command,
+    CommandOutcome,
+    CommandOutcomeReceived,
+    DispatchAttemptStarted,
+    Event,
+    InvokeTool,
+    ModelDecision,
+    OutcomeStatus,
+    StateProjector,
+    Step,
+    StepCommitted,
+    UserMessageReceived,
 )
 from konden.runtime.dispatcher import AttemptContext
-
+from tests.fixtures.artifacts import MemoryArtifactGateway
 
 PLAN = {
     "objective": "修复附件上传",
@@ -36,7 +47,7 @@ PLAN = {
 def event(sequence, payload, *, causation_id=None):
     return Event(
         event_id=f"e{sequence}", session_id="s", sequence=sequence,
-        payload=payload, occurred_at=datetime.now(timezone.utc),
+        payload=payload, occurred_at=datetime.now(UTC),
         causation_id=causation_id, correlation_id=None, schema_version=6, artifact_refs=(),
     )
 

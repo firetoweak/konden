@@ -1,12 +1,12 @@
 """Protect credential reuse, full-resolution delivery, and paid-request failure semantics."""
 import asyncio
-import errno
 from base64 import b64encode
+import errno
 from io import BytesIO
-from pathlib import Path
 import json
-from unittest.mock import AsyncMock, patch
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import httpx
 from PIL import Image
@@ -15,9 +15,9 @@ import pytest
 
 from konden.config import write_json
 from konden.llm.config import initial_connections
+from konden.mcp.image_generation import call_tool
 from konden.media.images import ImageConfig, ImageGeneration, ImageInput
 from konden.media.openai_images import GeneratedImage, ImageProviderError
-from konden.mcp.image_generation import call_tool
 from konden.model_settings import ModelConfigurationError
 
 
@@ -146,7 +146,7 @@ def test_missing_key_and_invalid_parameters_cannot_initiate_generation(service):
         ImageConfig(enabled=True)
     before = service.connections_path.read_bytes()
     write_json(service.connections_path, initial_connections())
-    with pytest.raises(ModelConfigurationError, match="openai.api_key"):
+    with pytest.raises(ModelConfigurationError, match=r"openai\.api_key"):
         service.save(ImageConfig(enabled=True, model="openai/gpt-image-1.5"))
     assert not service.path.exists()
     service.connections_path.write_bytes(before)

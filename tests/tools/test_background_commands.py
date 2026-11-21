@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
+
 from konden.tools.builtin.background_commands import create_command_specs
 from konden.tools.spec import ToolArgumentsError
 

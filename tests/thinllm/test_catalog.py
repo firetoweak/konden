@@ -7,8 +7,14 @@ import ssl
 import httpx
 import pytest
 
-from thinllm import InvalidLLMResponse, LLMAuthenticationError, LLMProviderError, LLMTransientError, list_codex_models
-from thinllm import list_models
+from thinllm import (
+    InvalidLLMResponse,
+    LLMAuthenticationError,
+    LLMProviderError,
+    LLMTransientError,
+    list_codex_models,
+    list_models,
+)
 
 
 def model(slug="MixedCase-ID", **overrides):

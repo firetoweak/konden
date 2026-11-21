@@ -12,7 +12,6 @@ from konden.mcp.bundled import OFFICECLI_SERVER_ID
 from konden.mcp.composition import build_mcp
 from konden.paths import KondenHome
 
-
 pytestmark = pytest.mark.process
 
 

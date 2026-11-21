@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, fields, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TypeAlias
 
-from konden.runtime.model import CommandOutcome, Step, freeze_value, _require_event_ids
+from konden.runtime.model import CommandOutcome, Step, _require_event_ids, freeze_value
 
 
 def _require_str_tuple(value: object, name: str) -> None:
@@ -87,7 +87,7 @@ def _validate_envelope(
     _require_str(session_id, "session id")
     if type(occurred_at) is not datetime:
         raise TypeError("occurred_at must be datetime")
-    if occurred_at.tzinfo is not timezone.utc:
+    if occurred_at.tzinfo is not UTC:
         raise ValueError("occurred_at must use UTC")
     if type(schema_version) is not int or schema_version < 1:
         raise ValueError("schema version must be positive")

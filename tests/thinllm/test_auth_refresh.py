@@ -1,8 +1,8 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import subprocess
 import sys
 import threading
@@ -221,11 +221,10 @@ print(json.dumps(auth.load_codex_auth(Path(sys.argv[1]), refresh=True)))
 """
     children = []
     try:
-        for _ in range(2):
-            children.append(subprocess.Popen(
-                [sys.executable, "-c", script, str(storage.path), f"http://127.0.0.1:{issuer.server_port}/token"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            ))
+        children.extend(subprocess.Popen(
+            [sys.executable, "-c", script, str(storage.path), f"http://127.0.0.1:{issuer.server_port}/token"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        ) for _ in range(2))
         for child in children:
             stdout, stderr = child.communicate(timeout=20)
             assert child.returncode == 0, stderr

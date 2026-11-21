@@ -24,7 +24,6 @@ from konden.runtime.dispatcher import AttemptContext
 from konden.runtime.json_values import thaw_value
 from konden.runtime.model import DecisionState
 
-
 LOAD_TOOLSET = "load_toolset"
 
 LOAD_TOOLSET_DESCRIPTION = (
@@ -134,7 +133,7 @@ class ToolsetProvider(Protocol):
         self,
         toolset_id: str,
         revision: int,
-        tools: tuple["LoadedToolSnapshot", ...],
+        tools: tuple[LoadedToolSnapshot, ...],
     ) -> tuple[LoadedTool, ...]:
         ...
 
@@ -231,18 +230,17 @@ def project_toolset_activations(
             or revision < 1
         ):
             raise ValueError("load_toolset outcome identity 无效")
-        snapshots: list[LoadedToolSnapshot] = []
-        for tool in data["tools"]:
-            snapshots.append(
-                LoadedToolSnapshot(
-                    name=tool["name"],
-                    description=tool["description"],
-                    # Journal 事实值在 Runtime 内被递归冻结；交给 Provider 的契约必须是普通 JSON 容器。
-                    parameters=thaw_value(tool["parameters"]),
-                    requires_authorization=tool["requires_authorization"],
-                    provider_data=thaw_value(tool["provider_data"]),
-                )
+        snapshots: list[LoadedToolSnapshot] = [
+            LoadedToolSnapshot(
+                name=tool["name"],
+                description=tool["description"],
+                # Journal 事实值在 Runtime 内被递归冻结；交给 Provider 的契约必须是普通 JSON 容器。
+                parameters=thaw_value(tool["parameters"]),
+                requires_authorization=tool["requires_authorization"],
+                provider_data=thaw_value(tool["provider_data"]),
             )
+            for tool in data["tools"]
+        ]
         activations[toolset_id] = ToolsetActivation(
             toolset_id,
             revision,

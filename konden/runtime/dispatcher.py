@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from konden.runtime.events import (
     CommandOutcomeReceived,
@@ -74,7 +74,7 @@ async def _stop_heartbeat(task: asyncio.Task[None]) -> None:
     try:
         await task
     except (asyncio.CancelledError, LeaseLostError):
-        pass
+        return
 
 
 class Dispatcher:
@@ -144,7 +144,7 @@ class Dispatcher:
                         self._id_factory("attempt-claim"),
                         self._worker_id,
                     ),
-                    occurred_at=datetime.now(timezone.utc),
+                    occurred_at=datetime.now(UTC),
                     causation_id=item.dispatch_eligible_by_event_id,
                 ),
                 lease_seconds=self._attempt_lease_seconds,
@@ -243,7 +243,7 @@ class Dispatcher:
                     event_id=self._id_factory("event"),
                     session_id=session_id,
                     payload=CommandOutcomeReceived(command_id, attempt_id, outcome),
-                    occurred_at=datetime.now(timezone.utc),
+                    occurred_at=datetime.now(UTC),
                     causation_id=causation_event_id,
                 )
             )

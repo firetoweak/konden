@@ -10,9 +10,15 @@ from konden.assistant.attachments import AttachmentGateway, AttachmentRejected
 from konden.assistant.conversations import project_conversation
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
-from konden.paths import KondenHome
 from konden.assistant.sessions import session_view
-from konden.runtime import AgentRuntime, InvokeTool, ModelDecision, SqliteJournal, replay
+from konden.paths import KondenHome
+from konden.runtime import (
+    AgentRuntime,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
+    replay,
+)
 from tests.assistant.test_runner import ScriptedDecisionMaker
 from tests.session_scheduler import settle_session
 

@@ -1,30 +1,36 @@
 from __future__ import annotations
+
 import asyncio
-from functools import partial
 from contextlib import closing
+from functools import partial
 from io import BytesIO
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-import pytest
 from PIL import Image
+import pytest
 
+from konden.assistant.artifacts import FileArtifactGateway
 from konden.assistant.attachments import AttachmentGateway
 from konden.assistant.compact.core import (
     WINDOW,
 )
-from konden.assistant.subagent.subagent import DelegateIntent, task_fact_arguments
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
+from konden.assistant.personal_memory import UpdatePersonalMemory, personal_memory_store
 from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
-from konden.assistant.personal_memory import personal_memory_store, UpdatePersonalMemory
-from konden.assistant.artifacts import FileArtifactGateway
-from konden.paths import KondenHome
+from konden.assistant.subagent.subagent import DelegateIntent, task_fact_arguments
 from konden.filesystem.registry import WorkspaceRegistry
-from konden.runtime import SqliteJournal, StepCommitted, DomainFactCommitted
-from tests.fixtures.compact_worker import CompactLlm, child_config_for, config_for, HANDOFF
+from konden.paths import KondenHome
+from konden.runtime import DomainFactCommitted, SqliteJournal, StepCommitted
+from tests.fixtures.compact_worker import (
+    HANDOFF,
+    CompactLlm,
+    child_config_for,
+    config_for,
+)
 
 pytestmark = pytest.mark.process
 

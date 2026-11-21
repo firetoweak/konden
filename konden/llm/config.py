@@ -1,13 +1,14 @@
 """模型标识与个人连接文件的外部边界。"""
 from __future__ import annotations
+
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from thinllm import PROVIDERS, Endpoint, MissingProviderSetting, resolve_endpoint
 from konden.llm.api import LLMAuthenticationError
 from konden.paths import KondenHome
+from thinllm import PROVIDERS, Endpoint, MissingProviderSetting, resolve_endpoint
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,10 +25,10 @@ class ModelConfig:
             raise ValueError("model 必须形如 <provider>/<model>，provider 为 " + "、".join(PROVIDERS))
         if type(self.compact_threshold_tokens) is not int or self.compact_threshold_tokens <= 0:
             raise ValueError("compact_threshold_tokens 必须是大于 0 的整数")
-        if self.reasoning_effort is not None:
-            if (type(self.reasoning_effort) is not str or not self.reasoning_effort
-                    or self.reasoning_effort != self.reasoning_effort.strip()):
-                raise ValueError("reasoning_effort 必须是供应商提供的非空档位")
+        if (self.reasoning_effort is not None
+                and (type(self.reasoning_effort) is not str or not self.reasoning_effort
+                     or self.reasoning_effort != self.reasoning_effort.strip())):
+            raise ValueError("reasoning_effort 必须是供应商提供的非空档位")
 
     def to_dict(self) -> dict:
         data = asdict(self)
@@ -36,7 +37,7 @@ class ModelConfig:
         return data
 
     @classmethod
-    def from_dict(cls, data: object) -> "ModelConfig":
+    def from_dict(cls, data: object) -> ModelConfig:
         required = {"model", "compact_threshold_tokens"}
         if type(data) is not dict or not required <= set(data) or set(data) - required - {"reasoning_effort"}:
             raise ValueError("候选模型字段必须是 model/compact_threshold_tokens，可选 reasoning_effort")

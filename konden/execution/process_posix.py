@@ -1,5 +1,7 @@
 """Managed raw Linux task process lifetime."""
 from __future__ import annotations
+
+import contextlib
 import ctypes
 import ctypes.util
 import os
@@ -79,10 +81,8 @@ class Running:
         # Skip it once the group is empty so a reused pid is not signaled.
         if self.process.returncode is not None and not self._group_busy():
             return
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(self.process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
 
     def _group_busy(self) -> bool:
         if self.process is None:
@@ -117,10 +117,8 @@ class Running:
 
     def _kill_escaped(self):
         for pid in self._escaped_children():
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
 
     def _reap_zombies(self):
         if self.process is None:
@@ -131,10 +129,8 @@ class Running:
             fields = _stat_fields(pid)
             if fields is None or fields[0] != "Z":
                 continue
-            try:
+            with contextlib.suppress(ChildProcessError):
                 os.waitpid(pid, os.WNOHANG)
-            except ChildProcessError:
-                pass
 
     def _drain_descendants(self):
         # Kill while the leader pid is still allocated. Reaping first would

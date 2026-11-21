@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-import json
-import os
+from collections.abc import Mapping
 from dataclasses import replace
+import json
 from pathlib import Path
-from typing import Mapping
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter
 
 from konden.config import write_json
 from konden.file_lock import exclusive
-from konden.paths import KondenHome
 from konden.mcp.models import (
     McpServerRecord,
     McpServerRuntimeState,
     RuntimeAvailability,
     utc_now,
 )
+from konden.paths import KondenHome
 
 
 class _BundledCheck(BaseModel):
@@ -41,7 +40,7 @@ class McpRegistry:
         self._lock_path = self._path.with_suffix(".lock")
 
     @classmethod
-    def from_home(cls, home: KondenHome) -> "McpRegistry":
+    def from_home(cls, home: KondenHome) -> McpRegistry:
         return cls(home.mcp_root)
 
     @property
@@ -241,4 +240,4 @@ class McpRegistry:
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        os.replace(temporary, self._path)
+        temporary.replace(self._path)

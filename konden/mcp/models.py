@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 import re
-from typing import Any, Mapping
+from typing import Any
 from urllib.parse import urlparse
-
 
 _SERVER_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
@@ -24,7 +24,7 @@ def validate_server_id(server_id: str) -> str:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class TransportKind(str, Enum):
@@ -211,7 +211,7 @@ class McpServerRecord:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "McpServerRecord":
+    def from_dict(cls, payload: Mapping[str, Any]) -> McpServerRecord:
         _require_exact_keys(
             payload,
             {
@@ -412,4 +412,4 @@ def _parse_datetime(value: Any) -> datetime:
     if not isinstance(value, str) or not value:
         raise ValueError("datetime 必须是非空 ISO 8601 字符串")
     parsed = datetime.fromisoformat(value)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)

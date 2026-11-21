@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import os
-import hashlib
-import sys
 from collections.abc import Callable
 from dataclasses import replace
+import hashlib
+import os
 from pathlib import Path
+import sys
 
 from konden.llm.config import load_connections
 from konden.mcp.models import McpServerRecord, StdioTransportConfig, TransportKind
+from konden.media.images import image_config_path, load_image_config
 from konden.paths import KondenHome
 from konden.search import load_search_config, search_path
-from konden.media.images import image_config_path, load_image_config
-
 
 BROWSER_SERVER_IDS = frozenset({"builtin-chrome-devtools", "builtin-playwright"})
 DEEPSEEK_SERVER_ID = "builtin-deepseek"

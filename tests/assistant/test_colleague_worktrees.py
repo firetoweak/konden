@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 from unittest.mock import AsyncMock, patch
 
-from konden.assistant.builtin_tools import build_builtin_tools
 from konden.assistant.agents import AgentCreated, fact_arguments
+from konden.assistant.builtin_tools import build_builtin_tools
 from konden.assistant.context.projection import ModelContextSettings
 from konden.assistant.decision import bind_executor_tools
 from konden.assistant.host.session_store import SessionStore

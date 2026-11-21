@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from konden.assistant.host.codex_continuation import CodexTarget, WAKE_MESSAGE, queue_codex
+from konden.assistant.host.codex_continuation import (
+    WAKE_MESSAGE,
+    CodexTarget,
+    queue_codex,
+)
 
 
 def test_queue_failure_and_timeout_do_not_claim_success():

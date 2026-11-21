@@ -4,7 +4,7 @@ from __future__ import annotations
 from base64 import b64decode
 from binascii import Error as Base64Error
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 
 import httpx
@@ -78,7 +78,7 @@ async def list_image_models(endpoint: Endpoint, *, transport=None) -> list[dict]
     return sorted(
         ({"model": "openai/" + item.id, "name": item.id} for item in catalog.data
          if item.id.startswith(("gpt-image-", "chatgpt-image-"))
-         and (item.shutdown_date is None or item.shutdown_date > date.today())),
+         and (item.shutdown_date is None or item.shutdown_date > datetime.now().astimezone().date())),
         key=lambda item: item["model"],
     )
 

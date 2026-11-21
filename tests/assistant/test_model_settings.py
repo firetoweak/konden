@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from konden.config import write_json
-from konden.model_settings import ModelSettings, ModelConfigurationError
+from konden.model_settings import ModelConfigurationError, ModelSettings
 from konden.paths import KondenHome
 
 PRO = {"model": "deepseek/pro", "compact_threshold_tokens": 200000}

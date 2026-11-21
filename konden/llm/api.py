@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from konden.llm.codec import (
+    LLMRemoteError,
+    decode_llm_error,
+    decode_llm_result,
+    encode_llm_error,
+    encode_llm_result,
+)
+from konden.llm.images import encode_images
 from thinllm import (
     ContentDeltaSink,
     InvalidLLMResponse,
@@ -14,16 +22,6 @@ from thinllm import (
     LLMUsage,
     ToolCall,
 )
-
-from konden.llm.codec import (
-    LLMRemoteError,
-    decode_llm_error,
-    decode_llm_result,
-    encode_llm_error,
-    encode_llm_result,
-)
-from konden.llm.images import encode_images
-
 
 __all__ = [
     "ContentDeltaSink",

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-
+import unittest
 from unittest.mock import AsyncMock
 
 from konden.assistant.host.session_store import SessionStore
@@ -19,19 +18,19 @@ from konden.assistant.subagent.subagent import (
     return_data,
     task_fact_arguments,
 )
+from konden.filesystem.registry import WorkspaceRegistry
 from konden.paths import KondenHome
 from konden.runtime import (
-    CommandPhase,
-    replay,
     AgentRuntime,
+    CommandPhase,
     InvokeTool,
     ModelDecision,
     SqliteJournal,
     ToolBinding,
     UserMessageReceived,
+    replay,
 )
 from konden.runtime.events import DeliveryIdentity, EventDraft
-from konden.filesystem.registry import WorkspaceRegistry
 from tests.assistant.test_runner import ScriptedDecisionMaker
 
 
@@ -140,7 +139,7 @@ class ResumeUnfinishedOnStartupTest(unittest.IsolatedAsyncioTestCase):
                         event_id="user-1",
                         session_id="session-open",
                         payload=UserMessageReceived("接着做"),
-                        occurred_at=datetime.now(timezone.utc),
+                        occurred_at=datetime.now(UTC),
                         delivery=DeliveryIdentity("user", "d1"),
                     )
                 )

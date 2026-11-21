@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import codecs
-import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import time
 
 from konden.execution.command import (
     BoundedTextCapture,

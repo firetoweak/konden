@@ -7,11 +7,21 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from konden.assistant.agent_messages import (
-    LIST_COLLEAGUES, SEND_MESSAGE, message_bindings, recover_message_attempts, send_message,
+    LIST_COLLEAGUES,
+    SEND_MESSAGE,
+    message_bindings,
+    recover_message_attempts,
+    send_message,
 )
 from konden.assistant.agents import (
-    COMMUNICATION_LIMIT_REACHED, PRIVATE_MESSAGE, AgentCreated, AgentRecord, PrivateMessage, Speaker,
-    fact_arguments, parse_agent_fact,
+    COMMUNICATION_LIMIT_REACHED,
+    PRIVATE_MESSAGE,
+    AgentCreated,
+    AgentRecord,
+    PrivateMessage,
+    Speaker,
+    fact_arguments,
+    parse_agent_fact,
 )
 from konden.assistant.conversations import project_conversation
 from konden.assistant.host.agent_messages import AgentMessages
@@ -20,7 +30,16 @@ from konden.assistant.host.supervisor import HostSupervisor
 from konden.assistant.sessions import session_view
 from konden.filesystem.registry import WorkspaceRegistry
 from konden.paths import KondenHome
-from konden.runtime import AgentRuntime, CommandPhase, DomainFactCommitted, InvokeTool, ModelDecision, SqliteJournal, ToolBinding, replay
+from konden.runtime import (
+    AgentRuntime,
+    CommandPhase,
+    DomainFactCommitted,
+    InvokeTool,
+    ModelDecision,
+    SqliteJournal,
+    ToolBinding,
+    replay,
+)
 from konden.runtime.dispatcher import AttemptContext
 from tests.assistant.test_runner import ScriptedDecisionMaker
 
@@ -39,7 +58,7 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
         other.mkdir()
         self.other = registry.register_path(other)
         self.host = HostSupervisor(self.store, None, self.home, None, llm=None, workspaces=registry)
-        for session_id, workspace in (("Ada", self.workspace), ("Lin", self.workspace),
+        for session_id, _workspace in (("Ada", self.workspace), ("Lin", self.workspace),
                                       ("Third", self.workspace), ("Elsewhere", self.other)):
             await self.store.create(session_id, directory=project, initial_fact=fact_arguments(
                 AgentCreated(name=session_id, directory=str(project)), delivery_id="created"))
@@ -288,8 +307,9 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
                 step = (await runtime.advance(session_id)).step
             return step.commands
 
-        tasks = lambda _: ModelDecision(command_requests=tuple(
-            InvokeTool(SEND_MESSAGE, (("recipient", "Lin"), ("text", f"任务{index}"))) for index in range(4)))
+        def tasks(_):
+            return ModelDecision(command_requests=tuple(
+                    InvokeTool(SEND_MESSAGE, (("recipient", "Lin"), ("text", f"任务{index}"))) for index in range(4)))
         await AgentRuntime(self.journal("Ada"), None, {}).receive_user_message("Ada", "分头去做", delivery_id="human")
         commands = await decide("Ada", lambda _: ModelDecision(content="你好"), tasks)
         with patch("konden.assistant.host.agent_messages.MAX_MESSAGES_PER_ORIGIN", 3):

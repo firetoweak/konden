@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
 import hashlib
 import json
-from dataclasses import asdict, dataclass
-from typing import Mapping, Sequence
 
 from konden.assistant.toolsets import ToolsetDescriptor
 from konden.runtime import DomainFactCommitted, Event
 from konden.runtime.json_values import thaw_value
-
 
 CATALOG = "assistant.catalog"
 CATALOG_SOURCE = "assistant.catalog"

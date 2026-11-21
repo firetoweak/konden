@@ -4,11 +4,9 @@ Stays thin: no cross-provider fallback, load balancing, circuit breaking,
 cost tracking, or user-defined providers.
 """
 
-from thinllm.chat_completions import ChatCompletionsClient
 from thinllm.catalog import list_codex_models, list_models
+from thinllm.chat_completions import ChatCompletionsClient
 from thinllm.codex import CodexResponsesClient
-from thinllm.responses import ResponsesClient
-from thinllm.http_errors import describe_transport_error
 from thinllm.errors import (
     InvalidLLMResponse,
     LLMAuthenticationError,
@@ -17,11 +15,13 @@ from thinllm.errors import (
     LLMTransientError,
     MissingProviderSetting,
 )
+from thinllm.http_errors import describe_transport_error
 from thinllm.providers import (
     PROVIDERS,
     Endpoint,
     resolve_endpoint,
 )
+from thinllm.responses import ResponsesClient
 from thinllm.types import (
     ContentDeltaSink,
     LLMCallResult,
@@ -34,11 +34,6 @@ __all__ = [
     "PROVIDERS",
     "ChatCompletionsClient",
     "CodexResponsesClient",
-    "ResponsesClient",
-    "create_client",
-    "describe_transport_error",
-    "list_codex_models",
-    "list_models",
     "ContentDeltaSink",
     "Endpoint",
     "InvalidLLMResponse",
@@ -50,7 +45,12 @@ __all__ = [
     "LLMTransientError",
     "LLMUsage",
     "MissingProviderSetting",
+    "ResponsesClient",
     "ToolCall",
+    "create_client",
+    "describe_transport_error",
+    "list_codex_models",
+    "list_models",
     "resolve_endpoint",
 ]
 

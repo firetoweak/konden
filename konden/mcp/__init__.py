@@ -12,9 +12,9 @@ from konden.mcp.models import (
 
 __all__ = [
     "McpApplicationService",
+    "McpAssembly",
     "McpCommandError",
     "McpConsoleAdapter",
-    "McpAssembly",
     "McpServerRecord",
     "McpServerRuntimeState",
     "RuntimeAvailability",

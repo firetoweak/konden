@@ -4,15 +4,23 @@ from __future__ import annotations
 import asyncio
 from hashlib import sha256
 
-from konden.assistant.agent_messages import LIMIT_NOTICE, MAX_MESSAGE_HOPS, MAX_MESSAGES_PER_ORIGIN
+from konden.assistant.agent_messages import (
+    LIMIT_NOTICE,
+    MAX_MESSAGE_HOPS,
+    MAX_MESSAGES_PER_ORIGIN,
+)
 from konden.assistant.agents import (
-    PRIVATE_MESSAGE, ColleagueJoined, PrivateMessage, Speaker, fact_arguments, message_origin,
+    PRIVATE_MESSAGE,
+    ColleagueJoined,
+    PrivateMessage,
+    Speaker,
+    fact_arguments,
+    message_origin,
     parse_agent_fact,
 )
 from konden.assistant.conversations import project_agent_roster_entry
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
 from konden.runtime import DomainFactCommitted, SqliteJournal
-
 
 # The Web roster tells "waiting for the person" apart from idle; to a colleague both
 # mean the same thing: not working now, and a message reaches it.

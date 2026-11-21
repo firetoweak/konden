@@ -1,12 +1,13 @@
 """Managed raw Windows task process lifetime."""
 from __future__ import annotations
+
 import ctypes as c
 from ctypes import wintypes as w
 import msvcrt
 import os
+from pathlib import Path
 import subprocess
 import time
-from pathlib import Path
 
 k = c.WinDLL('kernel32', use_last_error=True)
 INVALID = c.c_void_p(-1).value
@@ -58,7 +59,8 @@ class Running:
             checked(set_job(self.job,9,c.byref(limits),c.sizeof(limits)))
             for name, mode in [('stdin.bin','rb'),('stdout.bin','wb'),('stderr.bin','wb')]:
                 path = Path(log_dir)/name
-                if mode == 'rb': path.write_bytes(b'')
+                if mode == 'rb':
+                    path.write_bytes(b'')
                 stream = path.open(mode)
                 os.set_inheritable(stream.fileno(),True)
                 self.logs.append(stream)
@@ -77,7 +79,8 @@ class Running:
             raise
         finally:
             for stream in self.logs:
-                if not stream.closed: os.set_inheritable(stream.fileno(),False)
+                if not stream.closed:
+                    os.set_inheritable(stream.fileno(),False)
 
     def wait(self, timeout=60, cancel_event=None):
         start = time.monotonic()
@@ -101,8 +104,10 @@ class Running:
         while True:
             accounting = Accounting()
             checked(query_job(self.job,1,c.byref(accounting),c.sizeof(accounting),None))
-            if accounting.active == 0: break
-            if time.monotonic() > deadline: raise TimeoutError('Job did not drain')
+            if accounting.active == 0:
+                break
+            if time.monotonic() > deadline:
+                raise TimeoutError('Job did not drain')
             time.sleep(.01)
         self.close()
         return {'exit_code':code.value,'timed_out':timed_out,'interrupted':interrupted,'duration_ms':(time.monotonic()-start)*1000}
@@ -146,10 +151,12 @@ class Running:
             checked(close_handle(self.job))
             self.job = None
         for handle in [self.info.thread,self.info.process]:
-            if handle: checked(close_handle(handle))
+            if handle:
+                checked(close_handle(handle))
         self.info.thread,self.info.process = None,None
         for stream in self.logs:
             if not stream.closed:
                 stream.flush()
-                if stream.writable(): os.fsync(stream.fileno())
+                if stream.writable():
+                    os.fsync(stream.fileno())
                 stream.close()

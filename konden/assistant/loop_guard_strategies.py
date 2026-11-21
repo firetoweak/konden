@@ -1,8 +1,8 @@
 """Mechanical observations only; strategies never decide whether work progresses."""
 
-import json
 from dataclasses import dataclass
 from itertools import groupby
+import json
 
 from konden.assistant.delivery import DELIVER_TOOL_NAME
 from konden.runtime import DomainFactCommitted, StepCommitted, UserMessageReceived

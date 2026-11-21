@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -53,7 +52,7 @@ class SkillInstallCandidateStore:
             package = temporary / "package" / bundle.name
             write_skill_bundle(package, bundle)
             self.package_reader.read(package)
-            os.replace(temporary, destination)
+            temporary.replace(destination)
         finally:
             if temporary.exists():
                 shutil.rmtree(temporary)

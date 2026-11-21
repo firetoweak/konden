@@ -11,8 +11,14 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from konden.config import write_json
 from konden.llm.config import load_connections
 from konden.model_settings import ModelConfigurationError
-from konden.search.deepseek import BASE_URL, DeepSeekAuth, MissingApiKey, SearchInput, request_web
-from thinllm import ResponsesClient, resolve_endpoint, MissingProviderSetting
+from konden.search.deepseek import (
+    BASE_URL,
+    DeepSeekAuth,
+    MissingApiKey,
+    SearchInput,
+    request_web,
+)
+from thinllm import MissingProviderSetting, ResponsesClient, resolve_endpoint
 
 
 class SearchConfig(BaseModel):

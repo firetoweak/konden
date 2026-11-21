@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import subprocess
 import sys
@@ -116,10 +117,8 @@ def test_same_cli_installation_is_serialized_across_processes(tmp_path):
         start("first")
         second = start("second")
         # 第一位仍在下载；第二位应等待，而不是先覆盖目录并完成登记。
-        try:
+        with contextlib.suppress(subprocess.TimeoutExpired):
             second.wait(timeout=0.5)
-        except subprocess.TimeoutExpired:
-            pass
         (tmp_path / "release").touch()
         for process in installers:
             _, error = process.communicate(timeout=15)

@@ -11,7 +11,6 @@ from konden.runtime.model import (
     ModelDecision,
 )
 
-
 USER_MESSAGE_SENT = "bot.user_message_sent"
 DELIVER_TOOL_NAME = "deliver"
 
@@ -167,13 +166,7 @@ def ensure_deliver(decision: ModelDecision, output_id: str) -> ModelDecision:
         return decision
     return replace(
         decision,
-        command_requests=decision.command_requests
-        + (
-            InvokeTool(
-                DELIVER_TOOL_NAME,
-                (("output_id", output_id), ("text", text)),
-            ),
-        ),
+        command_requests=(*decision.command_requests, InvokeTool(DELIVER_TOOL_NAME, (("output_id", output_id), ("text", text)))),
     )
 
 

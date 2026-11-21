@@ -1,16 +1,19 @@
 import asyncio
-import unittest
 from contextlib import AsyncExitStack
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 import httpx2
 
 from konden.mcp.client_manager import (
-    ManagedMcpConnection, McpClientManager, McpSdkError, _SdkConnectionOwner,
+    ManagedMcpConnection,
+    McpClientManager,
+    McpSdkError,
     _is_transport_failure,
+    _SdkConnectionOwner,
 )
 from konden.mcp.models import RuntimeAvailability
 from konden.mcp.toolset_provider import McpToolsetProvider

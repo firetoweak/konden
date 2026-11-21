@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 PROCESS_GROUP_PATHS = {
     "compact": ("assistant/test_compact.py",),
     "supervisor": ("assistant/test_supervisor.py",),

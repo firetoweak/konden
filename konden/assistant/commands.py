@@ -1,14 +1,19 @@
 """Background command facts and narrow recovery of interrupted handoffs."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from konden.runtime import (
-    CommandOutcome, CommandOutcomeReceived, CommandPhase, DomainFactCommitted,
-    EventDraft, OutcomeStatus, StepCommitted, replay,
-)
-from konden.runtime.json_values import thaw_value
 from konden.assistant.builtin_tools import command_result
 from konden.execution.processes import command_identity
-
+from konden.runtime import (
+    CommandOutcome,
+    CommandOutcomeReceived,
+    CommandPhase,
+    DomainFactCommitted,
+    EventDraft,
+    OutcomeStatus,
+    StepCommitted,
+    replay,
+)
+from konden.runtime.json_values import thaw_value
 
 COMMAND_FINISHED = "background_command_finished"
 SOURCE = "command"
@@ -59,5 +64,5 @@ async def recover_command_attempts(journal, session_id, transport):
             event_id=f"command-recovered:{item.command.command_id}", session_id=session_id,
             payload=CommandOutcomeReceived(item.command.command_id, attempt.attempt_id,
                                           CommandOutcome(OutcomeStatus.SUCCEEDED, value=result)),
-            occurred_at=datetime.now(timezone.utc), causation_id=attempt.started_event_id,
+            occurred_at=datetime.now(UTC), causation_id=attempt.started_event_id,
         ))

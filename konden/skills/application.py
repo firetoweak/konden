@@ -6,27 +6,13 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from konden.paths import KondenHome
-from konden.skills.installer import LocalSkillInstaller
-from konden.skills.models import SkillBundle, SkillRecord, validate_skill_id
-from konden.skills.package import LocalSkillPackageReader
-from konden.skills.package import write_skill_bundle
-from konden.skills.registry import SkillRegistry
-from konden.skills.runtime import SkillToolCatalog
-from konden.skills.updates import SkillCandidateStore
-from konden.skills.models import SkillUpdateReport
-from konden.skills.models import SkillSourceRef
-from konden.skills.sources import SkillSourceRouter
-from konden.skills.summarizer import SkillDiffSummarizer
-from konden.skills.summarizer import InvalidSkillSummaryResponse
 from konden.llm.api import (
     InvalidLLMResponse,
     LLMContextLengthError,
     LLMProviderError,
     LLMTransientError,
 )
-from konden.skills.install_candidates import SkillInstallCandidateStore
-from konden.skills.models import SkillInstallCandidate
+from konden.paths import KondenHome
 from konden.skills.errors import (
     SkillAlreadyInstalledError,
     SkillInputError,
@@ -34,7 +20,26 @@ from konden.skills.errors import (
     SkillNotFoundError,
     SkillPreconditionError,
 )
-from konden.skills.package import SkillPackageError
+from konden.skills.install_candidates import SkillInstallCandidateStore
+from konden.skills.installer import LocalSkillInstaller
+from konden.skills.models import (
+    SkillBundle,
+    SkillInstallCandidate,
+    SkillRecord,
+    SkillSourceRef,
+    SkillUpdateReport,
+    validate_skill_id,
+)
+from konden.skills.package import (
+    LocalSkillPackageReader,
+    SkillPackageError,
+    write_skill_bundle,
+)
+from konden.skills.registry import SkillRegistry
+from konden.skills.runtime import SkillToolCatalog
+from konden.skills.sources import SkillSourceRouter
+from konden.skills.summarizer import InvalidSkillSummaryResponse, SkillDiffSummarizer
+from konden.skills.updates import SkillCandidateStore
 
 
 @dataclass(frozen=True)
@@ -315,7 +320,7 @@ class SkillApplicationService:
                     raise BaseExceptionGroup(
                         f"Skill Registry 更新失败且包回滚失败；备份保留在 {backup}",
                         [registry_error, rollback_error],
-                    )
+                    ) from rollback_error
                 raise
         finally:
             if cleanup_temporary and temporary.exists():
@@ -361,7 +366,7 @@ class SkillApplicationService:
                     raise BaseExceptionGroup(
                         f"Skill Registry 删除失败且包回滚失败；备份保留在 {held_package}",
                         [registry_error, rollback_error],
-                    )
+                    ) from rollback_error
                 raise
             finally:
                 if cleanup_temporary and temporary_parent.exists():

@@ -1,11 +1,10 @@
-import json
 from collections.abc import Mapping
+import json
 from typing import Any
 
 from konden.tools.control import ControlApprovalProposal, ControlPreparationFailure
 from konden.tools.registry import ToolRegistry
 from konden.tools.spec import ToolArgumentsError, ToolSpec
-
 
 RESERVED_KEYS = frozenset({"ok", "code", "data", "error", "hint"})
 
@@ -31,7 +30,7 @@ def normalize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": result["ok"],
         "code": result["code"],
-        "data": result["data"] if "data" in result else extra or None,
+        "data": result.get("data", extra or None),
         "error": _as_str_error(result.get("error")),
         "hint": result.get("hint"),
     }

@@ -6,13 +6,13 @@ PATH 快照尚未刷新时体检依然有效。
 
 from __future__ import annotations
 
-import os
-import re
 from dataclasses import dataclass
+import os
 from pathlib import Path
+import re
 
 from konden.cli.models import CliHealth, utc_now
-from konden.execution.command import CommandResult, CommandExecutor
+from konden.execution.command import CommandExecutor, CommandResult
 
 _VERSION_RE = re.compile(r"\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?")
 

@@ -10,20 +10,20 @@ manifest 源只登记本机已有的 CLI；本模块补上"由 konden 提供"的
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import io
 import os
+from pathlib import Path
 import platform
 import re
 import shutil
 import sys
 import tarfile
 import tempfile
-import zipfile
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+import zipfile
 
 import httpx
 

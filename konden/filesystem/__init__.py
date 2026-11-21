@@ -1,10 +1,10 @@
 """Workspace path resolution, registration and text file access."""
-from .text import read_text, write_text, replace_text
+from .text import read_text, replace_text, write_text
 from .workspace import (
-    FileAccess,
     EnvironmentInputError,
     EnvironmentLocation,
     EnvironmentPermissionDenied,
+    FileAccess,
     FilesystemPermission,
     InvalidEnvironmentPath,
     PathOutsideWorkspaceView,
@@ -19,13 +19,10 @@ from .workspace import (
 )
 
 __all__ = [
-    "read_text",
-    "write_text",
-    "replace_text",
-    "FileAccess",
     "EnvironmentInputError",
     "EnvironmentLocation",
     "EnvironmentPermissionDenied",
+    "FileAccess",
     "FilesystemPermission",
     "InvalidEnvironmentPath",
     "PathOutsideWorkspaceView",
@@ -37,4 +34,7 @@ __all__ = [
     "WorkspacePathResolver",
     "WorkspaceScope",
     "WorkspaceViewSnapshot",
+    "read_text",
+    "replace_text",
+    "write_text",
 ]

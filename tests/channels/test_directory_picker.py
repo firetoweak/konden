@@ -12,9 +12,9 @@ from unittest.mock import Mock, patch
 
 from konden.channels.web.directory_picker import (
     DirectoryPickerUnavailable,
+    _main,
     select_directory,
     select_file,
-    _main,
 )
 
 

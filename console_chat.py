@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import sys
 from pathlib import Path
+import sys
 
 from konden.config import CONFIG_PATH_ENV
 from konden.paths import HOME_PATH_ENV

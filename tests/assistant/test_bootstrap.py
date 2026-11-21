@@ -1,9 +1,9 @@
 """Overdue clocks cannot deliver before startup recovery takes over old attempts."""
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from konden import bootstrap
-from konden.automation.once import OneShotSchedules, TIME_REACHED
+from konden.automation.once import TIME_REACHED, OneShotSchedules
 from konden.config import AppConfig
 from konden.paths import KondenHome
 
@@ -12,7 +12,7 @@ def test_overdue_clock_waits_for_startup_recovery(tmp_path, monkeypatch):
     home = KondenHome(tmp_path / "home")
     home.initialize()
     OneShotSchedules(home.state_root / "automation.sqlite").register(
-        "due", "bot", 1, "observe", started_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        "due", "bot", 1, "observe", started_at=datetime.now(UTC) - timedelta(minutes=1),
     )
     monkeypatch.setenv("KONDEN_HOME", str(home.root))
     monkeypatch.setenv("KONDEN_CONFIG", str(home.config_path))

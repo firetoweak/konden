@@ -6,8 +6,7 @@ import unittest
 
 from konden.assistant.host.ipc import PipePeer
 from konden.assistant.host.llm_port import WorkerLlmPort, complete_llm_chat
-from konden.llm.api import LLMTransientError
-from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage
+from konden.llm.api import LLMCallResult, LLMResponse, LLMTransientError, LLMUsage
 
 
 class _FakeLlm:

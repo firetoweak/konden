@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import unittest
 from unittest.mock import AsyncMock, call, patch
 
 from konden.assistant.host.auto_authorize import AutoAuthorizeStore

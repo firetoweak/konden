@@ -1,20 +1,20 @@
 import io
 import json
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 import zipfile
 
 import httpx
 
-from konden.skills.models import SkillSourceRef
 from konden.skills.approval import (
     SkillInstallProposalInput,
     create_skill_install_proposal_spec,
 )
-from konden.skills.sources import SkillSourceError, SkillSourceRouter
+from konden.skills.models import SkillSourceRef
 from konden.skills.package import SkillPackageError
+from konden.skills.sources import SkillSourceError, SkillSourceRouter
 from konden.tools.control import ControlPreparationFailure
 from tests.skills.test_package import write_skill
 

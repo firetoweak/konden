@@ -9,7 +9,6 @@ import subprocess
 import sys
 import tempfile
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE_TESTS = (
     "tests/scripts/test_start_process.py",
@@ -97,7 +96,7 @@ def main(argv: list[str] | None = None) -> None:
         run([npm, "ci"], cwd=ROOT / "scripts/browser")
     for target in targets:
         if target == "python":
-            run([sys.executable, "-m", "ruff", "check", "--select", "F,B905",
+            run([sys.executable, "-m", "ruff", "check",
                  "--target-version", f"py{expected_python.replace('.', '')}",
                  "konden", "thinllm", "scripts", "tests", "console_chat.py", "web_chat.py"])
             run([sys.executable, "-m", "pytest", "--durations=20",

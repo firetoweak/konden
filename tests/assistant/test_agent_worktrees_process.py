@@ -4,13 +4,13 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-import subprocess
-import sys
-import time
 import shlex
 import signal
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
 import threading
+import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -22,7 +22,6 @@ from konden.assistant.host.supervisor import HostSupervisor
 from konden.filesystem.registry import WorkspaceRegistry
 from konden.paths import KondenHome
 from tests.execution.test_foreground_lifetime_process import gone, until
-
 
 pytestmark = pytest.mark.process
 

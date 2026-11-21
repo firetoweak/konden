@@ -4,16 +4,16 @@
 """
 
 import asyncio
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from konden.cli.application import CliApplicationService
 from konden.cli.approval import (
+    CliIdProposalInput,
     CliInstallApprovalHandler,
     CliInstallProposalInput,
-    CliIdProposalInput,
     CliUninstallApprovalHandler,
     create_cli_install_proposal_spec,
     create_cli_repair_proposal_spec,

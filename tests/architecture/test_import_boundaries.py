@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 import unittest
 
-
 RUNTIME_ROOT = Path(__file__).resolve().parents[2] / "konden" / "runtime"
 ASSISTANT_ROOT = Path(__file__).resolve().parents[2] / "konden" / "assistant"
 LLM_ROOT = Path(__file__).resolve().parents[2] / "konden" / "llm"

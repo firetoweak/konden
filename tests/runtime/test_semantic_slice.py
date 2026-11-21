@@ -13,8 +13,8 @@ from konden.runtime import (
     ToolBinding,
     UserMessageReceived,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.memory_journal import MemoryJournal
 from tests.runtime.test_boundary_slice import RecordingTool, runtime_for
 from tests.session_scheduler import SettlingScheduler
 

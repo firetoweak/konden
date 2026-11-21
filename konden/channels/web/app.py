@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -12,55 +12,81 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.staticfiles import StaticFiles
-from starlette.exceptions import HTTPException as StarletteHTTPException
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from konden.assistant.attachments import (
+    MAX_SOURCE_BYTES,
     AttachmentGateway,
     AttachmentNotInSession,
     AttachmentRejected,
-    MAX_SOURCE_BYTES,
     is_valid_attachment_id,
 )
-from konden.assistant.file_attachments import is_file_attachment_id
-from konden.assistant.authorization import AuthorizationConflict, AuthorizationTargetNotFound
-from konden.assistant.host.agent_groups import GroupDissolvedError, GroupNameTaken, GroupNotFound
-from konden.assistant.host.agent_roster import AgentDeletedError, AgentNameTaken, AgentNotFound
-from konden.assistant.host.agent_projects import ProjectLinkRefused
-from konden.assistant.host.external_messages import ExternalConnectionNotFound, ExternalSessionNotFound, ExternalMessageInvalid
+from konden.assistant.authorization import (
+    AuthorizationConflict,
+    AuthorizationTargetNotFound,
+)
 from konden.assistant.external_messages import PostExternal
-from konden.assistant.host.codex_continuation import CodexContinuationInvalid, CodexExecutable
+from konden.assistant.file_attachments import is_file_attachment_id
+from konden.assistant.host.agent_groups import (
+    GroupDissolvedError,
+    GroupNameTaken,
+    GroupNotFound,
+)
+from konden.assistant.host.agent_projects import ProjectLinkRefused
+from konden.assistant.host.agent_roster import (
+    AgentDeletedError,
+    AgentNameTaken,
+    AgentNotFound,
+)
+from konden.assistant.host.codex_continuation import (
+    CodexContinuationInvalid,
+    CodexExecutable,
+)
+from konden.assistant.host.external_messages import (
+    ExternalConnectionNotFound,
+    ExternalMessageInvalid,
+    ExternalSessionNotFound,
+)
 from konden.assistant.host.supervisor import HostSupervisor
-from konden.assistant.model_connection import check_model_connection
-from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
-from konden.assistant.personal_memory import UpdatePersonalMemory
-from konden.automation.routines import RoutineNotFound
-from konden.model_settings import ModelCatalogUnavailable, ModelConfigurationError
-from konden.search import SearchConfig, SearchSettings
-from konden.media.images import ImageConfig, ImageGeneration
-from konden.media.openai_images import ImageProviderError
-from thinllm import InvalidLLMResponse, LLMProviderError, LLMTransientError
-import httpx
-from konden.assistant.runner import SessionNotFoundError
 from konden.assistant.inputs import InputConflict
+from konden.assistant.model_connection import check_model_connection
+from konden.assistant.personal_memory import UpdatePersonalMemory
+from konden.assistant.runner import SessionNotFoundError
+from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
+from konden.automation.routines import RoutineNotFound
 from konden.bootstrap import bootstrap_assistant
-from konden.channels.web.channel import WebChannel, WebConnectionInactive, WebInputInvalid
+from konden.channels.mcp import create_mcp_app
 from konden.channels.web.avatars import AvatarImageNotFound, AvatarStore
+from konden.channels.web.capabilities import CapabilityViews
+from konden.channels.web.channel import (
+    WebChannel,
+    WebConnectionInactive,
+    WebInputInvalid,
+)
 from konden.channels.web.directory_picker import (
     DirectoryPickerUnavailable,
     select_directory,
 )
 from konden.channels.web.hub import WebEventHub
-from konden.channels.web.capabilities import CapabilityViews
 from konden.cli.registry import CliRegistry
-from konden.skills.errors import SkillInputError, SkillInstalledPackageError, SkillNotFoundError
-from konden.mcp.errors import McpServerNotFoundError
-from konden.channels.mcp import create_mcp_app
 from konden.filesystem.registry import (
     WorkspaceNotFound,
     WorkspacePathTaken,
     WorkspaceRegistryError,
 )
+from konden.mcp.errors import McpServerNotFoundError
+from konden.media.images import ImageConfig, ImageGeneration
+from konden.media.openai_images import ImageProviderError
+from konden.model_settings import ModelCatalogUnavailable, ModelConfigurationError
+from konden.search import SearchConfig, SearchSettings
+from konden.skills.errors import (
+    SkillInputError,
+    SkillInstalledPackageError,
+    SkillNotFoundError,
+)
+from thinllm import InvalidLLMResponse, LLMProviderError, LLMTransientError
 
 SSE_KEEPALIVE_SECONDS = 15
 _LOGGER = logging.getLogger("uvicorn.error")

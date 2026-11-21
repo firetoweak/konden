@@ -3,31 +3,32 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from inspect import isawaitable
+import json
+
 from konden.assistant.artifacts import FileArtifactGateway
 from konden.assistant.compact.core import (
     TASK,
     compact_seed,
     load_document,
-    save_document,
     projected_tail,
+    save_document,
     window_preamble,
 )
 from konden.assistant.compact.store import CompactStore
 from konden.assistant.subagent.subagent import project_parent, project_returned
+from konden.assistant.workspaces import bound_directory, bound_workspace_id
 from konden.runtime import SqliteJournal
-from konden.assistant.workspaces import bound_workspace_id, bound_directory
 
 
 def seed_fact(kind, data, *, continuing):
-    return dict(
-        fact_type=kind,
-        data=data,
-        source="compact",
-        delivery_id=kind,
-        requests_decision=continuing,
-    )
+    return {
+        "fact_type": kind,
+        "data": data,
+        "source": "compact",
+        "delivery_id": kind,
+        "requests_decision": continuing,
+    }
 
 
 class CompactHost:

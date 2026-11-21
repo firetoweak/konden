@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from datetime import datetime, timezone
 from dataclasses import replace
+from datetime import UTC, datetime
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-import pytest
 from fastapi.testclient import TestClient
+import pytest
 
 from konden.channels.web.app import create_web_app
 from konden.channels.web.capabilities import CapabilityViews
@@ -45,7 +45,7 @@ def capabilities(tmp_path):
         )
         await views.clis.add(CliRecord(
             name="git", description="版本控制", source=CliSourceRef("manifest", "git.json"),
-            version="2.50.0", resolved_path="C:/tools/git.exe", health=CliHealth(True, True, False, datetime.now(timezone.utc)),
+            version="2.50.0", resolved_path="C:/tools/git.exe", health=CliHealth(True, True, False, datetime.now(UTC)),
         ))
 
     asyncio.run(prepare())

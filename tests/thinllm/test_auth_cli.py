@@ -10,8 +10,8 @@ import threading
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
-from oauth_cli_kit.models import OAuthToken
 from oauth_cli_kit import flow, server
+from oauth_cli_kit.models import OAuthToken
 import pytest
 
 from thinllm import __main__ as cli

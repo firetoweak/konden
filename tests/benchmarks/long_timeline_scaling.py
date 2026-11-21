@@ -18,13 +18,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-
-from konden.assistant.agents import AgentCreated, PrivateMessage, Speaker, fact_arguments
+import time
 from types import SimpleNamespace
 
+from konden.assistant.agents import (
+    AgentCreated,
+    PrivateMessage,
+    Speaker,
+    fact_arguments,
+)
 from konden.assistant.host.agent_messages import OriginUsage
 from konden.assistant.host.agent_roster import AgentRoster
 from konden.assistant.host.session_store import SessionStore

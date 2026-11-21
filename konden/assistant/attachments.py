@@ -16,13 +16,14 @@ from uuid import uuid4
 from PIL import Image
 
 from konden.assistant.file_attachments import (
-    FileAttachment, FileAttachmentStore, InvalidAttachmentName, is_file_attachment_id,
+    FileAttachment,
+    FileAttachmentStore,
+    InvalidAttachmentName,
+    is_file_attachment_id,
 )
-
 from konden.runtime import SqliteJournal, ToolBinding
 from konden.runtime.events import CommandOutcomeReceived
 from konden.runtime.json_values import thaw_value
-
 
 MAX_SOURCE_BYTES = 20 * 1024 * 1024
 MAX_PIXELS = 64_000_000

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from pathlib import Path
 import tempfile
 import unittest
-from collections.abc import Mapping
-from datetime import datetime, timezone
-from pathlib import Path
 
 from konden.runtime import (
     AgentRuntime,
@@ -26,12 +26,11 @@ from konden.runtime import (
     diagnose_artifacts,
     replay,
 )
-from tests.fixtures.memory_journal import MemoryJournal
 from konden.runtime.model import AuthorizationPolicy
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
+from tests.fixtures.memory_journal import MemoryJournal
 
-
-NOW = datetime(2026, 8, 21, 14, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 21, 14, 0, tzinfo=UTC)
 
 
 class RecordingTool:

@@ -3,11 +3,10 @@ from dataclasses import dataclass
 import json
 
 from konden.assistant.memory import Memory
-from konden.assistant.shared_memory import SharedMemoryStore
 from konden.assistant.personal_memory import PersonalMemoryStore
+from konden.assistant.shared_memory import SharedMemoryStore
 from konden.runtime import DomainFactCommitted
 from konden.runtime.json_values import thaw_value
-
 
 SHARED_MEMORY = "bot.shared_memory"
 PERSONAL_MEMORY = "bot.personal_memory"

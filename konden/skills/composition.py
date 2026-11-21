@@ -4,19 +4,19 @@ from dataclasses import dataclass
 
 from konden.paths import KondenHome
 from konden.skills.application import SkillApplicationService
-from konden.skills.summarizer import SkillDiffSummarizer
 from konden.skills.approval import (
-    SkillSetEnabledApprovalHandler,
     SkillInstallApprovalHandler,
+    SkillSetEnabledApprovalHandler,
     SkillUninstallApprovalHandler,
     SkillUpdateApprovalHandler,
-    create_skill_set_enabled_proposal_spec,
     create_skill_install_proposal_spec,
+    create_skill_set_enabled_proposal_spec,
     create_skill_uninstall_proposal_spec,
     create_skill_update_proposal_spec,
 )
 from konden.skills.management_tools import create_skill_management_specs
 from konden.skills.runtime import SkillToolCatalog
+from konden.skills.summarizer import SkillDiffSummarizer
 from konden.tools.control import ControlOperation
 from konden.tools.spec import ToolSpec
 

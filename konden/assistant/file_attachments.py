@@ -10,7 +10,6 @@ import shutil
 from typing import BinaryIO
 from uuid import uuid4
 
-
 _FILE_ID = re.compile(r"^file:[0-9a-f]{32}$")
 _MOUNT_SUFFIX = ".mount"
 _COPY_CHUNK = 1024 * 1024
@@ -113,7 +112,7 @@ class FileAttachmentStore:
         if not resolved.is_file():
             raise FileNotFoundError(resolved)
         _validate_name(resolved.name)
-        attachment_id, directory = self._create_original()
+        attachment_id, _directory = self._create_original()
         self._mount_pointer(attachment_id).write_text(
             str(resolved), encoding="utf-8",
         )
