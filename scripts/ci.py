@@ -116,6 +116,7 @@ def main(argv: list[str] | None = None) -> None:
                 command.extend(["-p", "xdist.plugin", "-n", str(args.workers), "--dist", "worksteal"])
             run(command)
         else:
+            run([sys.executable, "tests/architecture/web_routes.py"])
             run([npm, "test"], cwd=ROOT / "web")
             run([npm, "run", "build"], cwd=ROOT / "web")
 
