@@ -13,7 +13,7 @@
 - `command-errors`：`execute_command` 的其他结果码（`command_execution.py`）：
   - `ok:false`：`EMPTY_COMMAND`（「command 不能为空」）、`CWD_NOT_FOUND`（「工作目录不存在: …」）、`CWD_NOT_A_DIRECTORY`（「工作目录不是目录: …」）、`SHELL_NOT_FOUND`（带 `shell`、`executable`）、`COMMAND_START_FAILED`、`COMMAND_IO_FAILED`（「命令管道 I/O 失败，采集结果可能不完整」）。
   - `ok:null`（结果不确定，工具状态投影为 `unknown`/「中断」）：`COMMAND_INTERRUPTED`（「命令被用户停止，可能已部分执行。」）。
-- `command-authorization`：Windows/Linux 顶层会话的 `execute_command` 参数为 `cwd`、`command`、`wait_seconds`；不支持后台的平台使用 `cwd`、`command` 并等待结束。每次调用都需要授权（自动放行开启时被自动批准）；工具描述写明直接作用于真实目录、不提供回退，按实际结果核对影响；Git 核对方法由适用 Skill 提供。
+- `command-authorization`：Web 的 Windows、Linux 和 macOS 父子会话中，`execute_command` 支持 `cwd`、`command`、`wait_seconds`。不提供后台执行的入口使用 `cwd`、`command` 并等待结束。每次调用都需要授权，自动放行时由系统批准。核对实际文件和退出结果，Git 核对方法见适用 Skill。
 - `search-tools`：`glob`、`grep` 在工作区内查找；`glob` 依赖 `fd`/`fdfind`，找不到时返回 `GLOB_NOT_FOUND`（「未找到 fd」）。
 - `write-tools`：`write_file`（新建/覆盖）、`replace_all`（替换文件中所有精确匹配文本）。
 - `referenced-content`：`read_content` 读取工具结果或历史检索返回的真实 `reference`；可按 `offset`/`limit` 连续读取，或用 `query` 查找字面关键词，按 `next_offset` 续读。来源 `konden/assistant/content.py`。

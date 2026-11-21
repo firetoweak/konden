@@ -32,6 +32,8 @@
 
 ## Gotchas
 
+- 2026-11-21 主线增量（`129998ef`，Windows Chrome、隔离 Web、真实 DeepSeek）：会话核对到模型用 `send_message` 发给 `user`，文字即时可见。Bot 用 `send_file` 交付工作目录中的合成 PNG，从图片预览点「下载原图」，下载 63467 字节，SHA-256 与原件一致。证据 `.tools/verification/main-20261121/evidence/reply-delivery/`。未重跑图文混排、源文件变更和服务重启。
+
 - 2026-11-18 在隔离 Web 实例复验。GPT-6.1 Sol 用显式私聊回答“你在吗”和升舱总价，DeepSeek Flash 也交付了总价。两者都发出真实澄清卡片，按原问题作答后，刷新仍显示“暂缓”和后续私信。群里的已处理通知没有引发被点名者回帖，直接提问得到引用原消息的 87 美元答复。样本和提示变更见[模型交互可靠性](../../../../docs/历史/模型交互可靠性.md#显式投递后的群回帖)。
 
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：普通回复直接可见，私信与定时结果保持来源，刷新历史一致。send_file 副本在源文件修改／删除后的保持未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。

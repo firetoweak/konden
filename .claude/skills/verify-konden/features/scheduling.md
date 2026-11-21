@@ -14,13 +14,13 @@
 
 ## How to get to it (user POV)
 
-- 发 `请用 schedule_once 安排 60 秒后继续，然后回复 SCHEDULED；到时间后回复 WOKE_UP。`
+- 请 Bot 用 `schedule_once` 安排 60 秒后的提醒，将「到期后用 send_message 给 user 发 WOKE_UP」写进用途。
 
 ## Driving it with the browser
 
 - **安排与触发**：
   - (a) `sqlite3 $KONDEN_HOME/state/automation.sqlite 'select schedule_id,due_at,fired_at,delivered_at from schedules'` 出现一行，`fired_at`、`delivered_at` 为空；`GET /api/sessions/<id>` 的 `waiting_until` 等于该行 `due_at`。到点后该行**不删除**：先写 `fired_at`，投递后写 `delivered_at`；`waiting_until` 变回 null。
-  - (b) 工具结果 `code=SCHEDULED`；SSE 收到 `schedule_changed`（安排时与投递后各一次）；输入框上方 `Waiting up to 00m 5xs` 倒计时；约 60 秒后会话多一轮，回复含 `WOKE_UP`，该轮的触发是 `automation.time_reached`。
+  - (b) 工具结果为 `code=SCHEDULED`，输入框上方出现 `Waiting up to 00m 5xs`。安排和投递后都有 `schedule_changed`。约 60 秒后 `automation.time_reached` 触发新一轮，核对给 `user` 的显式消息含 `WOKE_UP`。
   - (c) 无用户输入也会触发，但只触发一次（`delivered_at` 写入后不再投递）；侧栏不永久停在运行状态。
   - (d) 让模型调用 `schedule_once` 不带 `purpose`（或 `delay_seconds=0`）→ `ok=false`、`code=INVALID_ARGUMENT`，`automation.sqlite` 不新增行。
 - **取消**：安排后发 `请取消刚才的定时`。(a) `schedule_cancellations` 表出现一行 `code=CANCELLED`；`schedules` 行仍在、`fired_at` 为空；`waiting_until` 变回 null。(b) 工具结果 `code=CANCELLED`、`ok=true`；倒计时消失；SSE `schedule_changed`。(c) 到点后没有新一轮。(d) 对已触发的定时取消 → `ALREADY_FIRED`；对不存在的 id 取消 → `NOT_FOUND`，两者 `ok=false`。

@@ -2,7 +2,7 @@
 
 从空首页直接新建一位 Bot，再在它的会话里发一条消息并看到回复。入口 `web_chat.py`，路由见 `web/src/app/App.tsx`，接口见 `konden/channels/web/app.py`、`konden/channels/web/channel.py`。创建 Agent 见 [session-sidebar.md](./session-sidebar.md)。
 
-需求依据：[Web：界面设计原则、对话与操作](../../../../docs/架构/入口/Web.md#界面设计原则)、[消息接纳](../../../../docs/架构/入口/入口与授权.md#身份与消息接纳)。持续对话、草稿与阅读可接续，引用不改变接收方或授权。
+需求依据：[Web：界面设计原则、对话与操作](../../../../docs/架构/入口/Web.md#界面设计原则)、[消息接纳](../../../../docs/架构/入口/入口与授权.md#身份与消息接纳)、[交互与响应](../../../../docs/架构/多智能体/交互与响应.md)。持续对话、草稿与阅读可接续，引用不改变接收方或授权。
 
 ## Sub-features
 
@@ -27,7 +27,7 @@
   - (b) `POST /api/agents` 返回 201，且发生在任何 `POST .../inputs` 之前；侧栏出现这个名字。刷新 `/` 停在欢迎页，不会再新建会话。
   - (c) `$SCRATCH_WORKSPACE/note.txt` 仍是 `verify`。
   - (d) 错误路径：打开 `/sessions/session-不存在` → 页面显示 `这个会话不存在。请从左侧新建或选择会话。`，`GET /api/sessions/session-不存在` 返回 404。
-- **发首条消息**：发送 `请只回复 PING_OK`。
+- **发首条消息**：请 Bot 用 `send_message` 给 `user` 发 `PING_OK`。
   - (a) `GET /api/sessions/<id>` 含这条用户消息；`GET /api/agents` 仍是这一个 Agent，不因发消息多出一个。
   - (b) `POST .../inputs` 返回 2xx；SSE 上有该会话的事件流（见 realtime-events）。
   - (c) `$SCRATCH_WORKSPACE/note.txt` 仍是 `verify`；`config.json`、`connections.json` 的 mtime 不变；会话 id 不变（首条消息不再建新会话）。
@@ -53,6 +53,8 @@
 - **部署后的普通刷新**：核对入口与未版本化文件的缓存响应要求重新验证；在隔离环境部署另一份构建后普通刷新取得新入口，带哈希资源仍可缓存。已打开页面不要求自动换版。仅收到 200 不足以证明使用了当前构建。
 
 ## Gotchas
+
+- 2026-11-21 主线增量（`129998ef`，Windows Chrome、隔离 Web、真实 DeepSeek）：在同一条消息内选中「隔离验证」，右键点「引用选中文字」，提交后的会话响应保留片段及原消息引用。真实 `ask_user` 发出短选项卡，点「青色」后原卡显示回答，刷新保持。证据 `.tools/verification/main-20261121/evidence/web-session-chat/`。长选项、到期补答、并发回答与跨消息选区未在浏览器重验。
 
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：无项目 Bot 创建、问候、真实发送和回复，刷新保留历史。引用往返、长历史与部署换版未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 

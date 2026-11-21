@@ -20,7 +20,7 @@
 ## Driving it with the browser
 
 - **连接**：`curl -N $KONDEN_VERIFY_URL/api/events`。(b) 首事件为 `event: connected`，含 `connection_id`；空闲至少 16 秒，记录约 15 秒到达的 SSE 注释（`: keep-alive` 或 `: ping`），不固定只认一种。(a) 有会话正在运行时新连上的 curl 在 `connected` 之后立刻收到该会话的 `session_activity`（`running`）及进行中的 `preview.*`/`tool_progress` 快照。(c) 快照只描述当下，不重放历史的 `output_final`。(d) 见下方失效连接。
-- **流式**：发一条消息，(b) 依次出现 `preview.*`/`thinking.*`、`output_final`；(a) `output_final` 文本与 `GET /api/sessions/<id>` 最终回复一致（无丢字、重复）。(c) 回合进行中刷新页面：新连接的快照接上进行中的预览，最终文本仍与 `GET` 一致。
+- **思考与显式交付**：在长期 Bot 私聊请求它用 `send_message` 给 `user` 发一条确定的正文。(a) `output_final` 与 `GET /api/sessions/<id>` 中的已送达消息一致。(b) 模型有流式思考时核对 `thinking.*`，普通工作正文保留在执行过程。(c) 回合中刷新时进行中的思考可由快照接续，实时和 GET 同一输出只展示一次，其他会话的未读也仅增加一次。正文预览的重连场景只在支持该预览的入口检查。
 - **多标签页**：A 页发消息，B 页同会话无刷新出现同样回复；侧栏状态同步。在一页切换全局自动放行，另一页无需刷新更新开关值。
   - (d) 写接口传断开前的旧 `connection_id` → 409，`detail` 为 `Web 连接已失效，请重新连接页面。`，不应 500。JSON 写接口传空 `connection_id` 会先被请求模型（`min_length=1`）拦下返回 422；另一条 409 文案 `Web 连接无效，请重新连接页面。` 只在未经该校验的入口出现（如 `POST .../attachments` 的 multipart 表单字段 `connection_id` 为空），可用它探测。
 - **断线重连**：停掉服务（或断开网络）后，(b) 侧栏底部变 `正在连接…`，输入框禁用、占位 `正在连接…`；恢复后连接图标的可访问名称变为 `已连接`，输入框可用，(a) 页面内容与 `GET /api/sessions/<id>` 一致。
