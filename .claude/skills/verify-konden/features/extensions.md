@@ -89,6 +89,8 @@
 
 ## Gotchas
 
+- 2026-11-21 在隔离 Windows Web 与 Chrome 复验 `129998ef`。从「能力 → Skill」搜索并展开 `independent-verification`，页面显示「产品内置」，无启停开关。`GET /api/capabilities` 中该项为 `builtin:independent-verification`、已启用，初始用户安装清单为空。随后批准本地测试包安装，关闭「操作结果」后草稿仍在，前后会话版本均为 21。证据 `.tools/verification/main-20261121/evidence/extensions/`。实际加载见 [外部会话](external-conversations.md#gotchas)。
+
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：内置 pdf-reading 可发现，PDF Reader 展开与真实连接检测通过，用户安装登记未增加。PDF 视觉阅读、文字与目录读取、加载版本恢复及安装审批未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 2026-11-09 PDF 阅读增量：Windows 隔离 Web、AnyMD 8.5.11、本机路径输入，能力目录与真实连接检测通过。GPT-6.1 Sol（低强度）实际渲染 BERT 双栏论文与纯图片扫描页，正确辨认阅读顺序、图内六位编号、橙色三角形，并用 PDF 点坐标返回完整的 1350×570 局部图；三个原生 MCP 图片块与附件原件逐一核对，未运行 OCR 或下载模型。证据留在本地 `.tools/pdf-evidence/`。GPT-4.1 初轮识图正确，但曾混用像素和 PDF 点，未正确核对裁剪区域；指南已补充单位换算与实际返回图检查，未据此声称所有型号均可稳定看图。隐藏实例的本机文件选择窗口未显示，本轮未计入附件选择/上传通过；未实跑 Linux/macOS GUI、旋转页面及超长文档。

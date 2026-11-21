@@ -1,6 +1,6 @@
 # 计划、消息时间与上下文用量
 
-模型用 `update_plan` 维护计划；消息尾部显示时间；输入框显示上下文用量，超过阈值自动 compact。来源：`konden/assistant/work_plan.py`、`WorkPlanPanel.tsx`、`workPlanPlacement.ts`、`messageTime.ts`、`ContextUsage.tsx`（私聊与三方输入区共用用量环）、`Conversation.tsx`（compact 失败提示）、`ModelSettings.tsx`（阈值字段）、`konden/assistant/compact/core.py`（`find_history`、`compact.window_rolled_over`、`latest_input_tokens`；`model_usage` 是写进 journal 的用量元数据键，不是模型工具）。
+模型用 `update_plan` 维护计划；消息尾部显示时间；输入框显示上下文用量，超过阈值自动 compact。来源：`konden/assistant/work_plan.py`、`WorkPlanPanel.tsx`、`workPlanPlacement.ts`、`messageTime.ts`、`ContextUsage.tsx`（私聊与三方输入区共用用量环）、`Conversation.tsx`（compact 失败提示）、`SelectedModelsPanel.tsx`（阈值字段）、`konden/assistant/compact/core.py`（`find_history`、`compact.window_rolled_over`、`latest_input_tokens`；`model_usage` 是 journal 的用量元数据键）。
 
 需求依据：[上下文压缩](../../../../docs/架构/上下文/上下文压缩.md)、[用量与压缩](../../../../docs/架构/上下文/上下文投影.md#用量与压缩)、[Web：展示状态的来源](../../../../docs/架构/入口/Web.md#展示状态的来源)。切窗不丢事实、不重跑副作用，用量缺失保持未知。
 

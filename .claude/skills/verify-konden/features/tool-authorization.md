@@ -8,7 +8,7 @@
 
 - `pending`：需要授权的工具调用在步骤卡片上显示徽标 `待授权`，卡片内有 `允许`/`拒绝`；同时输入框上方出现区域 `待处理`（标题 `待处理 · N 项`），每项为 `<工具名> · <参数摘要>`，按钮 `允许 <工具名>`/`拒绝 <工具名>`（可见文字 `允许`/`拒绝`），点 `查看 <工具名> 的参数` 展开参数 JSON。待处理条只读服务端 `session.pending_authorization_commands`，与步骤卡片同源；SSE 发 `authorization_required`；侧栏该会话活动点为 `等授权`。
 - `approve` / `reject`：`POST .../commands/{command_id}/authorize`（`approved` 为 true/false）。批准后执行，徽标变 `运行中` 再到 `完成`；拒绝后徽标 `已拒绝`，不执行。
-- `auto-authorize`：当前实验阶段默认开启全局工具自动放行。侧栏底部始终显示全局开关，首页、私聊和群聊共用，可访问名称 `自动放行写文件等工具`，可见标签 `自动放行` → `POST /api/auto-authorize`（`enabled`）；`GET /api/auto-authorize` 读取同一全局值。选择持久化在 `$KONDEN_HOME/runtime_sessions/authorization.json`，所有现有与新建会话共用，重启后保留；开启时批准运行中会话的待授权工具调用，休眠会话恢复时使用当前选择，其他页面通过 `auto_authorize_changed` 事件同步开关。控制提案仍使用独立确认流程，放行规则后续再细化。
+- `auto-authorize`：当前实验阶段默认开启全局工具自动放行。首页、私聊和群聊共用侧栏底部的开关，可访问名称为 `自动放行写文件等工具`。展开名册有 `自动放行` 标签，头像栏保留开关和悬停说明。`POST /api/auto-authorize` 提交 `enabled`，`GET /api/auto-authorize` 读取全局值。重启保留选择，其他页面通过 `auto_authorize_changed` 同步。开启时批准现有待授权工具调用，控制提案继续单独确认。
 
 自动放行开启时，调用提交到批准完成之间也不显示需要人操作的授权提示：待处理条与名册不列工具授权，展开的执行过程显示排队中；关闭后同一待批准调用恢复待授权。开关变化同步刷新名册。
 - `control-confirm`：模型发起的控制请求作为一项出现在待处理条里，显示摘要与 `风险：…`，按钮 `取消`/`确认`；对话上下文保持可见。读 `session.control_approval`；`POST .../control` 带 `request_id`、`approved`。

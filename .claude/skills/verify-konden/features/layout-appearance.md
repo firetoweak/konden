@@ -47,6 +47,8 @@
 
 ## Gotchas
 
+- 2026-11-21 主线增量（`129998ef`，Windows Chrome、隔离 Web）：桌面「调节侧栏宽度」可聚焦，Home 收至 64px、End 展到 520px、左方向键可收窄。头像栏搜索可输入，刷新保留 64px。切到 390px 后抽屉显示完整 Bot 名称并可选中，返回桌面恢复头像栏。证据 `.tools/verification/main-20261121/evidence/layout-appearance/`。本轮未实测鼠标调宽、群聊和外部会话的头像栏入口、减少动态效果及实体触屏。
+
 - 2026-11-12 顶部阅读空间增量（基线 `origin/main@57235c47`，Windows Chrome、隔离 Web 与本地固定回复）：1440px 私聊和群聊滚动区顶沿为 0，身份与资料按钮浮动且无横线；能力页移除重复标题栏，搜索、刷新和分类切换通过。390/320px 下无横向溢出，私聊草稿跨聊天与断点保留，390px 资料抽屉开关及明暗显示通过。230 项前端测试、类型检查与构建通过；首轮默认并发有一项模型设置测试 5 秒超时，单文件诊断通过后以两个 worker 运行完整统一入口通过，原失败另存本地记录。未重验真实供应商、实体触屏、内容页打开与外部会话。证据在任务 worktree 的 `.tools/verification/chat-seam-scroll/evidence/`。
 
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：390px 子过程页保留输入，真实发送并收到 NARROW_INPUT_OK；桌面侧栏分隔条 tabIndex=-1。旧窄屏输入缺口本轮未复现；侧栏键盘调宽仍是产品缺口，减少动态效果与实体触屏未验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。

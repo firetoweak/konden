@@ -54,6 +54,8 @@ Agent 用 `send_message` 按全局名册中同事的名字发私信。参数是 
 
 ## Gotchas
 
+- 2026-11-21 主线增量（`129998ef`，Windows Chrome、隔离 Web、真实 DeepSeek）：两位 Bot 显式双向送达，双方会话包含相同消息号，点击收信入口可看回信。该次模型回信省略 `reply_to`，页面显示两个话题入口。四条同话题往返及合并未重验。证据 `.tools/verification/main-20261121/evidence/private-messages/`。
+
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：Ada 向 Lin 显式送达回执，双方历史及来源可见。源头额度、发送确认丢失与授权转述未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
 - 私信只装配给有长期身份的 Agent。普通会话、子 Agent 没有 `send_message`。
