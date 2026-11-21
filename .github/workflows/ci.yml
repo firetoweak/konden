@@ -61,6 +61,26 @@ jobs:
       - name: Run web verification
         run: python scripts/ci.py web
 
+  formal:
+    name: Formal (TLC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21.0.13+9'
+      - uses: actions/cache@v6
+        with:
+          path: .tools/formal/deps
+          key: tlc-${{ hashFiles('formal/toolchain.json') }}
+      - name: Check bounded models
+        run: python scripts/ci.py formal
+
   process:
     name: Process (${{ matrix.os }}, ${{ matrix.group }})
     runs-on: ${{ matrix.os }}
@@ -121,7 +141,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [python, web, process]
+    needs: [python, web, process, formal]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -130,7 +150,9 @@ jobs:
           PYTHON_RESULT: ${{ needs.python.result }}
           WEB_RESULT: ${{ needs.web.result }}
           PROCESS_RESULT: ${{ needs.process.result }}
+          FORMAL_RESULT: ${{ needs.formal.result }}
         run: |
           test "$PYTHON_RESULT" = success
           test "$WEB_RESULT" = success
           test "$PROCESS_RESULT" = success
+          test "$FORMAL_RESULT" = success
