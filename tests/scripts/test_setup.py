@@ -2,11 +2,11 @@ from subprocess import CompletedProcess
 
 import pytest
 
-from scripts import setup
+from scripts import preparation, setup
 
 
 def test_preflight_collects_missing_project_tools_and_node_version(monkeypatch):
-    monkeypatch.setattr(setup.shutil, "which", lambda command: "node" if command == "node" else None)
+    monkeypatch.setattr(setup.shutil, "which", lambda command, **_: "node" if command == "node" else None)
     monkeypatch.setattr(setup.runtime_tools, "supported_node", lambda: False)
     message = "\n".join(setup.check_dependencies())
     for dependency in ("Git", "ripgrep", "fd", "npm", "Node.js 版本"):
@@ -14,7 +14,8 @@ def test_preflight_collects_missing_project_tools_and_node_version(monkeypatch):
 
 
 @pytest.mark.parametrize("arguments,configure", [([], False), (["--configure"], True)])
-def test_preparation_uses_locked_dependencies_and_configures_only_when_requested(monkeypatch, arguments, configure):
+def test_preparation_uses_locked_dependencies_and_configures_only_when_requested(prepared_source, monkeypatch, arguments, configure):
+    monkeypatch.setattr(setup, "ROOT", prepared_source)
     monkeypatch.setattr(setup, "check_dependencies", lambda: [])
     monkeypatch.setattr(setup.runtime_tools, "prepare", lambda root: None)
     monkeypatch.setattr(setup.shutil, "which", lambda _: "npm")
@@ -28,6 +29,21 @@ def test_preparation_uses_locked_dependencies_and_configures_only_when_requested
     assert options == {"cwd": setup.ROOT, "check": True}
     initialize, = [command for command, _ in commands if "konden.initialize" in command]
     assert ("--configure" in initialize) == configure
+    assert preparation.is_prepared(prepared_source)
+
+
+def test_failed_update_invalidates_preparation_and_can_be_retried(prepared_source, monkeypatch):
+    """A failed reinstall must not leave a previously successful stamp usable."""
+    monkeypatch.setattr(setup, "ROOT", prepared_source)
+    monkeypatch.setattr(setup.runtime_tools, "prepare", lambda root: None)
+    monkeypatch.setattr(setup, "check_dependencies", lambda: ["missing tool"])
+    with pytest.raises(SystemExit):
+        setup.main([])
+    assert not preparation.is_prepared(prepared_source)
+    monkeypatch.setattr(setup, "check_dependencies", lambda: [])
+    monkeypatch.setattr(setup.subprocess, "run", lambda *args, **kwargs: None)
+    assert setup.main([]) == 0
+    assert preparation.is_prepared(prepared_source)
 
 
 @pytest.mark.parametrize("missing", [[], ["missing Git"]])
