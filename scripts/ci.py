@@ -98,7 +98,8 @@ def main(argv: list[str] | None = None) -> None:
         if target == "python":
             run([sys.executable, "-m", "ruff", "check",
                  "--target-version", f"py{expected_python.replace('.', '')}",
-                 "konden", "thinllm", "scripts", "tests", "console_chat.py", "web_chat.py"])
+                 "konden", "thinllm", "scripts", "tests", ".claude",
+                 "console_chat.py", "web_chat.py"])
             run([sys.executable, "-m", "pytest", "--durations=20",
                  "--junitxml=.tools/test-results/python.xml"])
         elif target == "smoke":

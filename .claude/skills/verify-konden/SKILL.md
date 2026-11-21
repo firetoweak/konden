@@ -5,178 +5,56 @@ description: "Drive konden Web the way a user does — workspace, Agent roster a
 
 # Verify konden
 
-Drive the Web app a person actually uses. The page is served by `web_chat.py`. Chat and tool calls also need a configured model. Web sessions are persistent Bots with their own ordinary directories under `$KONDEN_HOME/state/bots/`. Create and chat without registering a project. Optionally link a code project at creation or from Bot details. That path needs a Git repository with a first commit; the Bot project worktree lives in its personal directory under `projects/<name>/`. Integration worktrees live under `$KONDEN_HOME/state/coding_bot/`. Subagents share their parent's working files and can run commands; verify their authorization and explicit resource reclamation. The terminal entry point is covered by `features/console-chat.md`; use a separate disposable home for each terminal drive, never the Web home.
-
-UI copy is Chinese. Match the accessible names below exactly. Set the browser viewport to at least 1280×800 before any click; below the `sm` breakpoint the sidebar is collapsed behind `打开 Agent 名册`.
+Drive the Web app a person actually uses. `web_chat.py` serves it against an empty home; that path is part of the map. Chat and tool calls also need a configured model. Web sessions are persistent Bots under `$KONDEN_HOME/state/bots/`; a linked code project needs a Git repository with a first commit and lives under `projects/<name>/`. Integration worktrees live under `$KONDEN_HOME/state/coding_bot/`. Subagents share their parent's files and can run commands — verify their authorization and explicit reclamation. The terminal entry point is `features/console-chat.md`.
 
 ## Acceptance basis
 
-Read `features/README.md` and the feature’s **需求依据** before choosing assertions. Honor project `AGENTS.md`, including explicitly registered exceptions. Product positioning defines the user value; current architecture rules and the runtime semantics define required behavior. Source and tests locate the current entry point and observations. If implementation violates an explicit requirement, keep the requirement and report a product gap; do not rewrite the expected result to match the implementation. Conflicting current documents remain an unresolved basis conflict. History and future directions are not current acceptance requirements.
+Read `features/README.md` and the feature's **需求依据** before choosing assertions. Project `AGENTS.md` binds, including explicitly registered exceptions. Product positioning defines the user value; architecture rules and runtime semantics define required behavior. If the implementation contradicts an explicit requirement, keep the requirement and report a product gap — never rewrite the expected result to match the code. Conflicting current documents stay an unresolved basis conflict; history and future directions are not acceptance requirements.
 
-A path exercised per feature is feature coverage, not proof that every requirement or the external verification feedback loop passed. Record the exact version, requirement/scenario, actual evidence, result and unverified scope.
+A path exercised is feature coverage, not proof that every requirement passed. Record version, requirement/scenario, evidence, result and unverified scope.
 
 ## Launch
 
-One verification run owns one data directory, one port, and one process. Do not start it on `~/.konden` or on a port that already answers. Do not pass `--workspace`; the empty-home path is part of the map. Do not pass `--dev` for this port: Vite's proxy is fixed at `127.0.0.1:8765`, so an isolated port must serve the built files in `web/dist`.
-
-From the repository root:
-
 ```sh
-RUN_ID="$(date +%Y%m%d%H%M%S)"
-RUN_DIR="/tmp/konden-verify-$RUN_ID"
-export KONDEN_HOME="$RUN_DIR/home"
-SCRATCH_WORKSPACE="$RUN_DIR/workspace"
-EVIDENCE_DIR="/tmp/konden-verify-evidence/$RUN_ID"
-PORT=8876
-export KONDEN_VERIFY_URL="http://127.0.0.1:$PORT"
-SESSION="konden-verify-$RUN_ID"
-mkdir -p "$KONDEN_HOME" "$SCRATCH_WORKSPACE" "$EVIDENCE_DIR"
-printf 'verify\n' > "$SCRATCH_WORKSPACE/note.txt"
-git -C "$SCRATCH_WORKSPACE" init -q
-git -C "$SCRATCH_WORKSPACE" add note.txt
-git -C "$SCRATCH_WORKSPACE" -c user.name=verify -c user.email=verify@example.invalid commit -qm init
+python .claude/skills/verify-konden/run.py start
 ```
 
-`KONDEN_HOME` and `SCRATCH_WORKSPACE` are siblings. The personal directory must not sit inside the workspace directory.
+One run owns the directory, port and process it reports; never reuse them, and never start on `~/.konden`. It prints JSON: `url`, `run_dir`, `evidence_dir`, `home`, `workspace`, `pid`, `ok`, and Doctor's report. `ok: true` is the only readiness signal — that is `doctor.py` exiting 0, not the uvicorn log line. If the log stops first, read `log` and do not drive the port.
 
-Install once if `./konden-env/bin/python` or `web/dist/index.html` is missing. Re-run setup after updates that change browser dependencies. `sh scripts/setup.sh` (Linux x64 and macOS x64/Apple Silicon; network required) downloads the project Python into `konden-env`, then runs `scripts/setup.py` in four steps: it prepares pinned application tools, including OfficeCLI, and a private Chrome for Testing under `.tools/runtime/`, installs Python deps, runs `npm ci` in `scripts/browser/` and `web/` and builds the web bundle, and initializes whichever personal directory `KONDEN_HOME` points at. Existing `config.json` and `connections.json` there are left alone. `setup.py --check` checks system command prerequisites and rejects Node outside 22.x (≥22.13) or 24.x; it does not prove the browser MCP dependencies are installed. If only the web bundle is stale, rebuilding it alone is enough:
+`live_model_ready: false` means no usable provider for the default model. Skip chat send, the 测试 button, and coding tool rounds; say so in the note and do not type anyway. `start --require-model` makes that a blocker instead.
 
-```sh
-sh scripts/setup.sh
-( cd web && npm ci && npm run build )
-```
+Rerun the same check with `run.py status --run-dir <dir>`. A non-zero exit means do not click: a wrong home, a dead pid, or a page that is not konden is a different instance.
 
-Pick another `PORT` if `8876` is already listening. Then start the server in its own tmux session and record the process id. `exec` keeps that id on `web_chat.py`.
-
-```sh
-tmux new-session -d -s "$SESSION" -c "$PWD" \
-  "export KONDEN_HOME='$KONDEN_HOME'; echo \$\$ > '$RUN_DIR/web.pid'; exec ./konden-env/bin/python web_chat.py --host 127.0.0.1 --port $PORT > '$RUN_DIR/web.log' 2>&1"
-```
-
-Ready means `doctor.py` exits 0. The log line `Uvicorn running on http://127.0.0.1:$PORT` is the same moment, not a substitute for Doctor. If the log stops before that line, read `web.log` and do not drive the port.
-
-### Windows
-
-From the repository root in PowerShell. Install once with `.\scripts\setup.ps1`: it installs the pinned tools (portable Git when missing), Python deps, and builds `web\dist`.
-
-Set the run variables as process environment, so the server started below inherits them:
-
-```powershell
-$RunId = Get-Date -Format yyyyMMddHHmmss
-$env:RUN_DIR = "$env:TEMP\konden-verify-$RunId"
-$env:KONDEN_HOME = "$env:RUN_DIR\home"
-$env:SCRATCH_WORKSPACE = "$env:RUN_DIR\workspace"
-$env:EVIDENCE_DIR = "$env:TEMP\konden-verify-evidence\$RunId"
-$env:PORT = "8876"
-$env:KONDEN_VERIFY_URL = "http://127.0.0.1:$env:PORT"
-New-Item -ItemType Directory -Force $env:KONDEN_HOME, $env:SCRATCH_WORKSPACE, $env:EVIDENCE_DIR | Out-Null
-Set-Content -Path "$env:SCRATCH_WORKSPACE\note.txt" -Value verify
-git -C $env:SCRATCH_WORKSPACE init -q
-git -C $env:SCRATCH_WORKSPACE add note.txt
-git -C $env:SCRATCH_WORKSPACE -c user.name=verify -c user.email=verify@example.invalid commit -qm init
-$proc = Start-Process -FilePath .\konden-env\Scripts\python.exe -ArgumentList @('web_chat.py','--host','127.0.0.1','--port',$env:PORT) -PassThru -WindowStyle Hidden -RedirectStandardOutput "$env:RUN_DIR\web.log" -RedirectStandardError "$env:RUN_DIR\web.err"
-Set-Content -Path "$env:RUN_DIR\web.pid" -Value $proc.Id
-```
-
-`-WindowStyle Hidden` gives the server its own console. Do not use `-NoNewWindow`: a server that shares your console receives your Ctrl+C.
-
-### Terminal session
-
-For `console-chat`, create a fresh `$RUN_DIR/tui-home` and copy only the needed model configuration into it. Run `./konden-env/bin/python console_chat.py --home "$RUN_DIR/tui-home" --workspace "$SCRATCH_WORKSPACE"` in a real interactive terminal; on Windows use `.\konden-env\Scripts\python.exe`. Do not run two CLIs against the same home. Before typing, confirm the process command line, the isolated home, and its startup session id. The Web Doctor does not health-check a TUI; verify its prompt and successful model reply in the terminal itself. Exit with Ctrl+D and confirm process exit.
-
-## Doctor
-
-Run this before the first click, after any surprising failure, and before claiming the instance is still the one you started.
-
-```sh
-./konden-env/bin/python .claude/skills/verify-konden/doctor.py \
-  --url "$KONDEN_VERIFY_URL" \
-  --home "$KONDEN_HOME" \
-  --pid-file "$RUN_DIR/web.pid"
-```
-
-```powershell
-.\konden-env\Scripts\python.exe .claude\skills\verify-konden\doctor.py --url $env:KONDEN_VERIFY_URL --home $env:KONDEN_HOME --pid-file "$env:RUN_DIR\web.pid"
-```
-
-Any Python 3.11+ can run it; the script uses only the standard library. Exit 0 means the pid is alive, the process is `web_chat.py` with this `KONDEN_HOME` (on Windows the process environment is not readable: the command line is checked, and the home is checked only through `connections_path`), `GET /` contains `<title>konden</title>`, `GET /api/workspaces` is a list, `GET /api/model-settings` points `connections_path` at `$KONDEN_HOME/connections.json` and does not echo credentials, and `GET /api/events` emits `connected`. The JSON also reports `live_model_ready`.
-
-`live_model_ready` is false when no default model is selected or its provider has no usable connection setting. True does not mean the key is valid. vLLM and Ollama can still report configured with an empty key, because a base URL is enough; another provider's configured badge does not establish readiness for the default model. **Skip chat send, the 测试 button, and coding tool rounds when `live_model_ready` is false.** Say so in the proof note. Do not type a message anyway.
-
-Add `--require-model` only when the feature you are about to drive cannot be skipped. `python -m pytest -m process` is a separate contract check, not a substitute for Web entries.
-
-A non-zero exit means do not click. Wrong home, a dead pid, or a page that is not konden is a different instance.
+Missing `konden-env` or `web/dist`? Run `scripts/setup.sh` (`scripts\setup.ps1` on Windows) once; if only the bundle is stale, `( cd web && npm ci && npm run build )` is enough.
 
 ## Drive
 
-Use the browser automation in the session (Playwright or Chrome DevTools). The verbs below are the harness. There is no `browser` binary in this repository. Resolve each target by role and accessible name. Do not click by coordinates or DOM order.
+UI copy is Chinese; match accessible names exactly. Viewport at least 1280×800 — below the `sm` breakpoint the sidebar hides behind `打开 Agent 名册`.
 
-After switching Bots or changing the viewport, take a fresh snapshot and confirm the intended conversation and model selector before filling the composer. Wait for attachment uploads and model selection to finish before sending. For a switch saved by the server, click once according to its current value, then wait for the confirmed value; an immediate `setChecked` assertion can run while the save is still pending. Scope repeated names such as `保存记忆` to the named drawer or panel.
+Use the session's browser automation; this repository ships no browser binary. Resolve every target by role and accessible name, never by coordinates or DOM order. After switching Bots or resizing, take a fresh snapshot and confirm the conversation and model selector before filling the composer. Wait for uploads and model saves to settle: a server-saved switch needs one click at its current value, then the confirmed value. Scope repeated names such as `保存记忆` to its drawer.
 
-- `browser open <url>`
-- `browser click --role <role> --name "<accessible name>"`
-- `browser fill --role textbox --name "<accessible name>" --value "<text>"`
-- `browser press --key Enter`
-- `browser snapshot --aria --path <file>`
-- `browser screenshot --path <file>`
+The conversation timeline is a virtual list and dialogs are transitions; both need `requestAnimationFrame` and `ResizeObserver`. A hidden browser pane never fires them — no turns render and `新建工作区`, `外观`, `新建群聊` never open. Probe before trusting an empty page; if the pane cannot stay visible, record those entries `unreachable` with that prerequisite, not as product failures.
 
-The conversation timeline is a virtual list (react-virtuoso) and dialogs and menus are Mantine transitions; all of them need `requestAnimationFrame` and `ResizeObserver`. In a browser pane that is hidden (for example the desktop app's built-in Browser pane while it is not on screen) those callbacks do not fire: the timeline renders no turns and `新建工作区`, `外观`, `新建群聊` never open. Check with a tiny probe before trusting an empty page; if the pane cannot be kept visible, record those entries as `unreachable` with that prerequisite, not as product failures.
+Start from `features/README.md`, then the feature file, and drive the entry point it names — colleague tools, private messages, landing and sync, group chat, inbox, routines. Pending items highlight the Bot in the sidebar; there is no standalone inbox page. Wait for the sidebar indicator to reach role `status` / name `已连接`; `正在连接…` means not ready, so rerun Doctor instead of typing.
 
-`curl` is only the read-only confirmation written next to an action. Posting to `/api/workspaces`, `/api/agents`, or `/api/sessions/.../inputs` does not prove the page.
+`curl` is only read-only confirmation written beside an action; posting to the API does not prove the page. A green `pytest`, `-m process`, or live-model run is not Web proof.
 
-Read `features/README.md`, then the feature file. Drive the entry point that file names. A green `python -m pytest` or `python -m pytest -m process` run is not Web proof. Live model tests (`KONDEN_RUN_LIVE_TESTS=1 python -m pytest tests/live`) call a real model and still are not the Web page.
-
-Colleague tools, private messages, landing and sync, and group chat are `features/colleague-tools.md`, `features/private-messages.md`, `features/land-and-sync.md`, and `features/group-chat.md`. Drive them from the page those files name. Pending items highlight the corresponding Bot in the sidebar and are handled in that Bot's conversation; there is no standalone inbox page. Communication-limit reports and unattended-routine prompts are covered by `features/inbox.md` and `features/routines.md`.
-
-Wait until the sidebar connection indicator has role `status` and accessible name `已连接`. A connecting indicator and visible `正在连接…` text mean the page is not ready; run Doctor again instead of typing.
+Terminal drives: a fresh `tui-home` per run holding only the model settings you copy in, a real interactive terminal, and never two CLIs on one home. Web Doctor does not health-check it — verify the prompt, a model reply and exit in that terminal.
 
 ## Evidence
 
-Write proof under `$EVIDENCE_DIR/<feature-id>/`. Cleanup must not delete that directory.
+`run.py evidence --run-dir <dir> --feature <id>` creates the directory; cleanup never deletes it. Per driven entry point save `snapshot.txt` (accessibility snapshot with the resulting state on screen), `page.png` (that same state, `新建 Bot` visible on desktop, `打开 Agent 名册` on mobile), `state.json` (the read-only HTTP body the feature file names), and `note.txt` (feature id, entry point, `passed` or `skipped` plus the Doctor field that blocked it). Terminal drives save `terminal.txt` — startup, input, reply, exit — and never a browser screenshot.
 
-For each driven entry point save:
+A skipped live-model step is neither a pass nor a pass via pytest. Name the result: sidebar control plus `GET /api/workspaces`; transcript plus `GET /api/sessions/<id>`; for a coding round, the files in the Agent's worktree.
 
-- `snapshot.txt` — accessibility snapshot taken after the action, while the resulting state is on screen
-- `page.png` (or `page.jpg` when the browser returns JPEG) — screenshot of that same state, with the sidebar `新建 Bot` entry visible on desktop (on mobile, include the `打开 Agent 名册` control)
-- `state.json` — the read-only HTTP body named in the feature file
-- `note.txt` — feature id, entry point, and either `passed` or `skipped` plus the Doctor field that blocked it (`live_model_ready`)
-
-For TUI, save `terminal.txt` (startup, command input, reply and exit), the isolated session metadata or journal observations, and `note.txt`; a browser screenshot is not TUI proof.
-
-A skipped live-model step is not a pass and not a pass via pytest. Capture the action and the result. For a workspace, the result is the sidebar control and `GET /api/workspaces`. For a chat send, the result is the user text in the transcript and `GET /api/sessions/<id>`. For a coding round, the result is the transcript and the file contents in the Agent's worktree.
-
-## Cleanup
-
-Stop only the process you started, then delete the run directory. Leave `$EVIDENCE_DIR` in place.
+## Stop
 
 ```sh
-pid="$(cat "$RUN_DIR/web.pid")"
-tmux kill-session -t "$SESSION"
-if kill -0 "$pid" 2>/dev/null; then kill "$pid"; fi
-for _ in 1 2 3 4 5; do
-  kill -0 "$pid" 2>/dev/null || break
-  sleep 0.2
-done
-if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid"; fi
-rm -rf "$RUN_DIR"
-test -d "$EVIDENCE_DIR"
+python .claude/skills/verify-konden/run.py stop --run-dir <dir>
 ```
 
-On Windows, stop only the recorded pid. Session workers sit in a kill-on-close job of that process, so they exit with it. Do not stop every `python` or `web_chat.py`.
-
-```powershell
-Stop-Process -Id (Get-Content "$env:RUN_DIR\web.pid") -Force
-Wait-Process -Id (Get-Content "$env:RUN_DIR\web.pid") -Timeout 10 -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force $env:RUN_DIR
-Test-Path $env:EVIDENCE_DIR
-```
-
-After cleanup, check the saved screenshot and `state.json` at their named locations in `$EVIDENCE_DIR`; keep terminal evidence there too.
-
-## Helpers
-
-`doctor.py` is the only helper. It is read-only: four GETs plus the pid. Invocation is in Doctor. `--require-model` turns the model warning into a blocker.
+Stops only the recorded process — session workers sit in its kill-on-close job — and deletes the run directory. Evidence survives; reopen the screenshot and `state.json` before claiming anything.
 
 ## Maintenance
 
-When Web labels, routes, or these flows change, run `/maintain-verification-skill` and correct this map from the page you actually drove.
+When labels, routes or flows change, run `/maintain-verification-skill` and correct this map from the page you actually drove.

@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 FAILED = {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
 TITLE_CHARS = 80
@@ -112,8 +112,8 @@ def changes(previous: dict | None, current: dict) -> list[dict[str, object]]:
         if number not in before_merged:
             found.append({"change": "merged", "pr": int(number), "title": pr["title"], "head": pr["head"],
                           "merge_commit": pr["merge_commit"], "merged_at": pr["merged_at"]})
-    for number in before_open.keys() - current["open"].keys() - current["merged"].keys():
-        found.append({"change": "closed", "pr": int(number)})
+    found.extend({"change": "closed", "pr": int(number)}
+                 for number in before_open.keys() - current["open"].keys() - current["merged"].keys())
     return found
 
 
