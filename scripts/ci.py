@@ -49,7 +49,8 @@ def clean_checkout(targets: list[str]) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("targets", nargs="*", choices=("python", "web", "smoke", "process"))
+    parser.add_argument("targets", nargs="*", choices=("python", "web", "smoke", "process", "formal"))
+    parser.add_argument("--model", help="只验证指定的 formal 模型，可用编号或名称")
     parser.add_argument("--clean", action="store_true",
                         help="在独立虚拟环境与干净 HEAD 中验证；不携带本机产物")
     parser.add_argument("--process-group", choices=("compact", "supervisor", "execution", "integration"),
@@ -58,6 +59,8 @@ def main(argv: list[str] | None = None) -> None:
                         help="process 组内并行 worker 数；默认串行")
     args = parser.parse_args(argv)
     targets = args.targets or ["python", "web", "smoke"]
+    if args.model is not None and "formal" not in targets:
+        parser.error("--model 需要 formal 验证目标")
     if args.process_group and "process" not in targets:
         parser.error("--process-group 需要 process 验证目标")
     if args.workers < 1 or (args.workers != 1 and "process" not in targets):
@@ -67,6 +70,8 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(f"请使用 Python {expected_python}")
     if args.clean:
         arguments = [*targets, "--workers", str(args.workers)]
+        if args.model is not None:
+            arguments.extend(["--model", args.model])
         if args.process_group:
             arguments.extend(["--process-group", args.process_group])
         clean_checkout(arguments)
@@ -115,6 +120,9 @@ def main(argv: list[str] | None = None) -> None:
             if args.workers > 1:
                 command.extend(["-p", "xdist.plugin", "-n", str(args.workers), "--dist", "worksteal"])
             run(command)
+        elif target == "formal":
+            from scripts.formal import check
+            check(args.model)
         else:
             run([sys.executable, "tests/architecture/web_routes.py"])
             run([npm, "test"], cwd=ROOT / "web")
