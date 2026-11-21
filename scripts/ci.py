@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> None:
         run([npm, "ci"], cwd=ROOT / "scripts/browser")
     for target in targets:
         if target == "python":
-            run([sys.executable, "-m", "ruff", "check", "--select", "F",
+            run([sys.executable, "-m", "ruff", "check", "--select", "F,B905",
                  "--target-version", f"py{expected_python.replace('.', '')}",
                  "konden", "thinllm", "scripts", "tests", "console_chat.py", "web_chat.py"])
             run([sys.executable, "-m", "pytest", "--durations=20",

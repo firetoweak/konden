@@ -461,7 +461,7 @@ def frozen_bundle(projector, events, session_id, context, prepared=None):
         )
     records = [
         {"source": session_id, "sequence": seq, "message": message}
-        for seq, message in zip(prepared.source_sequences[1:], prepared.messages[1:])
+        for seq, message in zip(prepared.source_sequences[1:], prepared.messages[1:], strict=True)
     ]
     bundle = history_bundle(projector, events, session_id)
     artifacts = set(bundle["artifacts"])

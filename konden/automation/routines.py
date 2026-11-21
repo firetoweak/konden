@@ -15,6 +15,7 @@ import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from itertools import pairwise
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -104,7 +105,7 @@ def validate_schedule(schedule: str) -> None:
         )
     runs = croniter(schedule, datetime.now().astimezone())
     times = [runs.get_next(datetime) for _ in range(10)]
-    if any(later - earlier < MIN_INTERVAL for earlier, later in zip(times, times[1:])):
+    if any(later - earlier < MIN_INTERVAL for earlier, later in pairwise(times)):
         raise RoutineError("SCHEDULE_TOO_FREQUENT", "两次运行至少间隔 5 分钟。")
 
 

@@ -192,7 +192,7 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
                         for m in shown[:len(expected)]
                     ], expected)
                     self.assertEqual([
-                        seq for seq, message in zip(prepared.source_sequences, prepared.messages)
+                        seq for seq, message in zip(prepared.source_sequences, prepared.messages, strict=True)
                         if message["content"] == "two"
                     ], [later.sequence])
                 self.assertIn("three", str(project_chat_messages(events, model.frames[1].state)))

@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import json
 import time
+from itertools import pairwise
 
 import uvicorn
 
@@ -166,15 +167,15 @@ async def _run_interval(
 
     emit_gaps = [
         (later[0] - earlier[0]) * 1000
-        for earlier, later in zip(deltas_in, deltas_in[1:])
+        for earlier, later in pairwise(deltas_in)
     ]
     recv_gaps = [
         (later[0] - earlier[0]) * 1000
-        for earlier, later in zip(deltas_out, deltas_out[1:])
+        for earlier, later in pairwise(deltas_out)
     ]
     lags = [
         (arrived[0] - emitted[0]) * 1000
-        for emitted, arrived in zip(deltas_in, deltas_out)
+        for emitted, arrived in zip(deltas_in, deltas_out, strict=True)
     ]
     clusters = _cluster_gaps(recv_gaps, threshold_ms=3)
     events_per_read = [count for _, _, count in reads if count]
