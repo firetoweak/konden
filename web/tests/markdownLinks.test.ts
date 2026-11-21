@@ -29,7 +29,7 @@ function missingLinks(file: string, markdown: string): string[] {
 
 it("文档的相对链接和图片指向存在的目标", () => {
   const files = ["AGENTS.md", "README.md", "review.md"].map((name) => join(root, name));
-  for (const dir of ["docs", ".claude/skills"]) {
+  for (const dir of ["docs", ".claude/skills", "formal"]) {
     const entries = readdirSync(join(root, dir), { recursive: true, withFileTypes: true });
     files.push(...entries.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
       .map((entry) => join(entry.parentPath, entry.name)));

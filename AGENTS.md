@@ -45,7 +45,7 @@ konden 通过长期 Bot 团队提供通用能力与持续协作。产品范围�
 | Python | `python scripts/ci.py python` |
 | 启动、进程或执行边界 | 再运行 `python scripts/ci.py smoke` 及相关进程用例 |
 | 前端 | `python scripts/ci.py web` |
-| 形式化模型（`formal/`） | `python scripts/ci.py formal`，`--model` 可只跑一个 |
+| 已有模型覆盖的协议，或 `formal/` 模型 | `python scripts/ci.py formal`，本地可用 `--model` 选择受影响的模型。协议变更按[开发流程](docs/开发流程.md#月校准)复核变异 |
 
 真实应用按 [verify-konden](.claude/skills/verify-konden/SKILL.md) 及相关功能地图验证。交付说明包含 PR、验证结论和未验证范围。
 
