@@ -295,7 +295,7 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
         with patch("konden.assistant.host.agent_messages.MAX_MESSAGES_PER_ORIGIN", 3):
             codes = [(await send_message(self.transport, "Ada", command.command_id,
                                          {"recipient": recipient, "text": "新话题"}))["code"]
-                     for command, recipient in zip(commands, ("Lin", "Third", "Lin", "Third"))]
+                     for command, recipient in zip(commands, ("Lin", "Third", "Lin", "Third"), strict=True)]
             # New chains cannot escape the budget of the human message that drove them.
             self.assertEqual(codes, ["DELIVERED"] * 3 + ["ORIGIN_LIMIT_REACHED"])
             reply, = await decide("Lin", lambda _: ModelDecision(content="你好"), lambda _: ModelDecision(

@@ -130,12 +130,12 @@ class SkillToolCatalog:
         # even the minimal directory exceeds the limit, visibility takes priority.
         costs = [
             min(len(f"- {skill.id}: {skill.description}"), len(f"- {fallback.id}: {fallback.description}")) + 1
-            for skill, fallback in zip(skills, unavailable)
+            for skill, fallback in zip(skills, unavailable, strict=True)
         ]
         remaining = sum(costs)
         limit = max(self.max_catalog_chars, used + remaining)
         fitted = []
-        for skill, fallback, reserved in zip(skills, unavailable, costs):
+        for skill, fallback, reserved in zip(skills, unavailable, costs, strict=True):
             remaining -= reserved
             for candidate in (skill, fallback):
                 cost = len(f"- {candidate.id}: {candidate.description}") + (1 if used else 0)

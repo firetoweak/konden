@@ -63,7 +63,7 @@ class CliToolCatalog:
         limit = max(self.max_catalog_chars, remaining)
         used = 0
         fitted = []
-        for record, reserved in zip(records, costs):
+        for record, reserved in zip(records, costs, strict=True):
             remaining -= reserved
             cost = len(f"- {record.name}: {record.description}") + (1 if fitted else 0)
             if used + cost + remaining > limit:
