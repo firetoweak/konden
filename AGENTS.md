@@ -47,3 +47,5 @@ konden 通过长期 Bot 团队提供通用能力与持续协作。产品范围�
 | 前端 | `python scripts/ci.py web` |
 
 真实应用按 [verify-konden](.claude/skills/verify-konden/SKILL.md) 及相关功能地图验证。交付说明包含 PR、验证结论和未验证范围。
+
+说"完成"之前按[交付前评审](review.md)从结构层往下自查一遍。有些错误该由接口拦下，有些该由规则拦下，都不该靠下一轮人审再纠正。
