@@ -137,6 +137,9 @@ export const externalSessionSchema = z.object({
 }).strict();
 export type ExternalSessionSummary = z.infer<typeof externalSessionSchema>;
 
+export const a2aBotSchema = z.object({ bot_id: z.string().regex(/^[0-9a-f]{32}$/), name: z.string().min(1) }).strict();
+export type A2ABot = z.infer<typeof a2aBotSchema>;
+
 export const localCodexChatSchema = z.object({
   thread_id: z.string().uuid(),
   workspace: z.string().min(1),

@@ -261,11 +261,13 @@ class ToolSurface:
         reserved_names: Sequence[str] = (),
         gateway: ArtifactGateway | None = None,
         settings: ModelContextSettings | None = None,
+        decorate_bindings: Callable[[dict[str, ToolBinding]], dict[str, ToolBinding]] | None = None,
     ) -> None:
         self._providers = tuple(providers)
         self._base_schemas = list(base_schemas)
         self._reserved = set(reserved_names) | {LOAD_TOOLSET}
         self._gateway = gateway
+        self._decorate_bindings = decorate_bindings
         self._settings = (
             ModelContextSettings() if settings is None else settings
         )
@@ -436,15 +438,13 @@ class ToolSurface:
         runtime = self._runtime
         if runtime is None:
             raise RuntimeError("ToolSurface 尚未绑定 Runtime")
-        for tool in tools:
-            runtime.bind_tool(
-                tool.name,
-                ToolBinding(
-                    _loaded_handler(tool, self._gateway, self._settings),
-                    requires_authorization=tool.requires_authorization,
-                ),
-            )
-            self._tool_owners[tool.name] = toolset_id
+        bindings = {tool.name: ToolBinding(_loaded_handler(tool, self._gateway, self._settings),
+                                          requires_authorization=tool.requires_authorization) for tool in tools}
+        if self._decorate_bindings is not None:
+            bindings = self._decorate_bindings(bindings)
+        for name, binding in bindings.items():
+            runtime.bind_tool(name, binding)
+            self._tool_owners[name] = toolset_id
 
     def _bind_loaded(
         self,

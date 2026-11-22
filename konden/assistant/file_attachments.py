@@ -31,7 +31,7 @@ class FileAttachment:
     size: int
 
 
-def _validate_name(name: str) -> None:
+def validate_attachment_name(name: str) -> None:
     if (
         type(name) is not str or name in {"", ".", ".."}
         or any(character in name for character in ("/", "\\", "\x00"))
@@ -71,7 +71,7 @@ class FileAttachmentStore:
     def save_stream(self, stream: BinaryIO, name: str, *, rollback: ExitStack | None = None) -> FileAttachment:
         if not callable(getattr(stream, "read", None)):
             raise TypeError("file stream must be a binary IO")
-        _validate_name(name)
+        validate_attachment_name(name)
         attachment_id, directory = self._create_original()
         target = directory / name
         staging = directory / f".staging-{uuid4().hex}"
@@ -93,7 +93,7 @@ class FileAttachmentStore:
     async def save_async(self, read, name: str) -> FileAttachment:
         if not callable(read):
             raise TypeError("file read must be callable")
-        _validate_name(name)
+        validate_attachment_name(name)
         attachment_id, directory = self._create_original()
         target = directory / name
         staging = directory / f".staging-{uuid4().hex}"
@@ -117,7 +117,7 @@ class FileAttachmentStore:
         resolved = source.resolve()
         if not resolved.is_file():
             raise FileNotFoundError(resolved)
-        _validate_name(resolved.name)
+        validate_attachment_name(resolved.name)
         attachment_id, _directory = self._create_original()
         self._mount_pointer(attachment_id).write_text(
             str(resolved), encoding="utf-8",

@@ -75,6 +75,24 @@ it.each(["", " D:/项目/助手 "])("确认时一次提交名字和可选目录�
   store.dispatch(kondenApi.util.resetApiState());
 });
 
+it("在新建 Bot 中选 Codex，只登记 A2A Bot 并留在当前对话", async () => {
+  const submissions: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+    expect(new URL(request.url).pathname).toBe("/api/a2a-bots");
+    submissions.push(await request.json());
+    return Response.json({ bot_id: "a".repeat(32), name: "Codex 工程 Bot" }, { status: 201 });
+  }));
+  const { store, onClose, onCreated } = showModal();
+  fireEvent.click(screen.getByRole("radio", { name: "Codex（A2A）" }));
+  expect(screen.queryByRole("combobox", { name: "代码目录（可选）" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("名字"), { target: { value: "Codex 工程 Bot" } });
+  fireEvent.click(screen.getByRole("button", { name: "创建", exact: true }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  expect(onCreated).not.toHaveBeenCalled();
+  expect(submissions).toEqual([{ connection_id: "connection", name: "Codex 工程 Bot" }]);
+  store.dispatch(kondenApi.util.resetApiState());
+});
+
 it("同名项目同时展示完整路径，后续关联使用选择的目录", async () => {
   const submissions: unknown[] = [];
   vi.stubGlobal("fetch", vi.fn(async (request: Request) => {

@@ -184,6 +184,20 @@ def test_registration_is_visible_before_messages_and_reconnection_preserves_iden
     assert c.client.get("/api/external-sessions/unknown").status_code == 404
 
 
+def test_a2a_bot_created_by_a_live_web_connection_can_be_found_by_its_coworker(collaboration):
+    c = collaboration
+    path = "/api/a2a-bots"
+    body = {"connection_id": c.human_connection, "name": "Codex 工程 Bot"}
+    assert c.client.post(path, json={**body, "connection_id": "inactive"}).status_code == 409
+    created = c.client.post(path, json=body)
+    assert created.status_code == 201
+    assert c.client.post(path, json=body).status_code == 409
+    assert c.client.get(path).json() == [created.json()]
+    listing = c.client.portal.call(c.host._route, "list_a2a_bots", "coordinator", {})
+    assert listing["data"]["bots"] == [created.json()]
+    assert created.json()["bot_id"] not in {entry["identity"] for entry in c.client.get("/api/external-sessions").json()}
+
+
 def test_web_created_codex_chat_has_native_identity_and_human_only_direct_send(collaboration):
     c = collaboration
     identity = "2" * 32

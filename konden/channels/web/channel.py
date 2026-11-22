@@ -85,6 +85,13 @@ class WebChannel:
     async def list_external_sessions(self):
         return await self._sessions.external_messages.list_sessions()
 
+    def list_a2a_bots(self):
+        return self._sessions.a2a_bots.list()
+
+    def create_a2a_bot(self, connection_id, name):
+        self._require_connection(connection_id)
+        return self._sessions.a2a_bots.create(name)
+
     async def external_session(self, identity):
         return await self._sessions.external_messages.view(identity)
 

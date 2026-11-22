@@ -29,6 +29,7 @@ from konden.assistant.authorization import (
 )
 from konden.assistant.external_messages import PostExternal
 from konden.assistant.file_attachments import is_file_attachment_id
+from konden.assistant.host.a2a_bots import A2ABotName, A2ABotNameTaken
 from konden.assistant.host.agent_groups import (
     GroupDissolvedError,
     GroupNameTaken,
@@ -152,6 +153,10 @@ class ExternalMessageRequest(ConnectionRequest, PostExternal):
 
 class CreateLocalCodexRequest(ConnectionRequest):
     workspace_id: str | None = Field(default=None, min_length=1)
+
+
+class CreateA2ABotRequest(ConnectionRequest, A2ABotName):
+    pass
 
 
 class LocalCodexMessageRequest(ConnectionRequest):
@@ -700,6 +705,17 @@ def create_web_app(
     @app.get("/api/external-sessions")
     async def external_sessions(request: Request):
         return await _channel(request).list_external_sessions()
+
+    @app.get("/api/a2a-bots")
+    async def list_a2a_bots(request: Request):
+        return _channel(request).list_a2a_bots()
+
+    @app.post("/api/a2a-bots", status_code=201)
+    async def create_a2a_bot(body: CreateA2ABotRequest, request: Request):
+        try:
+            return _channel(request).create_a2a_bot(body.connection_id, body.name)
+        except A2ABotNameTaken as error:
+            return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.post("/api/external-sessions/codex", status_code=201)
     async def create_local_codex(body: CreateLocalCodexRequest, request: Request):

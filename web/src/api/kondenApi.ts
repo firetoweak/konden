@@ -19,6 +19,7 @@ import {
   attachmentRefSchema, type AttachmentRef,
   type ExternalSessionSummary,
   type ExternalConversation,
+  a2aBotSchema, type A2ABot,
   localCodexChatSchema,
   type LocalCodexChat,
   avatarSelectionSchema,
@@ -130,7 +131,7 @@ function putConversation(
 export const kondenApi = createApi({
   reducerPath: "kondenApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities"],
+  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities", "A2ABots"],
   endpoints: (build) => ({
     getCapabilities: build.query<CapabilityInventory, void>({
       query: () => "/capabilities",
@@ -305,6 +306,17 @@ export const kondenApi = createApi({
       query: () => "/external-sessions",
       transformResponse: (value: unknown) => z.array(externalSessionSchema).parse(value),
       providesTags: ["ExternalSessions"],
+    }),
+    getA2ABots: build.query<A2ABot[], void>({
+      query: () => "/a2a-bots",
+      transformResponse: (value: unknown) => z.array(a2aBotSchema).parse(value),
+      providesTags: ["A2ABots"],
+    }),
+    createA2ABot: build.mutation<A2ABot, { connectionId: string; name: string }>({
+      query: ({ connectionId, name }) => ({ url: "/a2a-bots", method: "POST", body: { connection_id: connectionId, name } }),
+      transformResponse: (value: unknown) => a2aBotSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: (_result, error) => error === undefined ? ["A2ABots"] : [],
     }),
     getExternalConversation: build.query<ExternalConversation, string>({
       query: (identity) => `/external-sessions/${encodeURIComponent(identity)}`,
@@ -767,6 +779,8 @@ export const {
   useSetCapabilityEnabledMutation,
   useGetExternalConnectionsQuery,
   useGetExternalSessionsQuery,
+  useGetA2ABotsQuery,
+  useCreateA2ABotMutation,
   useGetExternalConversationQuery,
   useCreateLocalCodexMutation,
   useGetLocalCodexChatQuery,
