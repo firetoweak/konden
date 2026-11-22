@@ -20,14 +20,16 @@ vi.mock("../src/api/kondenApi", async (importOriginal) => ({
     ] } }, providers: [{ provider: "deepseek", configured: true }],
   } }),
   useSetSessionModelMutation: () => [query.modelSelect, { isLoading: false }],
-  useGetExternalConversationQuery: () => ({ data: query.data }),
+  useGetExternalConversationQuery: () => ({ currentData: query.data }),
+  useGetLocalCodexChatQuery: () => ({}),
+  useSendLocalCodexMutation: () => [vi.fn(), { isLoading: false }],
   useGetAgentsQuery: () => ({ data: query.agents }),
   usePostExternalMessageMutation: () => [query.post, { isLoading: false }],
   useUploadAttachmentMutation: () => [query.upload],
   useSetExternalCodexMutation: () => [query.save, { isLoading: false }],
   useRetryExternalCodexMutation: () => [query.retry, { isLoading: false }],
 }));
-vi.mock("../src/app/hooks", () => ({ useAppSelector: () => query.connectionId }));
+vi.mock("../src/app/hooks", () => ({ useAppSelector: () => query.connectionId, useAppDispatch: () => vi.fn() }));
 vi.mock("../src/features/conversation/MarkdownMessage", () => ({ MarkdownMessage: ({ content }: { content: string }) => <p>{content}</p> }));
 
 const identity = "1".repeat(32);
@@ -58,11 +60,25 @@ beforeEach(() => {
   Object.defineProperty(document, "fonts", { configurable: true, value: new EventTarget() });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "fonts"); });
-function open(search = "") {
-  return render(<MantineProvider env="test"><MemoryRouter initialEntries={[`/external/${identity}${search}`]}>
+function externalPage(search = "") {
+  return <MantineProvider env="test"><MemoryRouter initialEntries={[`/external/${identity}${search}`]}>
     <Routes><Route path="/external/:identity" element={<ExternalSessionPage />} /></Routes>
-  </MemoryRouter></MantineProvider>);
+  </MemoryRouter></MantineProvider>;
 }
+
+const open = (search = "") => render(externalPage(search));
+
+it("名册已有一位 Bot 时，新建的 Codex 会话加载后直接打开直聊", () => {
+  query.agents = [{ session_id: "alpha", name: "墨竹" }];
+  query.data = undefined;
+  const view = open();
+  expect(screen.getByText("正在打开外部会话…")).toBeVisible();
+
+  query.data = { session: { ...session, active: false, local_codex: true }, codex, messages: [] };
+  view.rerender(externalPage());
+
+  expect(screen.getByRole("textbox", { name: "发给 Codex 的消息" })).toBeVisible();
+});
 
 it("会话登记后即有可理解的空状态，撤销后仍可查看", () => {
   query.data = { session: { ...session, active: false }, codex, messages: [] };
