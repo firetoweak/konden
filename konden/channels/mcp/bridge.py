@@ -8,7 +8,11 @@ from mcp import ClientSession
 from mcp.server.stdio import stdio_server
 from mcp.shared.exceptions import MCPError
 from mcp.types import (
+    CLIENT_CAPABILITIES_META_KEY,
+    CLIENT_INFO_META_KEY,
     CONNECTION_CLOSED,
+    LOG_LEVEL_META_KEY,
+    PROTOCOL_VERSION_META_KEY,
     REQUEST_TIMEOUT,
     CallToolRequest,
     CallToolResult,
@@ -21,6 +25,13 @@ from websockets.protocol import State
 from konden.assistant.external_messages import ConnectionStore
 from konden.channels.mcp import tool_server
 from konden.channels.mcp.socket_streams import socket_streams
+
+_CONNECTION_METADATA = frozenset({
+    CLIENT_CAPABILITIES_META_KEY,
+    CLIENT_INFO_META_KEY,
+    LOG_LEVEL_META_KEY,
+    PROTOCOL_VERSION_META_KEY,
+})
 
 
 class ConnectionUnavailable(ValueError):
@@ -94,9 +105,11 @@ class CollaborationLink:
             session = await self.session()
         except ConnectionUnavailable as error:
             return _error("COLLABORATION_DISCONNECTED", str(error), ok=False)
+        # The Desktop and WebSocket hops negotiate independently.
+        metadata = {key: value for key, value in (params.meta or {}).items() if key not in _CONNECTION_METADATA}
+        request = CallToolRequest(params=params.model_copy(update={"meta": metadata or None}))
         try:
-            return await session.send_request(CallToolRequest(params=params), CallToolResult,
-                                              request_read_timeout_seconds=600)
+            return await session.send_request(request, CallToolResult, request_read_timeout_seconds=600)
         except MCPError as error:
             if error.code not in {CONNECTION_CLOSED, REQUEST_TIMEOUT}:
                 raise

@@ -15,10 +15,12 @@ from konden.channels.mcp.install import BRIDGE_MODULE
 
 
 @pytest.mark.process
-def test_stdio_keeps_native_metadata_and_reauthenticates_without_replaying(tmp_path):
+@pytest.mark.parametrize("modern", [False, True], ids=["legacy", "modern"])
+def test_stdio_keeps_native_metadata_and_reauthenticates_without_replaying(tmp_path, modern):
     connections = ConnectionStore(tmp_path / "access.json")
     credential, _ = connections.create()
     identity = "01234567-89ab-7def-8123-456789abcdef"
+    native_meta = {"threadId": identity, "sessionId": "01234567-89ab-7def-8123-456789abcdee"}
     handshakes = []
     calls = []
 
@@ -36,7 +38,13 @@ def test_stdio_keeps_native_metadata_and_reauthenticates_without_replaying(tmp_p
                 continue
             else:
                 args = request["params"]
-                calls.append((args["name"], args["_meta"]["threadId"]))
+                metadata = args["_meta"]
+                if "io.modelcontextprotocol/protocolVersion" in metadata:
+                    await socket.send(json.dumps({"jsonrpc": "2.0", "id": request["id"], "error": {
+                        "code": -32600, "message": "Modern MCP envelope on a legacy connection",
+                    }}))
+                    continue
+                calls.append((args["name"], metadata))
                 if args["name"] == "send_message":
                     # The server has received the call, but the client will never see its reply.
                     await socket.close()
@@ -54,17 +62,19 @@ def test_stdio_keeps_native_metadata_and_reauthenticates_without_replaying(tmp_p
                 cwd=tmp_path,
             )
             async with stdio_client(stdio) as streams, ClientSession(*streams, read_timeout_seconds=10) as client:
-                await client.initialize()
+                if modern:
+                    await client.discover()
+                else:
+                    await client.initialize()
                 assert {tool.name for tool in (await client.list_tools()).tools} >= {"get_context", "delegate_a2a_task"}
-                meta = {"threadId": identity}
-                disconnected = await client.call_tool("get_context", {}, meta=meta)
+                disconnected = await client.call_tool("get_context", {}, meta=native_meta)
                 assert disconnected.structured_content["code"] == "COLLABORATION_DISCONNECTED"
-                assert (await client.call_tool("get_context", {}, meta=meta)).structured_content == {"identity": identity}
-                first = await client.call_tool("send_message", {"recipient": "Bot", "text": "check", "delivery_id": "once"}, meta=meta)
+                assert (await client.call_tool("get_context", {}, meta=native_meta)).structured_content == {"identity": identity}
+                first = await client.call_tool("send_message", {"recipient": "Bot", "text": "check", "delivery_id": "once"}, meta=native_meta)
                 assert first.structured_content["ok"] is None
                 assert first.structured_content["code"] == "COLLABORATION_RESULT_UNKNOWN"
-                assert (await client.call_tool("get_context", {}, meta=meta)).structured_content == {"identity": identity}
+                assert (await client.call_tool("get_context", {}, meta=native_meta)).structured_content == {"identity": identity}
 
     asyncio.run(asyncio.wait_for(exercise(), timeout=30))
-    assert calls == [("get_context", identity), ("send_message", identity), ("get_context", identity)]
+    assert calls == [("get_context", native_meta), ("send_message", native_meta), ("get_context", native_meta)]
     assert handshakes == [f"Bearer {credential.token}"] * 3
