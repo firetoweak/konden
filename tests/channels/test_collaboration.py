@@ -1,8 +1,10 @@
 """External conversation behavior at the MCP and human Web boundaries."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 import json
 import sys
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
@@ -20,7 +22,9 @@ from konden.assistant.external_messages import (
     SendToExternal,
     parse_external,
 )
+from konden.assistant.host.codex_app_server import CodexDisconnected, CodexLink
 from konden.assistant.host.codex_continuation import QueueAttempt
+from konden.assistant.host.codex_titles import ThreadSummary
 from konden.assistant.host.external_messages import ExternalMessages
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
@@ -66,6 +70,7 @@ def collaboration(tmp_path, tmp_path_factory):
         await AgentRuntime(SqliteJournal(store.require(session_id)), None, {}).receive_user_message(session_id, content, **kwargs)
 
     with patch("konden.assistant.host.external_messages.read_codex_titles", new=AsyncMock(return_value={})) as titles, \
+            patch.object(CodexLink, "require", new=AsyncMock(side_effect=CodexDisconnected("offline"))), \
             patch.object(host, "request", side_effect=deliver), \
             patch.object(host, "receive_user_message", side_effect=user_input):
         with TestClient(app, base_url="http://127.0.0.1:8876") as client:
@@ -222,12 +227,80 @@ def test_web_created_codex_chat_has_native_identity_and_human_only_direct_send(c
         assert c.client.post(other, json={"connection_id": c.human_connection, "text": text}).status_code == 404
         assert c.client.post(chat_path, json={"connection_id": c.human_connection, "text": "  "}).status_code == 422
         assert c.client.post(chat_path, json={"connection_id": c.human_connection, "text": text}).json() == delivered
-        send.assert_awaited_once_with(identity, text)
+        send.assert_awaited_once_with(c.service.codex_link, identity, text)
     assert c.deliveries == [] and c.user_inputs == []
     assert c.call("get_context", chat=identity)["structuredContent"]["identity"] == identity
     rows = c.client.get(path).json()
     assert len(rows) == 2
     assert next(item for item in rows if item["identity"] == identity)["local_codex"] is True
+
+
+def test_import_and_desktop_registration_share_one_native_identity(collaboration):
+    c = collaboration
+    link = c.service.codex_link
+    native = ThreadSummary(id=str(UUID(c.identity)), name="Codex 原生标题", cwd="example")
+    server = SimpleNamespace(request=AsyncMock())
+    server.request.side_effect = lambda method, _params: (
+        {"data": [native.model_dump()]} if method == "thread/list" else {"thread": native.model_dump()}
+    )
+    path = "/api/external-sessions/codex/import"
+    body = {"connection_id": c.human_connection, "identity": c.identity}
+    link.require.side_effect = None
+    link.require.return_value = server
+    c.titles.return_value = {c.identity: native.name}
+    assert c.client.get("/api/codex/chats", params={"query": "原生标题"}).json() == [{
+        "identity": c.identity, "name": native.name, "workspace": "example",
+    }]
+    sent = c.send()["message_id"]
+    assert c.client.post(path, json={**body, "connection_id": "inactive"}).status_code == 409
+    for _ in range(2):
+        assert c.client.post(path, json=body).json() == {"identity": c.identity}
+    info = c.call("get_context", {"name": "不采用的别名"})["structuredContent"]
+    assert info["identity"] == c.identity and info["name"] == native.name
+    rows = c.client.get("/api/external-sessions").json()
+    assert len(rows) == 1 and rows[0]["name"] == native.name and rows[0]["local_codex"] and rows[0]["active"]
+    messages = c.client.get(f"/api/external-sessions/{c.identity}").json()["messages"]
+    assert [message["message_id"] for message in messages] == [sent]
+
+
+def test_codex_a2a_waits_for_explicit_konden_delivery_and_returns_attachment(collaboration, tmp_path):
+    c = collaboration
+    (tmp_path / "feedback.csv").write_bytes(b"row,status\n1,done\n")
+    accepted = Event()
+    wait_for_reply = c.service.await_a2a_reply
+
+    async def observe_committed(*args):
+        accepted.set()
+        return await wait_for_reply(*args)
+
+    work = {"recipient": "协调员", "brief": "核对示例表", "delivery_id": "verify-example", "output_files": ["feedback.csv"]}
+    with patch.object(c.service, "await_a2a_reply", side_effect=observe_committed), ThreadPoolExecutor() as executor:
+        pending = executor.submit(c.call, "delegate_a2a_task", work)
+        replied = False
+        try:
+            assert accepted.wait(10)
+            [(event, task)] = c.client.portal.call(c.service.messages, "coordinator")
+            assert event is not None and task.text.startswith(work["brief"])
+            assert c.user_inputs == [] and task.a2a_task_id is not None
+            assert c.reply(reply_to=task.message_id, text="收到")["ok"]
+            assert c.reply(command="wrong", task_result="completed")["code"] == "INVALID_A2A_REPLY"
+            assert not pending.done()
+            completion = c.reply(command="delivery", reply_to=task.message_id, text="校验通过。",
+                                 task_result="completed", files=["feedback.csv"])
+            assert completion["ok"]
+            replied = True
+        finally:
+            if not replied and not pending.done():
+                c.client.portal.call(c.service.revoke_connection, c.connection.connection_id)
+        result = pending.result(timeout=10)["structuredContent"]
+    assert result["ok"] and result["task_id"] == task.a2a_task_id
+    assert result["message_id"] == completion["message_id"] and result["report"] == "校验通过。"
+    file, = result["attachments"]
+    assert file["name"] == "feedback.csv" and file["size"] == 18
+    assert c.reply(command="duplicate", reply_to=task.message_id, task_result="completed")["code"] == "A2A_TASK_REPLIED"
+    retry = c.call("delegate_a2a_task", work)["structuredContent"]
+    assert retry["ok"] is None and retry["code"] == "A2A_TASK_ALREADY_SENT"
+    assert (retry["task_id"], retry["message_id"]) == (task.a2a_task_id, task.message_id)
 
 
 def test_codex_titles_follow_renames_without_changing_identity_history_or_explicit_alias(collaboration):
@@ -256,7 +329,7 @@ def test_codex_titles_follow_renames_without_changing_identity_history_or_explic
     c.call("get_context", {"name": "我的别名"})
     c.titles.reset_mock()
     assert c.client.get("/api/external-sessions").json()[0]["name"] == "我的别名"
-    c.titles.assert_awaited_once_with([])
+    c.titles.assert_awaited_once_with([], server=None)
 
 
 def test_access_and_identity_scope_messages_without_exposing_private_timelines(collaboration):

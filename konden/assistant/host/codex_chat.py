@@ -1,36 +1,21 @@
-"""Direct human messages and history for locally created Codex conversations."""
+"""Native Codex chat operations over the Host's WebSocket connection."""
+
 from __future__ import annotations
 
-import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from uuid import UUID
 
 from konden.assistant.external_messages import external_name
-from konden.assistant.host.codex_app_server import (
-    CodexDisconnected,
-    CodexRequestError,
-    open_codex_app_server,
-)
-from konden.assistant.host.codex_continuation import default_codex_executable
+from konden.assistant.host.codex_app_server import CodexDisconnected, CodexRequestError
 from konden.assistant.host.codex_titles import ThreadSummary
 
 _GUI_PERMISSIONS = {"approvalPolicy": "never", "sandbox": "workspace-write"}
+_BUSY = "Codex Desktop 或另一个窗口正在使用这段会话。请先结束当前操作，再在原会话继续。"
 
 
 class CodexChatUnavailable(ValueError):
     pass
-
-
-@asynccontextmanager
-async def _chat_server():
-    try:
-        async with open_codex_app_server(default_codex_executable()) as server:
-            yield server
-    except FileNotFoundError as error:
-        raise CodexChatUnavailable("找不到本机 Codex。请安装并登录 Codex 后重试。") from error
-    except (CodexDisconnected, BrokenPipeError, ConnectionResetError, TimeoutError) as error:
-        raise CodexChatUnavailable("未收到 Codex 的确认。请刷新会话或在 Desktop 查看后再决定是否重发。") from error
 
 
 def _thread(result, expected_id=None):
@@ -40,14 +25,89 @@ def _thread(result, expected_id=None):
     return summary
 
 
-async def create_codex_chat(workspace: Path) -> str:
-    async with _chat_server() as server:
-        async with asyncio.timeout(15):
-            result = await server.request("thread/start", {"cwd": str(workspace), **_GUI_PERMISSIONS})
-            thread_id = _thread(result).id
-            identity = UUID(thread_id).hex
-            await server.request("thread/name/set", {"threadId": thread_id, "name": external_name(identity)})
-            return identity
+def _native_error(error, thread_id):
+    if error.error == {"code": -32600, "message": f"thread {thread_id} already has an active writer"}:
+        return CodexChatUnavailable(_BUSY)
+    if error.error == {"code": -32600, "message": f"thread not loaded: {thread_id}"}:
+        return CodexChatUnavailable("这条会话当前无法在本机 Codex 找到。请检查 Desktop 里的原会话。")
+    return error
+
+
+@asynccontextmanager
+async def edit_codex_chat(server, *, identity: str | None = None, workspace: Path | None = None, instructions: str | None = None):
+    thread = None
+    thread_id = str(UUID(identity)) if identity is not None else None
+    if thread_id is not None:
+        if thread_id in server.writers:
+            raise CodexChatUnavailable(_BUSY)
+        server.writers.add(thread_id)
+    try:
+        if thread_id is None:
+            assert workspace is not None
+            args = {"cwd": str(workspace), **_GUI_PERMISSIONS}
+            if instructions is not None:
+                args["developerInstructions"] = instructions
+            thread = _thread(await server.request("thread/start", args))
+            thread_id = thread.id
+            server.writers.add(thread_id)
+        else:
+            resumed = await server.request("thread/resume", {
+                "threadId": thread_id, "excludeTurns": True, **_GUI_PERMISSIONS,
+            })
+            thread = _thread(resumed, thread_id)
+            if resumed["thread"].get("status", {}).get("type") == "active":
+                raise CodexChatUnavailable(_BUSY)
+        yield thread
+    except CodexRequestError as error:
+        known = _native_error(error, thread_id)
+        if known is error:
+            raise
+        raise known from error
+    finally:
+        if thread_id is not None:
+            try:
+                if thread is not None and not server.reader.done():
+                    with suppress(CodexDisconnected):
+                        await server.request("thread/unsubscribe", {"threadId": thread_id})
+            finally:
+                server.writers.remove(thread_id)
+
+
+async def create_codex_chat(link, workspace: Path) -> str:
+    server = await link.require()
+    async with edit_codex_chat(server, workspace=workspace) as thread:
+        # Starting an empty native chat alone doesn't persist it across App Server restarts.
+        await server.request("thread/inject_items", {"threadId": thread.id, "items": [{
+            "type": "message", "role": "developer", "content": [{
+                "type": "input_text", "text": "这段 Codex 会话由用户在 Konden 创建。",
+            }],
+        }]})
+        return UUID(thread.id).hex
+
+
+async def native_codex_thread(server, identity):
+    thread_id = str(UUID(identity))
+    try:
+        return _thread(await server.request("thread/read", {"threadId": thread_id, "includeTurns": False}), thread_id)
+    except CodexRequestError as error:
+        known = _native_error(error, thread_id)
+        if known is error:
+            raise
+        raise known from error
+
+
+async def list_codex_chats(link, query):
+    server = await link.require()
+    params = {"sortKey": "updated_at", "limit": 50, "modelProviders": [], "currentAccountOnly": True}
+    if query:
+        params["searchTerm"] = query
+    result = await server.request("thread/list", params)
+    chats = []
+    for item in result["data"]:
+        thread = ThreadSummary.model_validate(item)
+        identity = UUID(thread.id).hex
+        chats.append({"identity": identity, "name": thread.name or external_name(identity), "workspace": thread.cwd})
+    return chats
 
 
 def _message(item):
@@ -78,31 +138,16 @@ async def _history(server, thread):
     }
 
 
-async def read_codex_chat(identity: str):
-    thread_id = str(UUID(identity))
-    async with _chat_server() as server:
-        async with asyncio.timeout(15):
-            result = await server.request("thread/read", {"threadId": thread_id, "includeTurns": False})
-            return await _history(server, _thread(result, thread_id))
+async def read_codex_chat(link, identity: str):
+    server = await link.require()
+    return await _history(server, await native_codex_thread(server, identity))
 
 
-async def send_codex_chat(identity: str, text: str):
-    thread_id = str(UUID(identity))
-    async with _chat_server() as server:
-        async with asyncio.timeout(15):
-            try:
-                resumed = await server.request("thread/resume", {
-                    "threadId": thread_id, "excludeTurns": True, **_GUI_PERMISSIONS,
-                })
-            except CodexRequestError as error:
-                if error.error == {"code": -32600, "message": f"thread {thread_id} already has an active writer"}:
-                    raise CodexChatUnavailable("Codex Desktop 或另一个窗口正在使用这段会话。可在当前窗口继续。") from error
-                raise
-            thread = _thread(resumed, thread_id)
-            started = await server.request("turn/start", {
-                "threadId": thread_id, "input": [{"type": "text", "text": text}],
-            })
-        async with asyncio.timeout(900):
-            await server.wait_for_turn(thread_id, started["turn"]["id"])
-        async with asyncio.timeout(15):
+async def send_codex_chat(link, identity: str, text: str):
+    server = await link.require()
+    try:
+        async with edit_codex_chat(server, identity=identity) as thread:
+            await server.run_turn(thread.id, {"input": [{"type": "text", "text": text}]}, timeout=900)
             return await _history(server, thread)
+    except (CodexDisconnected, TimeoutError) as error:
+        raise CodexChatUnavailable("未收到 Codex 的确认。请重新连接并查看原会话后，再决定是否重发。") from error

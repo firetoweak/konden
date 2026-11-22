@@ -26,6 +26,7 @@ export function ExternalAccess() {
   const config = created === null ? "" : [
     "[mcp_servers.konden]",
     `url = ${JSON.stringify(created.url)}`,
+    "tool_timeout_sec = 610",
     "",
     "[mcp_servers.konden.http_headers]",
     `Authorization = ${JSON.stringify(`Bearer ${created.token}`)}`,

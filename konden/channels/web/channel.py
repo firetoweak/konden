@@ -95,6 +95,22 @@ class WebChannel:
     async def external_session(self, identity):
         return await self._sessions.external_messages.view(identity)
 
+    def codex_connection(self):
+        return self._sessions.external_messages.codex_link.view()
+
+    async def reconnect_codex(self, connection_id):
+        self._require_connection(connection_id)
+        link = self._sessions.external_messages.codex_link
+        await link.reconnect()
+        return link.view()
+
+    async def list_local_codex(self, query):
+        return await self._sessions.external_messages.list_local_codex(query)
+
+    async def import_local_codex(self, connection_id, identity):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.import_local_codex(identity)
+
     async def create_local_codex(self, connection_id, workspace_id):
         self._require_connection(connection_id)
         return await self._sessions.external_messages.create_local_codex(workspace_id)

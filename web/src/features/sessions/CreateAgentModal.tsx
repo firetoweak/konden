@@ -73,7 +73,7 @@ export function CreateAgentModal({
               void submit();
             }
           }} />
-        {codex ? <Text size="sm" c="dimmed">其他 Bot 可以把任务派给它。Codex 在本机独立目录工作，成果回到派单的对话。</Text>
+        {codex ? <Text size="sm" c="dimmed">其他 Bot 可以给它派任务，成果会回到派单的对话。</Text>
           : <ProjectDirectoryInput label="代码目录（可选）" value={path} onChange={setPath}
             workspaces={workspaces} disabled={isLoading} onSelectingChange={setSelecting} />}
         {error === null ? null : <Alert color="red" title="无法创建">{error}</Alert>}

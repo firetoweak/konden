@@ -9,8 +9,9 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from konden.assistant.a2a_bots import A2A_COMPLETED, DelegateA2AWork
+from konden.assistant.a2a_bots import A2A_COMPLETED, CodexWork, DelegateA2AWork
 from konden.assistant.attachments import AttachmentGateway, AttachmentSnapshot
+from konden.assistant.host.codex_app_server import CodexDisconnected
 from konden.config import write_json
 
 
@@ -42,10 +43,11 @@ class A2ABotRegistry(BaseModel):
 
 
 class A2ABots:
-    def __init__(self, home, sessions_root):
+    def __init__(self, home, sessions_root, external):
         self.path = home.state_root / "a2a_bots.json"
         self.workspaces = home.state_root / "a2a_tasks"
         self.attachments = AttachmentGateway(sessions_root)
+        self.external = external
 
     def list(self):
         try:
@@ -64,36 +66,52 @@ class A2ABots:
         return bot
 
     async def delegate(self, session_id, arguments):
-        from konden.a2a_transport import ResultUnknown
-        from konden.assistant.host.a2a_codex import WorkFailed, run_a2a_task
+        from konden.a2a_transport import ResultUnknown, WorkFailed
+        from konden.assistant.host.a2a_codex import run_a2a_task
 
         work = DelegateA2AWork.model_validate(dict(arguments))
         bot = next((item for item in self.list() if item.bot_id == work.bot_id), None)
         if bot is None:
             return {"ok": False, "code": "A2A_BOT_NOT_FOUND", "error": "没有找到这位 A2A Bot，请重新查询名册。"}
-        workspace = (self.workspaces / bot.bot_id / uuid4().hex).resolve()
-        workspace.mkdir(parents=True)
+        if work.codex_session_id is not None and not self.external.has_local_codex(work.codex_session_id):
+            return {"ok": False, "code": "CODEX_SESSION_NOT_FOUND", "error": "请选择已关联的 Codex 会话。"}
         try:
-            task = await run_a2a_task(bot.name, workspace, work)
+            server = await self.external.codex_link.require()
+        except CodexDisconnected as error:
+            return {"ok": False, "code": "CODEX_DISCONNECTED", "error": str(error)}
+        workspace = None
+        if work.codex_session_id is None:
+            workspace = (self.workspaces / bot.bot_id / uuid4().hex).resolve()
+            workspace.mkdir(parents=True)
+        native_work = CodexWork.model_validate(work.model_dump(exclude={"bot_id"}))
+        try:
+            task = await run_a2a_task(server, bot.name, workspace, native_work)
         except WorkFailed as error:
             return {"ok": False, "code": "A2A_TASK_FAILED", "error": str(error)}
         except ResultUnknown as error:
             return {"ok": None, "code": "A2A_RESULT_UNKNOWN", "error": str(error), "data": {"task_id": error.task_id}}
 
-        files, report, thread_id = await asyncio.to_thread(self._receive_delivery, session_id, work.output_files, task)
+        files, report, thread_id = await asyncio.to_thread(self._receive_delivery, session_id, work, task)
+        if work.codex_session_id is None:
+            await self.external.bind_local_codex(UUID(thread_id).hex)
+        else:
+            await self.external.notify_changed()
         return {"ok": True, "code": A2A_COMPLETED, "data": {
             "bot_name": bot.name, "task_id": task.id, "report": report, "files": files, "codex_thread_id": thread_id,
         }}
 
-    def _receive_delivery(self, session_id, requested_names, task):
-        from konden.assistant.host.a2a_codex import CODEX_THREAD_ID, MAX_ARTIFACT_BYTES
+    def _receive_delivery(self, session_id, work, task):
+        from konden.a2a_transport import MAX_ARTIFACT_BYTES
+        from konden.assistant.host.a2a_codex import CODEX_THREAD_ID
 
         (native_id,) = (artifact.metadata[CODEX_THREAD_ID] for artifact in task.artifacts
                         if CODEX_THREAD_ID in artifact.metadata)
         thread_id = str(UUID(native_id))
+        if work.codex_session_id is not None and UUID(thread_id).hex != work.codex_session_id:
+            raise ValueError("A2A returned a different Codex session")
         parts = [part for artifact in task.artifacts for part in artifact.parts]
         incoming = [part for part in parts if part.HasField("raw")]
-        if sorted(part.filename for part in incoming) != sorted(requested_names):
+        if sorted(part.filename for part in incoming) != sorted(work.output_files):
             raise ValueError("A2A completed task returned a different set of files")
         if sum(len(part.raw) for part in incoming) > MAX_ARTIFACT_BYTES:
             raise ValueError("A2A completed task exceeded the file limit")

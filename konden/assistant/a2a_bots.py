@@ -42,8 +42,19 @@ class A2AWork(BaseModel):
         return names
 
 
-class DelegateA2AWork(A2AWork):
+class CodexWork(A2AWork):
+    codex_session_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$",
+        description="沿用会话时填写从 list_a2a_bots 查到的会话 ID；开启新会话时省略。")
+
+
+class DelegateA2AWork(CodexWork):
     bot_id: str = Field(pattern=r"^[0-9a-f]{32}$", description="从 list_a2a_bots 查到的目标 Bot ID。")
+
+
+class KondenWork(A2AWork):
+    recipient: str = Field(min_length=1, description="从 get_context 查到的 Konden Bot 名字。")
+    delivery_id: str = Field(min_length=1, max_length=200,
+        description="本次派单的唯一标识。结果未确认时，按原任务核对；新任务使用新标识。")
 
 
 class A2AToolset:
@@ -59,12 +70,12 @@ class A2AToolset:
 
     async def load(self, toolset_id, revision):
         return (
-            LoadedTool(A2A_LIST, "查询在 Konden 中创建的 A2A Bot，返回名字和派单所需的 Bot ID。",
+            LoadedTool(A2A_LIST, "查询可派单的 Codex Bot 和已关联的 Codex 会话，返回名称与对应 ID。",
                        {"type": "object", "properties": {}, "additionalProperties": False},
                        partial(self._call, A2A_LIST)),
             LoadedTool(A2A_DELEGATE,
-                       "把用户交办的任务交给指定 A2A Bot。Codex 在任务独立目录工作。"
-                       "等待结果，报告和文件会直接展示在当前对话，无需另用 send_file。"
+                       "把用户交办的任务交给指定 A2A Bot。可选择一个已关联的 Codex 会话继续，也可开启新会话。"
+                       "报告、附件和用于打开原生 Codex 会话的链接会显示在当前对话。"
                        "若结果未确认，先告诉用户，避免重复派单。",
                        DelegateA2AWork.model_json_schema(), partial(self._call, A2A_DELEGATE),
                        requires_authorization=True),

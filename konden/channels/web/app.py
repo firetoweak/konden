@@ -41,6 +41,7 @@ from konden.assistant.host.agent_roster import (
     AgentNameTaken,
     AgentNotFound,
 )
+from konden.assistant.host.codex_app_server import CodexDisconnected
 from konden.assistant.host.codex_chat import CodexChatUnavailable
 from konden.assistant.host.codex_continuation import (
     CodexContinuationInvalid,
@@ -153,6 +154,10 @@ class ExternalMessageRequest(ConnectionRequest, PostExternal):
 
 class CreateLocalCodexRequest(ConnectionRequest):
     workspace_id: str | None = Field(default=None, min_length=1)
+
+
+class ImportLocalCodexRequest(ConnectionRequest):
+    identity: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
 class CreateA2ABotRequest(ConnectionRequest, A2ABotName):
@@ -355,8 +360,12 @@ def create_web_app(
             app.state.shared_memory = shared_memory
             app.state.avatars = avatars
             app.state.capabilities = capabilities
-            async with mcp_app.router.lifespan_context(mcp_app):
-                yield
+            try:
+                async with mcp_app.router.lifespan_context(mcp_app):
+                    yield
+            finally:
+                if external_messages is not None:
+                    await external_messages.codex_link.close()
             return
         async with bootstrap_assistant(
             events.output_final,
@@ -721,6 +730,22 @@ def create_web_app(
     async def create_local_codex(body: CreateLocalCodexRequest, request: Request):
         return await _channel(request).create_local_codex(body.connection_id, body.workspace_id)
 
+    @app.get("/api/codex/connection")
+    async def codex_connection(request: Request):
+        return _channel(request).codex_connection()
+
+    @app.post("/api/codex/connection")
+    async def reconnect_codex(body: ConnectionRequest, request: Request):
+        return await _channel(request).reconnect_codex(body.connection_id)
+
+    @app.get("/api/codex/chats")
+    async def list_local_codex(request: Request, query: str = ""):
+        return await _channel(request).list_local_codex(query)
+
+    @app.post("/api/external-sessions/codex/import")
+    async def import_local_codex(body: ImportLocalCodexRequest, request: Request):
+        return await _channel(request).import_local_codex(body.connection_id, body.identity)
+
     @app.get("/api/external-sessions/{identity}")
     async def external_session(identity: str, request: Request):
         return await _channel(request).external_session(identity)
@@ -733,6 +758,7 @@ def create_web_app(
     async def send_local_codex(identity: str, body: LocalCodexMessageRequest, request: Request):
         return await _channel(request).send_local_codex(body.connection_id, identity, body.text)
 
+    @app.exception_handler(CodexDisconnected)
     @app.exception_handler(CodexChatUnavailable)
     async def codex_chat_unavailable(request, error):
         return JSONResponse(status_code=409, content={"detail": str(error)})

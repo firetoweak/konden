@@ -152,6 +152,17 @@ export const localCodexChatSchema = z.object({
   has_earlier: z.boolean(),
 }).strict();
 export type LocalCodexChat = z.infer<typeof localCodexChatSchema>;
+export const codexConnectionSchema = z.object({
+  status: z.enum(["disconnected", "connecting", "connected"]),
+  error: z.string().nullable(),
+}).strict();
+export type CodexConnection = z.infer<typeof codexConnectionSchema>;
+export const nativeCodexChatSchema = z.object({
+  identity: z.string().regex(/^[0-9a-f]{32}$/),
+  name: z.string().min(1),
+  workspace: z.string().nullable(),
+}).strict();
+export type NativeCodexChat = z.infer<typeof nativeCodexChatSchema>;
 export const attachmentRefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("image"), attachment_id: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     name: z.string().min(1), size: z.number().int().nonnegative(),

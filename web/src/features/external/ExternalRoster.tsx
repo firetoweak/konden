@@ -1,9 +1,14 @@
-import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, Select, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconArchive, IconDots, IconPlugConnected, IconPlus, IconRefresh, IconSearchOff, IconTrash } from "@tabler/icons-react";
+import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, ScrollArea, Select, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
+import { IconArchive, IconDots, IconFolderPlus, IconPlugConnected, IconPlus, IconRefresh, IconSearchOff, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useMatch } from "react-router-dom";
 
-import { useCreateLocalCodexMutation, useDeleteExternalSessionMutation, useGetExternalSessionsQuery, useGetWorkspacesQuery } from "../../api/kondenApi";
+import {
+  useCreateLocalCodexMutation, useDeleteExternalSessionMutation, useGetCodexConnectionQuery,
+  useGetExternalSessionsQuery, useGetNativeCodexChatsQuery, useGetWorkspacesQuery,
+  useImportLocalCodexMutation, useReconnectCodexMutation,
+} from "../../api/kondenApi";
 import type { ExternalSessionSummary } from "../../api/contracts";
 import { useAppSelector } from "../../app/hooks";
 import { sessionStatus } from "./sessionStatus";
@@ -14,7 +19,7 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
   const [showRevoked, setShowRevoked] = useState(false);
   const [menuIdentity, setMenuIdentity] = useState<string | null>(null);
   const [removing, setRemoving] = useState<ExternalSessionSummary | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState<"create" | "import" | null>(null);
   const revoked = sessions.filter((session) => !session.active && !session.local_codex);
   const visible = sessions.filter((session) => session.name.toLocaleLowerCase().includes(query));
   const entries = visible.filter((session) => session.active || session.local_codex || showRevoked || query !== "" || session.identity === identity);
@@ -30,22 +35,32 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
     notice = compact ? <Tooltip label="没有匹配的外部会话"><span className="sidebar-compact-notice" role="status" aria-label="没有匹配的外部会话"><IconSearchOff size={18} /></span></Tooltip>
       : <Text c="dimmed" size="xs" px={10} py={8}>没有匹配的外部会话。</Text>;
   }
-  const createButton = <Tooltip label="新建 Codex 会话">
-    <ActionIcon variant="subtle" color="gray" size="sm" aria-label="新建 Codex 会话" onClick={() => setCreating(true)}>
-      <IconPlus size={16} />
-    </ActionIcon>
-  </Tooltip>;
+  function onAdded(identity: string) {
+    setAdding(null);
+    onOpen(`/external/${encodeURIComponent(identity)}`);
+  }
+  const actions = <>
+    <CodexConnectionButton />
+    <Tooltip label="添加已有 Codex 会话">
+      <ActionIcon variant="subtle" color="gray" size="sm" aria-label="添加已有 Codex 会话" onClick={() => setAdding("import")}>
+        <IconFolderPlus size={17} />
+      </ActionIcon>
+    </Tooltip>
+    <Tooltip label="新建 Codex 会话">
+      <ActionIcon variant="subtle" color="gray" size="sm" aria-label="新建 Codex 会话" onClick={() => setAdding("create")}>
+        <IconPlus size={16} />
+      </ActionIcon>
+    </Tooltip>
+  </>;
   return <section className="roster-section external-roster" aria-label="外部会话">
-    {creating ? <CreateLocalCodexModal onClose={() => setCreating(false)} onCreated={(identity) => {
-      setCreating(false);
-      onOpen(`/external/${encodeURIComponent(identity)}`);
-    }} /> : null}
+    {adding === "create" ? <CreateLocalCodexModal onClose={() => setAdding(null)} onCreated={onAdded} /> : null}
+    {adding === "import" ? <ImportLocalCodexModal onClose={() => setAdding(null)} onAdded={onAdded} /> : null}
     {removing === null ? null : <RemoveExternalSessionModal target={removing} onClose={() => setRemoving(null)} onRemoved={() => {
       if (identity === removing.identity) onOpen("/");
       setRemoving(null);
     }} />}
-    {compact ? createButton : <Group className="roster-section-header" justify="space-between">
-      <Text fz={11}>外部会话</Text>{createButton}
+    {compact ? <Stack align="center" gap={2}>{actions}</Stack> : <Group className="roster-section-header" justify="space-between" gap={0}>
+      <Text fz={11}>外部会话</Text><Group gap={2}>{actions}</Group>
     </Group>}
     {notice}
     <Stack gap={3}>{entries.map((session) => <div key={session.identity}
@@ -76,6 +91,74 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
       {compact ? <IconArchive size={16} /> : showRevoked ? "收起已撤销会话" : `已撤销会话（${revoked.length}）`}
     </Button>}
   </section>;
+}
+
+function CodexConnectionButton() {
+  const connectionId = useAppSelector((state) => state.runtime.connectionId);
+  const { data } = useGetCodexConnectionQuery();
+  const [reconnect, { isLoading, error }] = useReconnectCodexMutation();
+  const connecting = isLoading || data?.status === "connecting";
+  const connected = data?.status === "connected";
+  const detail = data?.error ?? (typeof error === "string" ? error : null);
+  const label = connecting ? "正在连接 Codex" : connected ? "Codex 已连接" : detail ? "重新连接 Codex" : "连接 Codex";
+  return <Tooltip label={detail && !connecting && !connected ? `${label} · ${detail}` : label}>
+    <ActionIcon variant="subtle" color={connected ? "green" : detail ? "orange" : "gray"} size="sm"
+      aria-label={label} aria-disabled={connectionId === null || connecting || connected} loading={connecting}
+      onClick={() => { if (connectionId !== null && !connecting && !connected) void reconnect({ connectionId }); }}>
+      {detail && !connected ? <IconRefresh size={16} /> : <IconPlugConnected size={16} />}
+    </ActionIcon>
+  </Tooltip>;
+}
+
+function ImportLocalCodexModal({ onClose, onAdded }: { onClose: () => void; onAdded: (identity: string) => void }) {
+  const connectionId = useAppSelector((state) => state.runtime.connectionId);
+  const [query, setQuery] = useState("");
+  const [search] = useDebouncedValue(query.trim(), 250);
+  const [selected, setSelected] = useState<string | null>(null);
+  const { currentData: chats = [], error: readError, isFetching, refetch } = useGetNativeCodexChatsQuery(search, { refetchOnMountOrArgChange: true });
+  const [add, { isLoading, error: addError, reset }] = useImportLocalCodexMutation();
+  const error = readError ?? addError;
+
+  async function submit() {
+    if (connectionId === null || selected === null || isLoading || isFetching) return;
+    try {
+      const { identity } = await add({ connectionId, identity: selected }).unwrap();
+      onAdded(identity);
+    } catch {
+      // RTK Query exposes the error in this dialog.
+    }
+  }
+
+  return <Modal opened title="添加已有 Codex 会话" onClose={onClose}
+    closeOnClickOutside={!isLoading} closeOnEscape={!isLoading} withCloseButton={!isLoading}>
+    <Stack gap="sm">
+      <TextInput label="搜索会话" placeholder="按会话名称搜索" data-autofocus disabled={isLoading}
+        value={query} onChange={(event) => { setQuery(event.currentTarget.value); setSelected(null); reset(); }} />
+      {isFetching ? <Text c="dimmed" size="sm" role="status">正在读取 Codex 会话…</Text> : null}
+      {error ? <Alert color="red" role="alert">
+        {typeof error === "string" ? error : "无法读取或添加 Codex 会话。"}
+        {readError ? <Button size="compact-xs" variant="subtle" color="red" onClick={() => void refetch()}>重试</Button> : null}
+      </Alert> : null}
+      {!isFetching && !readError && chats.length === 0 ? <Text c="dimmed" size="sm">没有找到 Codex 会话。</Text> : null}
+      <ScrollArea.Autosize mah={300} offsetScrollbars>
+        <Stack gap={3}>
+          {chats.map((chat) => <UnstyledButton key={chat.identity} aria-pressed={chat.identity === selected}
+            disabled={isLoading || search !== query.trim()} onClick={() => { setSelected(chat.identity); reset(); }}
+            className={chat.identity === selected ? "session-row is-active" : "session-row"}>
+            <Text size="sm" lineClamp={2}>{chat.name}</Text>
+            <Text size="xs" c="dimmed" truncate title={chat.workspace ?? undefined}>
+              {chat.identity.slice(-8)}{chat.workspace ? ` · ${chat.workspace}` : ""}
+            </Text>
+          </UnstyledButton>)}
+        </Stack>
+      </ScrollArea.Autosize>
+      <Group justify="flex-end">
+        <Button variant="default" disabled={isLoading} onClick={onClose}>取消</Button>
+        <Button disabled={connectionId === null || selected === null || isFetching || Boolean(readError)}
+          loading={isLoading} onClick={() => void submit()}>添加会话</Button>
+      </Group>
+    </Stack>
+  </Modal>;
 }
 
 function CreateLocalCodexModal({ onClose, onCreated }: { onClose: () => void; onCreated: (identity: string) => void }) {

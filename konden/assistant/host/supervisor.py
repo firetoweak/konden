@@ -243,7 +243,7 @@ class HostSupervisor:
         self.agent_messages = AgentMessages(self)
         self.agent_groups = AgentGroups(self)
         self.external_messages = ExternalMessages(self)
-        self.a2a_bots = A2ABots(home, store.root)
+        self.a2a_bots = A2ABots(home, store.root, self.external_messages)
         self.agent_worktrees = AgentWorktrees(home, self.command_environment)
         self.agent_projects = AgentProjects(self)
         self._agent_creation_lock = asyncio.Lock()
@@ -371,7 +371,10 @@ class HostSupervisor:
 
     async def _route(self, operation, session_id, arguments, *, worker=None):
         if operation == A2A_LIST:
-            return {"ok": True, "code": "A2A_BOTS_READ", "data": {"bots": [bot.model_dump() for bot in self.a2a_bots.list()]}}
+            return {"ok": True, "code": "A2A_BOTS_READ", "data": {
+                "bots": [bot.model_dump() for bot in self.a2a_bots.list()],
+                "codex_sessions": await self.external_messages.codex_choices(),
+            }}
         if operation == A2A_DELEGATE:
             return await self.a2a_bots.delegate(session_id, arguments)
         if operation == LIST_COLLEAGUES:
@@ -1618,6 +1621,7 @@ class HostSupervisor:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
         self.closed = True
+        await self.external_messages.codex_link.close()
         workers = tuple(self.workers.values())
         for worker in workers:
             if worker.process.is_alive():

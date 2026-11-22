@@ -91,7 +91,7 @@ it("确认命名后创建，可复制及重新查看配置，关闭后隐藏凭�
   fireEvent.click(screen.getByRole("button", { name: "高级：手动配置 TOML" }));
   const config = await screen.findByRole("textbox", { name: "Codex MCP 配置（TOML）" });
   const value = (config as HTMLTextAreaElement).value;
-  expect(value).toBe('[mcp_servers.konden]\nurl = "http://localhost/mcp/"\n\n[mcp_servers.konden.http_headers]\nAuthorization = "Bearer one-time-secret"');
+  expect(value).toBe('[mcp_servers.konden]\nurl = "http://localhost/mcp/"\ntool_timeout_sec = 610\n\n[mcp_servers.konden.http_headers]\nAuthorization = "Bearer one-time-secret"');
   fireEvent.click(screen.getByRole("button", { name: "复制 TOML" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "已复制" })).toBeVisible());
   expect(writeText).toHaveBeenLastCalledWith(value);
