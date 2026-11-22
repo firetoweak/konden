@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("同事私信留在原线程，显式发给用户的消息可见并计入未读", async () => {
+it("私信留在原线程，用户能看到正文、原生会话入口和新消息提醒", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   const NativeRequest = Request;
@@ -39,6 +39,7 @@ it("同事私信留在原线程，显式发给用户的消息可见并计入未�
       super(typeof input === "string" ? new URL(input, "http://localhost") : input, init);
     }
   });
+  const threadId = "12345678-abcd-7123-abcd-123456789abc";
   const view: ConversationView = {
     session_id: "agent", workspace_id: "workspace", revision: 6,
     compact_count: 0, compact_phase: null, waiting_until: null, work_plan: null, work_plan_updates: [], context_input_tokens: null,
@@ -63,6 +64,8 @@ it("同事私信留在原线程，显式发给用户的消息可见并计入未�
         occurred_at: "2026-10-19T00:01:04Z" },
       { kind: "step", step_id: "s3:tell", output_id: "tell", text: "结论给你", thinking: null,
         occurred_at: "2026-10-19T00:01:05Z", tools: [] },
+      { kind: "step", step_id: "s4:deliver", output_id: "delivery", text: "Codex 工程 Bot · A2A 交付", thinking: null,
+        occurred_at: "2026-10-19T00:01:06Z", tools: [], codex_thread_id: threadId },
     ],
   };
   vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
@@ -88,6 +91,9 @@ it("同事私信留在原线程，显式发给用户的消息可见并计入未�
 
   expect(await screen.findByText("回给人")).toBeInTheDocument();
   expect(screen.getByText("结论给你")).toBeInTheDocument();
+  const desktopLink = screen.getByRole("link", { name: "在 Desktop 打开" });
+  expect(desktopLink).toHaveAttribute("href", `codex://threads/${threadId}`);
+  expect(desktopLink.closest("article")).toHaveTextContent("Codex 工程 Bot · A2A 交付");
   expect(screen.queryByText("这一轮没有文字回复")).not.toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "打开 Lin 的对话" })).not.toBeInTheDocument();

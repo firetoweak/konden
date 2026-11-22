@@ -3,10 +3,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ExternalConversation, SessionModel } from "../src/api/contracts";
+import type { ExternalConversation, LocalCodexChat, SessionModel } from "../src/api/contracts";
 import { ExternalSessionPage } from "../src/features/external/ExternalSessionPage";
+import { NewLocalCodexConversation } from "../src/features/external/LocalCodexConversation";
 
 const query = vi.hoisted(() => ({ data: undefined as ExternalConversation | undefined, connectionId: "human" as string | null,
+  nativeChat: undefined as LocalCodexChat | undefined, prepare: vi.fn(), start: vi.fn(),
   agents: [] as { session_id: string; name: string }[], save: vi.fn(), retry: vi.fn(), post: vi.fn(), upload: vi.fn(),
   models: {} as Record<string, SessionModel>, usage: {} as Record<string, number | null>, modelSelect: vi.fn() }));
 vi.mock("../src/api/kondenApi", async (importOriginal) => ({
@@ -20,14 +22,19 @@ vi.mock("../src/api/kondenApi", async (importOriginal) => ({
     ] } }, providers: [{ provider: "deepseek", configured: true }],
   } }),
   useSetSessionModelMutation: () => [query.modelSelect, { isLoading: false }],
-  useGetExternalConversationQuery: () => ({ data: query.data }),
+  useGetExternalConversationQuery: () => ({ currentData: query.data }),
+  useGetLocalCodexChatQuery: () => ({ data: query.nativeChat }),
+  useGetWorkspacesQuery: () => ({ data: [] }),
+  usePrepareLocalCodexMutation: () => [query.prepare, { isLoading: false }],
+  useStartLocalCodexMutation: () => [query.start, { isLoading: false }],
+  useSendLocalCodexMutation: () => [vi.fn(), { isLoading: false }],
   useGetAgentsQuery: () => ({ data: query.agents }),
   usePostExternalMessageMutation: () => [query.post, { isLoading: false }],
   useUploadAttachmentMutation: () => [query.upload],
   useSetExternalCodexMutation: () => [query.save, { isLoading: false }],
   useRetryExternalCodexMutation: () => [query.retry, { isLoading: false }],
 }));
-vi.mock("../src/app/hooks", () => ({ useAppSelector: () => query.connectionId }));
+vi.mock("../src/app/hooks", () => ({ useAppSelector: () => query.connectionId, useAppDispatch: () => vi.fn() }));
 vi.mock("../src/features/conversation/MarkdownMessage", () => ({ MarkdownMessage: ({ content }: { content: string }) => <p>{content}</p> }));
 
 const identity = "1".repeat(32);
@@ -36,6 +43,10 @@ const session = { identity, name: "外部会话-11111111", active: true, codex_s
   created_at: "2026-10-25T01:00:00Z", last_activity_at: "2026-10-25T01:00:00Z", peers: [] };
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
+  query.nativeChat = undefined;
+  query.prepare.mockReset();
+  query.start.mockReset();
   query.agents = [];
   query.connectionId = "human";
   query.models = {
@@ -58,11 +69,64 @@ beforeEach(() => {
   Object.defineProperty(document, "fonts", { configurable: true, value: new EventTarget() });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "fonts"); });
-function open(search = "") {
-  return render(<MantineProvider env="test"><MemoryRouter initialEntries={[`/external/${identity}${search}`]}>
+function externalPage(search = "") {
+  return <MantineProvider env="test"><MemoryRouter initialEntries={[`/external/${identity}${search}`]}>
     <Routes><Route path="/external/:identity" element={<ExternalSessionPage />} /></Routes>
-  </MemoryRouter></MantineProvider>);
+  </MemoryRouter></MantineProvider>;
 }
+
+const open = (search = "") => render(externalPage(search));
+
+it("名册已有一位 Bot 时，已建立的 Codex 会话直接打开原生对话", () => {
+  query.agents = [{ session_id: "alpha", name: "墨竹" }];
+  query.data = undefined;
+  const view = open();
+  expect(screen.getByText("正在打开外部会话…")).toBeVisible();
+
+  query.data = { session: { ...session, active: false, local_codex: true }, codex, messages: [] };
+  view.rerender(externalPage());
+
+  expect(screen.getByRole("textbox", { name: "发给 Codex 的消息" })).toBeVisible();
+});
+
+it("打开新会话只显示草稿，首次发送失败后沿原身份重试", async () => {
+  const text = "请查收第一条消息";
+  query.data = { session: { ...session, local_codex: true }, codex, messages: [] };
+  query.nativeChat = { thread_id: codex.thread_id, workspace: "C:/task", has_earlier: false,
+    last_status: "completed", messages: [{ id: "first", role: "user", text }] };
+  query.prepare.mockReturnValue({ unwrap: () => Promise.resolve({ identity }) });
+  query.start.mockReturnValueOnce({ unwrap: () => Promise.reject("还未确认首条消息") })
+    .mockReturnValueOnce({ unwrap: () => Promise.resolve(query.nativeChat) });
+  render(<MantineProvider env="test"><MemoryRouter initialEntries={["/external/new"]}>
+    <Routes>
+      <Route path="/external/new" element={<NewLocalCodexConversation />} />
+      <Route path="/external/:identity" element={<ExternalSessionPage />} />
+    </Routes>
+  </MemoryRouter></MantineProvider>);
+  const input = screen.getByRole("textbox", { name: "发给 Codex 的消息" });
+  expect(screen.getByRole("button", { name: "发送给 Codex" })).toBeDisabled();
+  fireEvent.change(input, { target: { value: text } });
+  expect(query.prepare).not.toHaveBeenCalled();
+  expect(query.start).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "发送给 Codex" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("还未确认首条消息");
+  expect(input).toHaveValue(text);
+  fireEvent.click(screen.getByRole("button", { name: "发送给 Codex" }));
+  expect(await screen.findByRole("article", { name: "你的消息" })).toHaveTextContent(text);
+  expect(query.prepare).toHaveBeenCalledOnce();
+  expect(query.start.mock.calls).toEqual([[{ connectionId: "human", identity, text }], [{ connectionId: "human", identity, text }]]);
+  expect(screen.getByRole("link", { name: "在 Desktop 打开" })).toHaveAttribute("href", `codex://threads/${codex.thread_id}`);
+});
+
+it("在原生会话里将 Bot 的首单显示为 A2A 派单", () => {
+  query.data = { session: { ...session, local_codex: true }, codex, messages: [] };
+  query.nativeChat = { thread_id: codex.thread_id, workspace: "C:/task", has_earlier: false,
+    last_status: "inProgress", messages: [{ id: "a2a", role: "delegation", text: "请核对附件" }] };
+  open();
+  expect(screen.getByRole("article", { name: "Konden Bot 的派单" })).toHaveTextContent("请核对附件");
+  expect(screen.queryByRole("article", { name: "你的消息" })).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("正在等待 Codex 回复");
+});
 
 it("会话登记后即有可理解的空状态，撤销后仍可查看", () => {
   query.data = { session: { ...session, active: false }, codex, messages: [] };

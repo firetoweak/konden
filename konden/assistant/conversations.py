@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Literal
 
+from konden.assistant.a2a import A2A_COMPLETED, A2A_DELEGATE
 from konden.assistant.agent_messages import SEND_FILE, SEND_MESSAGE
 from konden.assistant.agents import (
     COMMUNICATION_LIMIT_REACHED,
@@ -166,6 +167,7 @@ class StepItem:
     thinking: str | None = None
     files: tuple[FileAttachment, ...] = ()
     clarification: ClarificationView | None = None
+    codex_thread_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -535,6 +537,24 @@ def _delivered_files(command_state, attachments: AttachmentStore | None) -> tupl
     return (attachments.files.describe(attachment_id),)
 
 
+def _a2a_delivery(command_state, attachments, step_id, occurred_at) -> StepItem | None:
+    outcome = command_state.outcome
+    if outcome is None or outcome.status is not OutcomeStatus.SUCCEEDED:
+        return None
+    result = thaw_value(outcome.value)
+    if result.get("code") != A2A_COMPLETED:
+        return None
+    if attachments is None:
+        raise ValueError("A2A 交付必须装配 Session 附件存储")
+    command_id = command_state.command.command_id
+    delivery = result["data"]
+    files = tuple(attachments.files.describe(file["attachment_id"]) for file in delivery["files"])
+    title = f"{delivery.get('codex_session_name') or delivery['bot_name']} · A2A 交付"
+    return StepItem("step", f"{step_id}:{command_id}", command_id,
+                    "\n\n".join(filter(None, (title, delivery["report"]))), (), occurred_at, files=files,
+                    codex_thread_id=delivery.get("codex_thread_id"))
+
+
 def project_conversation(
     session_id: str,
     events: tuple[Event, ...],
@@ -652,6 +672,10 @@ def project_conversation(
                     command_state.command.command_id, effect.argument_dict().get("text") or None, (),
                     event.occurred_at, files=_delivered_files(command_state, attachments)))
                 continue
+            if effect.name == A2A_DELEGATE:
+                delivery = _a2a_delivery(command_state, attachments, payload.step.step_id, event.occurred_at)
+                if delivery is not None:
+                    messages.append(delivery)
             status, error = _tool_status(command_state, auto_authorize=session.auto_authorize)
             tools.append(
                 ToolItem(

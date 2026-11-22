@@ -117,12 +117,6 @@ export const externalConnectionSchema = z.object({
   name: z.string(),
 }).strict();
 export type ExternalConnection = z.infer<typeof externalConnectionSchema>;
-export const createdExternalConnectionSchema = z.object({
-  connection: externalConnectionSchema,
-  token: z.string().min(1),
-  url: z.url(),
-}).strict();
-export type CreatedExternalConnection = z.infer<typeof createdExternalConnectionSchema>;
 
 export const codexContinuationStatusSchema = z.enum(["disabled", "ready", "pending", "queued", "failed", "unknown"]);
 export const externalSessionSchema = z.object({
@@ -131,10 +125,35 @@ export const externalSessionSchema = z.object({
   created_at: z.string().datetime({ offset: true }),
   last_activity_at: z.string().datetime({ offset: true }),
   active: z.boolean(),
+  local_codex: z.literal(true).optional(),
   codex_status: codexContinuationStatusSchema,
   peers: z.array(z.object({ name: z.string().min(1), session_id: z.string().min(1), deleted: z.boolean() }).strict()),
 }).strict();
 export type ExternalSessionSummary = z.infer<typeof externalSessionSchema>;
+
+export const localCodexChatSchema = z.object({
+  thread_id: z.string().uuid(),
+  workspace: z.string().min(1),
+  messages: z.array(z.object({
+    id: z.string().min(1),
+    role: z.enum(["user", "codex", "delegation"]),
+    text: z.string().min(1),
+  }).strict()),
+  last_status: z.enum(["completed", "failed", "interrupted", "inProgress"]).nullable(),
+  has_earlier: z.boolean(),
+}).strict();
+export type LocalCodexChat = z.infer<typeof localCodexChatSchema>;
+export const codexConnectionSchema = z.object({
+  status: z.enum(["disconnected", "connecting", "connected"]),
+  error: z.string().nullable(),
+}).strict();
+export type CodexConnection = z.infer<typeof codexConnectionSchema>;
+export const nativeCodexChatSchema = z.object({
+  identity: z.string().regex(/^[0-9a-f]{32}$/),
+  name: z.string().min(1),
+  workspace: z.string().nullable(),
+}).strict();
+export type NativeCodexChat = z.infer<typeof nativeCodexChatSchema>;
 export const attachmentRefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("image"), attachment_id: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     name: z.string().min(1), size: z.number().int().nonnegative(),
@@ -348,6 +367,7 @@ export const conversationViewSchema = z
             kind: z.literal("step"),
             step_id: z.string().min(1),
             output_id: z.string().min(1),
+            codex_thread_id: z.string().uuid().nullish(),
             clarification: z.object({
               question_id: z.string().min(1),
               options: z.array(z.string().min(1)),

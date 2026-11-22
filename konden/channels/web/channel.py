@@ -16,6 +16,7 @@ from konden.assistant.file_attachments import FileAttachment, is_file_attachment
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
 from konden.assistant.personal_memory import personal_memory_store
 from konden.automation.once import SOURCE as AUTOMATION_SOURCE
+from konden.channels.mcp.install import install_codex_mcp
 from konden.channels.web.directory_picker import select_file
 
 
@@ -88,6 +89,37 @@ class WebChannel:
     async def external_session(self, identity):
         return await self._sessions.external_messages.view(identity)
 
+    def codex_connection(self):
+        return self._sessions.external_messages.codex_link.view()
+
+    async def reconnect_codex(self, connection_id):
+        self._require_connection(connection_id)
+        link = self._sessions.external_messages.codex_link
+        await link.reconnect()
+        return link.view()
+
+    async def list_local_codex(self, query):
+        return await self._sessions.external_messages.list_local_codex(query)
+
+    async def import_local_codex(self, connection_id, identity):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.import_local_codex(identity)
+
+    async def prepare_local_codex(self, connection_id, workspace_id):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.prepare_local_codex(workspace_id)
+
+    async def start_local_codex(self, connection_id, identity, text):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.start_local_codex(identity, text)
+
+    async def local_codex_chat(self, identity):
+        return await self._sessions.external_messages.read_local_codex(identity)
+
+    async def send_local_codex(self, connection_id, identity, text):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.send_local_codex(identity, text)
+
     async def post_external_message(self, connection_id, identity, arguments):
         self._require_connection(connection_id)
         return await self._sessions.external_messages.post_user(identity, arguments)
@@ -104,13 +136,9 @@ class WebChannel:
         self._require_connection(connection_id)
         return await self._sessions.external_messages.retry_codex(identity)
 
-    async def create_external_connection(self, connection_id, name):
+    async def install_codex_mcp(self, connection_id, address, external_id):
         self._require_connection(connection_id)
-        return self._sessions.external_messages.create_connection(name)
-
-    async def external_connection_configuration(self, connection_id, external_id):
-        self._require_connection(connection_id)
-        return self._sessions.external_messages.connection_configuration(external_id)
+        return await install_codex_mcp(self._sessions.external_messages, address, external_id)
 
     async def rename_external_connection(self, connection_id, external_id, name):
         self._require_connection(connection_id)

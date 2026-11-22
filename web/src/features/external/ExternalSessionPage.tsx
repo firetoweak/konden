@@ -3,7 +3,7 @@ import { IconPlugConnected } from "@tabler/icons-react";
 import { Fragment, useContext, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
-import type { ExternalConversationMessage } from "../../api/contracts";
+import type { ExternalConversation, ExternalConversationMessage } from "../../api/contracts";
 import { useGetAgentsQuery, useGetExternalConversationQuery, usePostExternalMessageMutation } from "../../api/kondenApi";
 import { useAppSelector } from "../../app/hooks";
 import { BotAvatar, ChatPresentation, MessageMenu, MessageQuote, messageReference, type MessageReference } from "../conversation/ChatPresentation";
@@ -14,20 +14,26 @@ import { formatMessageTime } from "../conversation/messageTime";
 import { useMessageReading } from "../conversation/useMessageReading";
 import { CodexContinuation } from "./CodexContinuation";
 import { ExternalComposer } from "./ExternalComposer";
+import { LocalCodexConversation } from "./LocalCodexConversation";
 import { sessionStatus } from "./sessionStatus";
-
-const EMPTY_MESSAGES: ExternalConversationMessage[] = [];
 
 export function ExternalSessionPage() {
   const identity = useParams().identity!;
   const [search, setSearch] = useSearchParams();
   const bot = search.get("bot");
-  return <ExternalConversationView key={`${identity}:${bot}`} identity={identity} bot={bot}
+  const { currentData: conversation, error, refetch } = useGetExternalConversationQuery(identity);
+  if (error !== undefined) return <div className="conversation-loading"><Alert color="orange">无法打开这个外部会话。<Button variant="subtle" size="compact-sm" onClick={() => void refetch()}>重试</Button></Alert></div>;
+  if (conversation === undefined) return <div className="conversation-loading"><Loader size="sm" /><Text c="dimmed" size="sm">正在打开外部会话…</Text></div>;
+  if (conversation.session.local_codex && bot === null && search.get("view") !== "shared") {
+    return <LocalCodexConversation key={identity} session={conversation.session} />;
+  }
+  return <ExternalConversationView key={`${identity}:${bot}`} identity={identity} conversation={conversation} bot={bot}
     onBot={(value) => setSearch({ bot: value }, { replace: bot === null })} />;
 }
 
-function ExternalConversationView({ identity, bot, onBot }: { identity: string; bot: string | null; onBot: (value: string) => void }) {
-  const { data: conversation, error, refetch } = useGetExternalConversationQuery(identity);
+function ExternalConversationView({ identity, conversation, bot, onBot }: {
+  identity: string; conversation: ExternalConversation; bot: string | null; onBot: (value: string) => void;
+}) {
   const { data: agents = [] } = useGetAgentsQuery();
   const [postMessage, posting] = usePostExternalMessageMutation();
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
@@ -35,19 +41,17 @@ function ExternalConversationView({ identity, bot, onBot }: { identity: string; 
   const [quote, setQuote] = useState<MessageReference | null>(null);
   const presentation = useContext(ChatPresentation);
   const peers = useMemo(() => {
-    const known = new Map(conversation?.session.peers.map((peer) => [peer.session_id, peer]));
+    const known = new Map(conversation.session.peers.map((peer) => [peer.session_id, peer]));
     for (const agent of agents) known.set(agent.session_id, { name: agent.name, session_id: agent.session_id, deleted: false });
     return [...known.values()];
   }, [conversation, agents]);
-  const selectedId = bot ?? (conversation?.session.peers.length === 1 ? conversation.session.peers[0].session_id
+  const selectedId = bot ?? (conversation.session.peers.length === 1 ? conversation.session.peers[0].session_id
     : peers.length === 1 ? peers[0].session_id : null);
   const selected = peers.find((peer) => peer.session_id === selectedId);
   useEffect(() => { if (bot === null && selectedId !== null) onBot(selectedId); }, [bot, selectedId, onBot]);
-  const messages = useMemo(() => conversation?.messages.filter((message) => message.bot_session_id === selectedId) ?? EMPTY_MESSAGES, [conversation, selectedId]);
+  const messages = useMemo(() => conversation.messages.filter((message) => message.bot_session_id === selectedId), [conversation, selectedId]);
   const byId = useMemo(() => new Map(messages.map((message) => [message.message_id, message])), [messages]);
   const reading = useMessageReading(`external:${identity}:${selectedId}`, messages);
-  if (error !== undefined) return <div className="conversation-loading"><Alert color="orange">无法打开这个外部会话。<Button variant="subtle" size="compact-sm" onClick={() => void refetch()}>重试</Button></Alert></div>;
-  if (conversation === undefined) return <div className="conversation-loading"><Loader size="sm" /><Text c="dimmed" size="sm">正在打开外部会话…</Text></div>;
   const { session } = conversation;
   const author = (message: ExternalConversationMessage) => message.sender === "user" ? "你" : message.sender === "codex" ? session.name : message.bot_name;
   const participant = (role: "bot" | "codex" | "user", message: ExternalConversationMessage) => role === "bot"
@@ -60,9 +64,10 @@ function ExternalConversationView({ identity, bot, onBot }: { identity: string; 
             <span className="agent-avatar agent-avatar-small" aria-hidden="true"><IconPlugConnected size={18} /></span>
             <div className="session-header-name">
               <Text fw={600} size="sm" truncate>{session.name}</Text>
-              <Text c="dimmed" fz={11}>Codex · {sessionStatus(session)}</Text>
+              <Text c="dimmed" fz={11}>Codex · {session.local_codex && session.active ? "三方对话" : sessionStatus(session)}</Text>
             </div>
           </Group>
+          {session.local_codex ? <Button component={Link} to={`/external/${encodeURIComponent(identity)}`} size="compact-xs" variant="subtle">返回 Codex 直聊</Button> : null}
           {messages.length === 0 ? null : <Text c="dimmed" fz={11} className="external-session-last-activity"
             title={formatMessageTime(messages[messages.length - 1].occurred_at).full}>最近消息 {formatMessageTime(messages[messages.length - 1].occurred_at).short}</Text>}
         </header>

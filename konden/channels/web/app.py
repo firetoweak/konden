@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from ipaddress import ip_address
 import logging
 from pathlib import Path
 from typing import Literal
@@ -40,6 +41,8 @@ from konden.assistant.host.agent_roster import (
     AgentNameTaken,
     AgentNotFound,
 )
+from konden.assistant.host.codex_app_server import CodexDisconnected
+from konden.assistant.host.codex_chat import CodexChatUnavailable
 from konden.assistant.host.codex_continuation import (
     CodexContinuationInvalid,
     CodexExecutable,
@@ -58,6 +61,7 @@ from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
 from konden.automation.routines import RoutineNotFound
 from konden.bootstrap import bootstrap_assistant
 from konden.channels.mcp import create_mcp_app
+from konden.channels.mcp.install import CodexInstallUnavailable
 from konden.channels.web.avatars import AvatarImageNotFound, AvatarStore
 from konden.channels.web.capabilities import CapabilityViews
 from konden.channels.web.channel import (
@@ -136,6 +140,10 @@ class ExternalConnectionRequest(ConnectionRequest):
         return value.strip()
 
 
+class CodexInstallRequest(ConnectionRequest):
+    external_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
 class AbsenceAnswer(ConnectionRequest):
     session_id: str = Field(min_length=1)
     action: Literal["continue", "stop"]
@@ -147,6 +155,29 @@ class CodexContinuationRequest(ConnectionRequest, CodexExecutable):
 
 class ExternalMessageRequest(ConnectionRequest, PostExternal):
     pass
+
+
+class PrepareLocalCodexRequest(ConnectionRequest):
+    workspace_id: str | None = Field(default=None, min_length=1)
+
+
+class ImportLocalCodexRequest(ConnectionRequest):
+    identity: str = Field(pattern=r"^[0-9a-f]{32}$")
+
+
+class LocalCodexMessageRequest(ConnectionRequest):
+    text: str = Field(min_length=1)
+
+    @field_validator("text")
+    @classmethod
+    def nonblank_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("消息不能为空白")
+        return value
+
+
+class FirstLocalCodexMessageRequest(LocalCodexMessageRequest):
+    identity: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
 class ModelSettingsRequest(ConnectionRequest):
@@ -334,8 +365,12 @@ def create_web_app(
             app.state.shared_memory = shared_memory
             app.state.avatars = avatars
             app.state.capabilities = capabilities
-            async with mcp_app.router.lifespan_context(mcp_app):
-                yield
+            try:
+                async with mcp_app.router.lifespan_context(mcp_app):
+                    yield
+            finally:
+                if external_messages is not None:
+                    await external_messages.codex_link.close()
             return
         async with bootstrap_assistant(
             events.output_final,
@@ -685,9 +720,47 @@ def create_web_app(
     async def external_sessions(request: Request):
         return await _channel(request).list_external_sessions()
 
+    @app.get("/api/codex/connection")
+    async def codex_connection(request: Request):
+        return _channel(request).codex_connection()
+
+    @app.post("/api/codex/connection")
+    async def reconnect_codex(body: ConnectionRequest, request: Request):
+        return await _channel(request).reconnect_codex(body.connection_id)
+
+    @app.get("/api/codex/chats")
+    async def list_local_codex(request: Request, query: str = ""):
+        return await _channel(request).list_local_codex(query)
+
+    @app.post("/api/codex/chats", status_code=201)
+    async def prepare_local_codex(body: PrepareLocalCodexRequest, request: Request):
+        return await _channel(request).prepare_local_codex(body.connection_id, body.workspace_id)
+
+    @app.post("/api/codex/chats/first-message")
+    async def start_local_codex(body: FirstLocalCodexMessageRequest, request: Request):
+        return await _channel(request).start_local_codex(body.connection_id, body.identity, body.text)
+
+    @app.post("/api/external-sessions/codex/import")
+    async def import_local_codex(body: ImportLocalCodexRequest, request: Request):
+        return await _channel(request).import_local_codex(body.connection_id, body.identity)
+
     @app.get("/api/external-sessions/{identity}")
     async def external_session(identity: str, request: Request):
         return await _channel(request).external_session(identity)
+
+    @app.get("/api/external-sessions/{identity}/codex/chat")
+    async def local_codex_chat(identity: str, request: Request):
+        return await _channel(request).local_codex_chat(identity)
+
+    @app.post("/api/external-sessions/{identity}/codex/chat")
+    async def send_local_codex(identity: str, body: LocalCodexMessageRequest, request: Request):
+        return await _channel(request).send_local_codex(body.connection_id, identity, body.text)
+
+    @app.exception_handler(CodexDisconnected)
+    @app.exception_handler(CodexChatUnavailable)
+    @app.exception_handler(CodexInstallUnavailable)
+    async def codex_chat_unavailable(request, error):
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.post("/api/external-sessions/{identity}/messages")
     async def post_external_message(identity: str, body: ExternalMessageRequest, request: Request):
@@ -724,21 +797,21 @@ def create_web_app(
     async def retry_external_codex(identity: str, body: ConnectionRequest, request: Request):
         return await _channel(request).retry_external_codex(body.connection_id, identity)
 
-    @app.post("/api/external-connections", status_code=201)
-    async def create_external_connection(body: ExternalConnectionRequest, request: Request):
-        created = await _channel(request).create_external_connection(body.connection_id, body.name)
-        return JSONResponse(status_code=201, content={**created, "url": str(request.base_url) + "mcp/"},
-                            headers={"Cache-Control": "no-store"})
+    @app.put("/api/external-connections/codex")
+    async def install_codex_mcp(body: CodexInstallRequest, request: Request):
+        try:
+            local = request.client is not None and ip_address(request.client.host).is_loopback
+        except ValueError:
+            local = False
+        if not local:
+            return JSONResponse(status_code=403, content={"detail": "请在运行 Konden 的电脑上打开本机页面，再安装 Codex 接入。"})
+        host, port = request.scope["server"]
+        loopback = "[::1]" if ":" in host else "127.0.0.1"
+        return await _channel(request).install_codex_mcp(body.connection_id, f"ws://{loopback}:{port}/mcp/ws", body.external_id)
 
     @app.exception_handler(ExternalConnectionNotFound)
     async def external_connection_missing(request, error):
         return JSONResponse(status_code=404, content={"detail": "没有这份连接配置，可能已撤销。"})
-
-    @app.post("/api/external-connections/{external_id}/configuration")
-    async def external_connection_configuration(external_id: str, body: ConnectionRequest, request: Request):
-        config = await _channel(request).external_connection_configuration(body.connection_id, external_id)
-        return JSONResponse(content={**config, "url": str(request.base_url) + "mcp/"},
-                            headers={"Cache-Control": "no-store"})
 
     @app.put("/api/external-connections/{external_id}/name")
     async def rename_external_connection(external_id: str, body: ExternalConnectionRequest, request: Request):

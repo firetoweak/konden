@@ -17,7 +17,8 @@ export function CreateAgentModal({
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [selecting, setSelecting] = useState(false);
-  const [createAgent, { isLoading, reset }] = useCreateAgentMutation();
+  const [createAgent, agentRequest] = useCreateAgentMutation();
+  const isLoading = agentRequest.isLoading;
   const [error, setError] = useState<string | null>(null);
   const canSubmit = connectionId !== null && name.trim() !== "" && !selecting && !isLoading;
 
@@ -29,7 +30,7 @@ export function CreateAgentModal({
 
   function close() {
     clearDraft();
-    reset();
+    agentRequest.reset();
     onClose();
   }
 

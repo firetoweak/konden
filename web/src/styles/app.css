@@ -623,6 +623,10 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
 .external-roster { margin-top: 16px; }
 .external-roster .session-row { display: flex; align-items: center; gap: 4px; }
 .external-roster > .roster-section-header { padding-inline: 10px; }
+.local-codex-composer { margin: 12px auto; width: min(100% - 32px, 760px); }
+.local-codex-input { flex: 1; min-width: 0; }
+.local-codex-header .session-header-name { flex: 1; flex-direction: column; align-items: flex-start; gap: 0; }
+.local-codex-header .session-header-name > p { max-width: 100%; }
 .external-session-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 29px; border-bottom: 1px solid var(--konden-border); }
 .external-codex { flex-shrink: 0; padding: 10px 29px; border-bottom: 1px solid var(--konden-border); }
 .external-codex-form { max-width: 680px; }
@@ -639,7 +643,6 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
   .external-composer .composer-meta { flex-wrap: wrap; }
   .external-composer .group-composer-recipients { flex-basis: 100%; }
 }
-.external-connection-config { font-family: var(--mantine-font-family-monospace); font-size: var(--mantine-font-size-xs); }
 .external-connection-name { min-width: 0; overflow-wrap: anywhere; }
 .private-message-peer { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; text-decoration: none; overflow-wrap: anywhere; }
 .private-message-peer .agent-avatar { flex: 0 0 18px; width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }

@@ -20,6 +20,7 @@ import { GroupChatPage } from "../features/groups/GroupChatPage";
 import { AgentHome } from "../features/sessions/AgentHome";
 import { AgentSidebar } from "../features/sessions/AgentSidebar";
 import { ExternalSessionPage } from "../features/external/ExternalSessionPage";
+import { NewLocalCodexConversation } from "../features/external/LocalCodexConversation";
 import { CapabilitiesPage } from "../features/capabilities/CapabilitiesPage";
 import { openEventBridge } from "../realtime/eventBridge";
 
@@ -133,6 +134,7 @@ export function App() {
           <Route path="/capabilities" element={<CapabilitiesPage />} />
           <Route path="/groups/:groupId" element={<GroupChatPage />} />
           <Route path="/sessions/:sessionId" element={<SessionConversation />} />
+          <Route path="/external/new" element={<NewLocalCodexConversation />} />
           <Route path="/external/:identity" element={<ExternalSessionPage />} />
         </Routes>
       </AppShell.Main>

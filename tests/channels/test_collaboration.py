@@ -1,14 +1,17 @@
 """External conversation behavior at the MCP and human Web boundaries."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 import json
 import sys
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 from fastapi.testclient import TestClient
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 from konden.assistant.agents import AgentCreated, fact_arguments
 from konden.assistant.attachments import AttachmentGateway
@@ -20,7 +23,10 @@ from konden.assistant.external_messages import (
     SendToExternal,
     parse_external,
 )
+from konden.assistant.host.codex_app_server import CodexDisconnected, CodexLink
+from konden.assistant.host.codex_chat import CodexChatUnavailable
 from konden.assistant.host.codex_continuation import QueueAttempt
+from konden.assistant.host.codex_titles import ThreadSummary
 from konden.assistant.host.external_messages import ExternalMessages
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
@@ -66,9 +72,10 @@ def collaboration(tmp_path, tmp_path_factory):
         await AgentRuntime(SqliteJournal(store.require(session_id)), None, {}).receive_user_message(session_id, content, **kwargs)
 
     with patch("konden.assistant.host.external_messages.read_codex_titles", new=AsyncMock(return_value={})) as titles, \
+            patch.object(CodexLink, "require", new=AsyncMock(side_effect=CodexDisconnected("offline"))), \
             patch.object(host, "request", side_effect=deliver), \
             patch.object(host, "receive_user_message", side_effect=user_input):
-        with TestClient(app, base_url="http://127.0.0.1:8876") as client:
+        with TestClient(app, base_url="http://127.0.0.1:8876", client=("127.0.0.1", 50000)) as client:
             human = client.portal.call(web.connect)
 
             native_identity = "0123456789ab7def8123456789abcdef"
@@ -120,44 +127,90 @@ def collaboration(tmp_path, tmp_path_factory):
 def test_web_manages_named_access(collaboration):
     c = collaboration
     path = "/api/external-connections"
-    assert c.client.post(path, json={"connection_id": "inactive", "name": "test"}).status_code == 409
+    install_path = f"{path}/codex"
+    assert c.client.put(install_path, json={"connection_id": "inactive"}).status_code == 409
     before = c.client.get(path).json()
-    for fields in ({}, {"name": ""}, {"name": "   "}):
-        assert c.client.post(path, json={"connection_id": c.human_connection, **fields}).status_code == 422
+    assert c.client.put(install_path, json={"connection_id": c.human_connection, "external_id": "bad"}).status_code == 422
     assert c.client.get(path).json() == before
-    created = c.client.post(path, json={"connection_id": c.human_connection, "name": "笔记本 Codex"})
-    assert created.status_code == 201 and created.headers["cache-control"] == "no-store"
-    credential = created.json()
-    assert credential["url"] == "http://127.0.0.1:8876/mcp/"
-    entries = c.client.get(path).json()
-    assert credential["connection"] in entries and all(set(item) == {"connection_id", "name"} for item in entries)
-    assert credential["token"] not in str(entries)
-    context = c.call("get_context", credential=credential["token"], chat="3" * 32)["structuredContent"]
+    writer = SimpleNamespace(request=AsyncMock(return_value={"status": "ok"}))
+    body = {"connection_id": c.human_connection}
+    with patch.object(c.service.codex_link, "reconnect", new=AsyncMock(return_value=writer)):
+        installed = c.client.put(install_path, json=body)
+        assert installed.status_code == 200
+        item = installed.json()
+        external_id = item["connection_id"]
+        assert item["name"] == "本机 Codex"
+        assert c.client.put(install_path, json=body).json() == item
+        assert c.client.get(path).json() == [*before, item]
+        assert set(item) == {"connection_id", "name"}
+        credential = c.service.connections.get(external_id)
+        method, config = writer.request.await_args.args
+        assert method == "config/value/write" and config["keyPath"] == "mcp_servers.konden"
+        assert config["value"]["args"][-3:] == ["ws://127.0.0.1:8876/mcp/ws", str(c.service.connections.path), external_id]
+        assert credential.token not in str(config) and credential.token not in installed.text
+        reused = c.client.put(install_path, json={**body, "external_id": c.connection.connection_id})
+        assert reused.json() == c.connection.view()
+        assert writer.request.await_args.args[1]["value"]["args"][-1] == c.connection.connection_id
+        assert c.client.get(path).json() == [*before, item]
+
+    context = c.call("get_context", credential=credential.token, chat="3" * 32)["structuredContent"]
     assert {item["name"] for item in context["colleagues"]} == {"协调员", "其他 Bot"}
-    external_id = credential["connection"]["connection_id"]
-    config_path = f"{path}/{external_id}/configuration"
-    assert c.client.post(config_path, json={"connection_id": "inactive"}).status_code == 409
-    config = c.client.post(config_path, json={"connection_id": c.human_connection})
-    assert config.headers["cache-control"] == "no-store"
-    assert config.json() == credential
-    restarted = ExternalMessages(c.host)
-    assert restarted.connection_configuration(external_id)["token"] == credential["token"]
+    assert ExternalMessages(c.host).connections.get(external_id).token == credential.token
     rename_path = f"{path}/{external_id}/name"
     assert c.client.put(rename_path, json={"connection_id": "inactive", "name": "x"}).status_code == 409
     assert c.client.put(rename_path, json={"connection_id": c.human_connection, "name": "x" * 81}).status_code == 422
     renamed = c.client.put(rename_path, json={"connection_id": c.human_connection, "name": " 台式机 Codex "})
     assert renamed.status_code == 200
     assert renamed.json()["name"] == "台式机 Codex"
-    c.call("read_messages", {"wait_seconds": 0}, credential["token"], chat=context["identity"])
+    c.call("read_messages", {"wait_seconds": 0}, credential.token, chat=context["identity"])
     restored = ExternalMessages(c.host).list_connections()
     item = next(item for item in restored if item["connection_id"] == external_id)
     assert item["name"] == "台式机 Codex"
-    assert credential["token"] not in str(restored) and "token_hash" not in str(restored)
+    assert credential.token not in str(restored) and "token_hash" not in str(restored)
     assert c.client.request("DELETE", f"{path}/{external_id}", json={"connection_id": c.human_connection}).status_code == 204
     assert c.client.put(rename_path, json={"connection_id": c.human_connection, "name": "x"}).status_code == 404
-    assert c.client.post(config_path, json={"connection_id": c.human_connection}).status_code == 404
     assert c.client.request("DELETE", f"{path}/{external_id}", json={"connection_id": c.human_connection}).status_code == 404
-    assert c.client.post("/mcp/", headers={"Authorization": "Bearer " + credential["token"]}, json={}).status_code == 401
+    assert c.client.post("/mcp/", headers={"Authorization": "Bearer " + credential.token}, json={}).status_code == 401
+
+
+def test_websocket_mcp_reauthenticates_and_keeps_native_conversation(collaboration):
+    c = collaboration
+    path = "/mcp/ws"
+    headers = {"Authorization": f"Bearer {c.token}"}
+
+    def initialize(socket):
+        socket.send_json({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+            "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"},
+        }})
+        assert socket.receive_json()["result"]["protocolVersion"] == "2025-11-25"
+        socket.send_json({"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+    def call(socket, name, arguments):
+        socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": name, "arguments": arguments, "_meta": {"threadId": str(UUID(c.identity))},
+        }})
+        return socket.receive_json()["result"]["structuredContent"]
+
+    with pytest.raises(WebSocketDisconnect), c.client.websocket_connect(path):
+        pytest.fail("Anonymous WebSocket accepted")
+    with c.client.websocket_connect(path, headers=headers) as socket:
+        initialize(socket)
+        assert call(socket, "get_context", {}) == c.context
+        outgoing = call(socket, "send_message", {"recipient": "协调员", "text": "来自 WebSocket", "delivery_id": "ws-one"})
+        assert outgoing["ok"]
+        c.reply(reply_to=outgoing["message_id"])
+        read = call(socket, "read_messages", {"wait_seconds": 0})
+        assert any(item["text"] == "收到，我们可以继续讨论。" for item in read["messages"])
+    with c.client.websocket_connect(path, headers=headers) as socket:
+        initialize(socket)
+        assert call(socket, "get_context", {})["identity"] == c.identity
+        assert call(socket, "read_messages", {"wait_seconds": 0, "after": read["next_cursor"]})["messages"] == []
+        revoked = c.client.request("DELETE", f"/api/external-connections/{c.connection.connection_id}",
+                                   json={"connection_id": c.human_connection})
+        assert revoked.status_code == 204
+        assert call(socket, "read_messages", {"wait_seconds": 0})["ok"] is False
+    with pytest.raises(WebSocketDisconnect), c.client.websocket_connect(path, headers=headers):
+        pytest.fail("Revoked WebSocket accepted")
 
 
 def test_registration_is_visible_before_messages_and_reconnection_preserves_identity(collaboration):
@@ -182,6 +235,138 @@ def test_registration_is_visible_before_messages_and_reconnection_preserves_iden
     assert all(set(item) == {"identity", "name", "active", "last_activity_at", "codex_status"} for item in peers)
     assert len(c.client.portal.call(c.host.agents.list)) == 2
     assert c.client.get("/api/external-sessions/unknown").status_code == 404
+
+
+def test_first_human_message_establishes_the_same_native_chat_before_reply(collaboration):
+    c = collaboration
+    identity = "2" * 32
+    path = "/api/external-sessions"
+    first_path = "/api/codex/chats/first-message"
+    chat_path = f"{path}/{identity}/codex/chat"
+    text = "原样保留\n 这就是用户输入"
+    body = {"connection_id": c.human_connection, "identity": identity, "text": text}
+    delivered = {"thread_id": str(UUID(identity)), "workspace": "example", "has_earlier": False,
+                 "messages": [{"id": "native-user", "role": "user", "text": text}], "last_status": "completed"}
+    accepted, release = Event(), Event()
+
+    async def native_send(link, received_identity, received_text, *, accept_first=None):
+        assert (link, received_identity, received_text) == (c.service.codex_link, identity, text)
+        if accept_first is not None:
+            await accept_first()
+            accepted.set()
+            assert await asyncio.to_thread(release.wait, 10)
+        return delivered
+
+    with patch("konden.assistant.host.external_messages.prepare_codex_chat", new=AsyncMock(return_value=identity)), \
+            patch("konden.assistant.host.external_messages.read_codex_chat", new=AsyncMock(return_value=delivered)), \
+            patch("konden.assistant.host.external_messages.send_codex_chat", new=AsyncMock(side_effect=native_send)) as send:
+        assert c.client.post("/api/codex/chats", json={"connection_id": "inactive"}).status_code == 409
+        prepared = c.client.post("/api/codex/chats", json={"connection_id": c.human_connection})
+        assert prepared.status_code == 201 and prepared.json() == {"identity": identity}
+        assert c.client.get(chat_path).status_code == 404
+        assert c.client.post(first_path, json={**body, "connection_id": "inactive"}).status_code == 409
+        assert c.client.post(first_path, json={**body, "text": "  "}).status_code == 422
+        send.side_effect = CodexChatUnavailable("Codex 尚未接纳首条消息")
+        assert c.client.post(first_path, json=body).status_code == 409
+        assert all(row["identity"] != identity for row in c.client.get(path).json())
+        send.reset_mock()
+        send.side_effect = native_send
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(c.client.post, first_path, json=body)
+            try:
+                assert accepted.wait(10)
+                assert any(row["identity"] == identity for row in c.client.get(path).json())
+                listing = c.client.portal.call(c.host._route, "list_codex_sessions", "coordinator", {})
+                assert [row["identity"] for row in listing["data"]["sessions"]] == [identity]
+                assert c.client.post(first_path, json=body).json() == delivered
+                assert not pending.done()
+            finally:
+                release.set()
+            assert pending.result(timeout=10).json() == delivered
+
+        send.assert_awaited_once()
+        assert c.client.get(chat_path).json() == delivered
+        assert c.client.post(chat_path, json={"connection_id": "inactive", "text": text}).status_code == 409
+        other = f"{path}/{c.identity}/codex/chat"
+        assert c.client.post(other, json={"connection_id": c.human_connection, "text": text}).status_code == 404
+        assert c.client.post(chat_path, json={"connection_id": c.human_connection, "text": "  "}).status_code == 422
+        assert c.client.post(chat_path, json={"connection_id": c.human_connection, "text": text}).json() == delivered
+        assert send.await_args.args == (c.service.codex_link, identity, text)
+        assert not send.await_args.kwargs
+    assert c.deliveries == [] and c.user_inputs == []
+    assert c.call("get_context", chat=identity)["structuredContent"]["identity"] == identity
+    rows = c.client.get(path).json()
+    assert len(rows) == 2
+    assert next(item for item in rows if item["identity"] == identity)["local_codex"] is True
+
+
+def test_import_and_desktop_registration_share_one_native_identity(collaboration):
+    c = collaboration
+    link = c.service.codex_link
+    native = ThreadSummary(id=str(UUID(c.identity)), name="Codex 原生标题", cwd="example")
+    server = SimpleNamespace(request=AsyncMock())
+    server.request.side_effect = lambda method, _params: (
+        {"data": [native.model_dump()]} if method == "thread/list" else {"thread": native.model_dump()}
+    )
+    path = "/api/external-sessions/codex/import"
+    body = {"connection_id": c.human_connection, "identity": c.identity}
+    link.require.side_effect = None
+    link.require.return_value = server
+    c.titles.return_value = {c.identity: native.name}
+    assert c.client.get("/api/codex/chats", params={"query": "原生标题"}).json() == [{
+        "identity": c.identity, "name": native.name, "workspace": "example",
+    }]
+    sent = c.send()["message_id"]
+    assert c.client.post(path, json={**body, "connection_id": "inactive"}).status_code == 409
+    for _ in range(2):
+        assert c.client.post(path, json=body).json() == {"identity": c.identity}
+    info = c.call("get_context", {"name": "不采用的别名"})["structuredContent"]
+    assert info["identity"] == c.identity and info["name"] == native.name
+    rows = c.client.get("/api/external-sessions").json()
+    assert len(rows) == 1 and rows[0]["name"] == native.name and rows[0]["local_codex"] and rows[0]["active"]
+    messages = c.client.get(f"/api/external-sessions/{c.identity}").json()["messages"]
+    assert [message["message_id"] for message in messages] == [sent]
+
+
+def test_codex_a2a_waits_for_explicit_konden_delivery_and_returns_attachment(collaboration, tmp_path):
+    c = collaboration
+    (tmp_path / "feedback.csv").write_bytes(b"row,status\n1,done\n")
+    accepted = Event()
+    wait_for_reply = c.service.await_a2a_reply
+
+    async def observe_committed(*args):
+        accepted.set()
+        return await wait_for_reply(*args)
+
+    work = {"recipient": "协调员", "brief": "核对示例表", "delivery_id": "verify-example", "output_files": ["feedback.csv"]}
+    with patch.object(c.service, "await_a2a_reply", side_effect=observe_committed), ThreadPoolExecutor() as executor:
+        pending = executor.submit(c.call, "delegate_a2a_task", work)
+        replied = False
+        try:
+            assert accepted.wait(10)
+            [(event, task)] = c.client.portal.call(c.service.messages, "coordinator")
+            assert event is not None and task.text.startswith(work["brief"])
+            assert c.user_inputs == [] and task.a2a_task_id is not None
+            assert c.reply(reply_to=task.message_id, text="收到")["ok"]
+            assert c.reply(command="wrong", task_result="completed")["code"] == "INVALID_A2A_REPLY"
+            assert not pending.done()
+            completion = c.reply(command="delivery", reply_to=task.message_id, text="校验通过。",
+                                 task_result="completed", files=["feedback.csv"])
+            assert completion["ok"]
+            replied = True
+        finally:
+            if not replied and not pending.done():
+                c.client.portal.call(c.service.revoke_connection, c.connection.connection_id)
+        result = pending.result(timeout=10)["structuredContent"]
+    assert result["ok"] and result["task_id"] == task.a2a_task_id
+    assert result["message_id"] == completion["message_id"] and result["report"] == "校验通过。"
+    file, = result["attachments"]
+    assert file["name"] == "feedback.csv" and file["size"] == 18
+    assert c.reply(command="duplicate", reply_to=task.message_id, task_result="completed")["code"] == "A2A_TASK_REPLIED"
+    retry = c.call("delegate_a2a_task", work)["structuredContent"]
+    assert retry["ok"] is None and retry["code"] == "A2A_TASK_ALREADY_SENT"
+    assert (retry["task_id"], retry["message_id"]) == (task.a2a_task_id, task.message_id)
 
 
 def test_codex_titles_follow_renames_without_changing_identity_history_or_explicit_alias(collaboration):
@@ -210,7 +395,7 @@ def test_codex_titles_follow_renames_without_changing_identity_history_or_explic
     c.call("get_context", {"name": "我的别名"})
     c.titles.reset_mock()
     assert c.client.get("/api/external-sessions").json()[0]["name"] == "我的别名"
-    c.titles.assert_awaited_once_with([])
+    c.titles.assert_awaited_once_with([], server=None)
 
 
 def test_access_and_identity_scope_messages_without_exposing_private_timelines(collaboration):

@@ -11,14 +11,16 @@ import {
 import {
   agentRosterEntrySchema,
   externalConnectionSchema,
-  createdExternalConnectionSchema,
   type ExternalConnection,
-  type CreatedExternalConnection,
   externalSessionSchema,
   externalConversationSchema,
   attachmentRefSchema, type AttachmentRef,
   type ExternalSessionSummary,
   type ExternalConversation,
+  localCodexChatSchema,
+  type LocalCodexChat,
+  codexConnectionSchema, type CodexConnection,
+  nativeCodexChatSchema, type NativeCodexChat,
   avatarSelectionSchema,
   avatarsSchema,
   type AvatarSelection,
@@ -128,7 +130,7 @@ function putConversation(
 export const kondenApi = createApi({
   reducerPath: "kondenApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities"],
+  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities", "CodexConnection", "LocalCodexChat"],
   endpoints: (build) => ({
     getCapabilities: build.query<CapabilityInventory, void>({
       query: () => "/capabilities",
@@ -309,6 +311,59 @@ export const kondenApi = createApi({
       transformResponse: (value: unknown) => externalConversationSchema.parse(value),
       providesTags: ["ExternalSessions"],
     }),
+    getCodexConnection: build.query<CodexConnection, void>({
+      query: () => "/codex/connection",
+      transformResponse: (value: unknown) => codexConnectionSchema.parse(value),
+      providesTags: ["CodexConnection"],
+    }),
+    reconnectCodex: build.mutation<CodexConnection, { connectionId: string }>({
+      query: ({ connectionId }) => ({ url: "/codex/connection", method: "POST", body: { connection_id: connectionId } }),
+      transformResponse: (value: unknown) => codexConnectionSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: ["CodexConnection"],
+    }),
+    getNativeCodexChats: build.query<NativeCodexChat[], string>({
+      query: (query) => ({ url: "/codex/chats", params: { query } }),
+      transformResponse: (value: unknown) => nativeCodexChatSchema.array().parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+    }),
+    importLocalCodex: build.mutation<{ identity: string }, { connectionId: string; identity: string }>({
+      query: ({ connectionId, identity }) => ({
+        url: "/external-sessions/codex/import", method: "POST", body: { connection_id: connectionId, identity },
+      }),
+      transformResponse: (value: unknown) => nativeCodexChatSchema.pick({ identity: true }).parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: (_result, error) => error === undefined ? ["ExternalSessions"] : [],
+    }),
+    prepareLocalCodex: build.mutation<{ identity: string }, { connectionId: string; workspaceId: string | null }>({
+      query: ({ connectionId, workspaceId }) => ({
+        url: "/codex/chats", method: "POST",
+        body: { connection_id: connectionId, workspace_id: workspaceId },
+      }),
+      transformResponse: (value: unknown) => nativeCodexChatSchema.pick({ identity: true }).parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+    }),
+    startLocalCodex: build.mutation<LocalCodexChat, { connectionId: string; identity: string; text: string }>({
+      query: ({ connectionId, identity, text }) => ({
+        url: "/codex/chats/first-message", method: "POST", body: { connection_id: connectionId, identity, text },
+      }),
+      transformResponse: (value: unknown) => localCodexChatSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: ["ExternalSessions"],
+    }),
+    getLocalCodexChat: build.query<LocalCodexChat, string>({
+      query: (identity) => `/external-sessions/${encodeURIComponent(identity)}/codex/chat`,
+      transformResponse: (value: unknown) => localCodexChatSchema.parse(value),
+      providesTags: ["LocalCodexChat"],
+    }),
+    sendLocalCodex: build.mutation<LocalCodexChat, { connectionId: string; identity: string; text: string }>({
+      query: ({ connectionId, identity, text }) => ({
+        url: `/external-sessions/${encodeURIComponent(identity)}/codex/chat`, method: "POST",
+        body: { connection_id: connectionId, text },
+      }),
+      transformResponse: (value: unknown) => localCodexChatSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+    }),
     postExternalMessage: build.mutation<ExternalConversation, {
       connectionId: string; identity: string; botSessionId: string;
       text: string; target: "bot" | "codex" | "both"; deliveryId: string; replyTo: string | null;
@@ -352,20 +407,13 @@ export const kondenApi = createApi({
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
       invalidatesTags: (_result, error) => error === undefined ? ["ExternalSessions"] : [],
     }),
-    createExternalConnection: build.mutation<CreatedExternalConnection, { connectionId: string; name: string }>({
-      query: ({ connectionId, name }) => ({
-        url: "/external-connections", method: "POST", body: { connection_id: connectionId, name },
-      }),
-      transformResponse: (value: unknown) => createdExternalConnectionSchema.parse(value),
-      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
-      invalidatesTags: (_result, error) => error === undefined ? ["ExternalConnections"] : [],
-    }),
-    viewExternalConnection: build.mutation<CreatedExternalConnection, { connectionId: string; externalId: string }>({
+    installCodexMcp: build.mutation<ExternalConnection, { connectionId: string; externalId?: string }>({
       query: ({ connectionId, externalId }) => ({
-        url: `/external-connections/${externalId}/configuration`, method: "POST", body: { connection_id: connectionId },
+        url: "/external-connections/codex", method: "PUT", body: { connection_id: connectionId, external_id: externalId },
       }),
-      transformResponse: (value: unknown) => createdExternalConnectionSchema.parse(value),
+      transformResponse: (value: unknown) => externalConnectionSchema.parse(value),
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: ["ExternalConnections"],
     }),
     renameExternalConnection: build.mutation<ExternalConnection, { connectionId: string; externalId: string; name: string }>({
       query: ({ connectionId, externalId, name }) => ({
@@ -745,12 +793,19 @@ export const {
   useGetExternalConnectionsQuery,
   useGetExternalSessionsQuery,
   useGetExternalConversationQuery,
+  useGetCodexConnectionQuery,
+  useReconnectCodexMutation,
+  useGetNativeCodexChatsQuery,
+  useImportLocalCodexMutation,
+  usePrepareLocalCodexMutation,
+  useStartLocalCodexMutation,
+  useGetLocalCodexChatQuery,
+  useSendLocalCodexMutation,
   usePostExternalMessageMutation,
   useDeleteExternalSessionMutation,
   useSetExternalCodexMutation,
   useRetryExternalCodexMutation,
-  useCreateExternalConnectionMutation,
-  useViewExternalConnectionMutation,
+  useInstallCodexMcpMutation,
   useRevokeExternalConnectionMutation,
   useRenameExternalConnectionMutation,
   useGetBackgroundCommandsQuery,

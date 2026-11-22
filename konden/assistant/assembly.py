@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 import sys
 
+from konden.assistant.a2a import A2AToolset
 from konden.assistant.agent_messages import (
     MESSAGE_SCHEMAS,
     SEND_MESSAGE,
@@ -265,7 +266,8 @@ async def build_assistant_assembly(
 
     question_model = TimedQuestion if session_transport is not None else Question
     surface = ToolSurface(
-        providers=(McpToolsetAdapter(mcp, attachments),),
+        providers=(McpToolsetAdapter(mcp, attachments),
+                   *((A2AToolset(session_transport, session_id),) if connected_agent else ())),
         base_schemas=[
             *builtin_tools.schemas,
             *([ask_user_schema(question_model)] if agent is not None else []),
@@ -305,6 +307,7 @@ async def build_assistant_assembly(
         ),
         gateway=gateway,
         settings=settings,
+        decorate_bindings=lambda bindings: _with_tool_progress(bindings, tool_progress_sink),
     )
     catalog = CapabilityCatalog(
         surface,

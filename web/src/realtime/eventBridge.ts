@@ -67,12 +67,12 @@ export function openEventBridge(dispatch: AppDispatch): () => void {
   source.addEventListener("connected", (event) => {
     const payload = connectedEventSchema.parse(JSON.parse(event.data));
     dispatch(connected(payload.connection_id));
-    refresh(["Conversation", "Agents", "Groups", "Inbox", "AutoAuthorize", "Avatars", "ExternalSessions", "ExternalConnections"]);
+    refresh(["Conversation", "Agents", "Groups", "Inbox", "AutoAuthorize", "Avatars", "ExternalSessions", "ExternalConnections", "CodexConnection", "LocalCodexChat"]);
     flushRefresh();
   });
   source.addEventListener("external_sessions_changed", (event) => {
     externalSessionsChangedEventSchema.parse(JSON.parse(event.data));
-    refresh(["ExternalSessions", "Conversation"]);
+    refresh(["ExternalSessions", "Conversation", "CodexConnection", "LocalCodexChat"]);
   });
   source.addEventListener("avatars_changed", (event) => {
     avatarsChangedEventSchema.parse(JSON.parse(event.data));
