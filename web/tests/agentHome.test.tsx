@@ -35,7 +35,6 @@ vi.mock("../src/api/kondenApi", () => ({
   } }),
   useCreateGroupMutation: () => [queries.createGroup, { isLoading: false, reset: vi.fn() }],
   useCreateAgentMutation: () => [queries.createAgent, { isLoading: false, reset: vi.fn() }],
-  useCreateA2ABotMutation: () => [vi.fn(), { isLoading: false, reset: vi.fn() }],
   useCreateWorkspaceMutation: () => [vi.fn(), { reset: vi.fn() }],
   useSelectWorkspaceDirectoryMutation: () => [vi.fn(), { reset: vi.fn() }],
 }));

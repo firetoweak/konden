@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 from uuid import uuid4
 
-from konden.assistant.a2a_bots import A2A_DELEGATE, A2A_LIST
+from konden.assistant.a2a import A2A_DELEGATE, A2A_LIST
 from konden.assistant.agent_git import GitWorkspace
 from konden.assistant.agent_messages import (
     CREATE_GROUP,
@@ -49,7 +49,6 @@ from konden.assistant.control import (
     project_control_message,
 )
 from konden.assistant.external_messages import LIST_EXTERNAL, SEND_EXTERNAL
-from konden.assistant.host.a2a_bots import A2ABots
 from konden.assistant.host.agent_groups import AgentGroups
 from konden.assistant.host.agent_lifecycle import AgentLifecycle
 from konden.assistant.host.agent_messages import AgentMessages
@@ -62,6 +61,7 @@ from konden.assistant.host.agent_roster import (
 )
 from konden.assistant.host.agent_worktrees import AgentWorktrees, GitWorktree
 from konden.assistant.host.auto_authorize import AutoAuthorizeStore
+from konden.assistant.host.codex_delegation import CodexDelegation
 from konden.assistant.host.commands import CommandHost
 from konden.assistant.host.external_messages import ExternalMessages
 from konden.assistant.host.ipc import (
@@ -243,7 +243,7 @@ class HostSupervisor:
         self.agent_messages = AgentMessages(self)
         self.agent_groups = AgentGroups(self)
         self.external_messages = ExternalMessages(self)
-        self.a2a_bots = A2ABots(home, store.root, self.external_messages)
+        self.codex_delegation = CodexDelegation(home, store.root, self.external_messages)
         self.agent_worktrees = AgentWorktrees(home, self.command_environment)
         self.agent_projects = AgentProjects(self)
         self._agent_creation_lock = asyncio.Lock()
@@ -371,12 +371,11 @@ class HostSupervisor:
 
     async def _route(self, operation, session_id, arguments, *, worker=None):
         if operation == A2A_LIST:
-            return {"ok": True, "code": "A2A_BOTS_READ", "data": {
-                "bots": [bot.model_dump() for bot in self.a2a_bots.list()],
-                "codex_sessions": await self.external_messages.codex_choices(),
+            return {"ok": True, "code": "CODEX_SESSIONS_READ", "data": {
+                "sessions": await self.external_messages.codex_choices(),
             }}
         if operation == A2A_DELEGATE:
-            return await self.a2a_bots.delegate(session_id, arguments)
+            return await self.codex_delegation.delegate(session_id, arguments)
         if operation == LIST_COLLEAGUES:
             return await self.agent_messages.colleagues(session_id)
         if operation == SEND_MESSAGE:

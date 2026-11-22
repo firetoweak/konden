@@ -23,6 +23,7 @@ from konden.assistant.external_messages import (
     parse_external,
 )
 from konden.assistant.host.codex_app_server import CodexDisconnected, CodexLink
+from konden.assistant.host.codex_chat import CodexChatUnavailable
 from konden.assistant.host.codex_continuation import QueueAttempt
 from konden.assistant.host.codex_titles import ThreadSummary
 from konden.assistant.host.external_messages import ExternalMessages
@@ -189,45 +190,63 @@ def test_registration_is_visible_before_messages_and_reconnection_preserves_iden
     assert c.client.get("/api/external-sessions/unknown").status_code == 404
 
 
-def test_a2a_bot_created_by_a_live_web_connection_can_be_found_by_its_coworker(collaboration):
-    c = collaboration
-    path = "/api/a2a-bots"
-    body = {"connection_id": c.human_connection, "name": "Codex 工程 Bot"}
-    assert c.client.post(path, json={**body, "connection_id": "inactive"}).status_code == 409
-    created = c.client.post(path, json=body)
-    assert created.status_code == 201
-    assert c.client.post(path, json=body).status_code == 409
-    assert c.client.get(path).json() == [created.json()]
-    listing = c.client.portal.call(c.host._route, "list_a2a_bots", "coordinator", {})
-    assert listing["data"]["bots"] == [created.json()]
-    assert created.json()["bot_id"] not in {entry["identity"] for entry in c.client.get("/api/external-sessions").json()}
-
-
-def test_web_created_codex_chat_has_native_identity_and_human_only_direct_send(collaboration):
+def test_first_human_message_establishes_the_same_native_chat_before_reply(collaboration):
     c = collaboration
     identity = "2" * 32
     path = "/api/external-sessions"
+    first_path = "/api/codex/chats/first-message"
     chat_path = f"{path}/{identity}/codex/chat"
-    original = {"thread_id": str(UUID(identity)), "workspace": "example", "messages": [],
-                "last_status": None, "has_earlier": False}
     text = "原样保留\n 这就是用户输入"
-    delivered = {**original, "messages": [{"id": "native-user", "role": "user", "text": text}],
-                 "last_status": "completed"}
-    with patch("konden.assistant.host.external_messages.create_codex_chat", new=AsyncMock(return_value=identity)), \
-            patch("konden.assistant.host.external_messages.read_codex_chat", new=AsyncMock(return_value=original)), \
-            patch("konden.assistant.host.external_messages.send_codex_chat", new=AsyncMock(return_value=delivered)) as send:
-        assert c.client.post(f"{path}/codex", json={"connection_id": "inactive"}).status_code == 409
-        created = c.client.post(f"{path}/codex", json={"connection_id": c.human_connection})
-        assert created.status_code == 201 and created.json() == {"identity": identity}
-        assert c.client.get(chat_path).json() == original
-        saved = ExternalMessages(c.host).sessions.read().sessions
-        assert any(item.identity == identity and item.local_codex and item.connection_id is None for item in saved)
+    body = {"connection_id": c.human_connection, "identity": identity, "text": text}
+    delivered = {"thread_id": str(UUID(identity)), "workspace": "example", "has_earlier": False,
+                 "messages": [{"id": "native-user", "role": "user", "text": text}], "last_status": "completed"}
+    accepted, release = Event(), Event()
+
+    async def native_send(link, received_identity, received_text, *, accept_first=None):
+        assert (link, received_identity, received_text) == (c.service.codex_link, identity, text)
+        if accept_first is not None:
+            await accept_first()
+            accepted.set()
+            assert await asyncio.to_thread(release.wait, 10)
+        return delivered
+
+    with patch("konden.assistant.host.external_messages.prepare_codex_chat", new=AsyncMock(return_value=identity)), \
+            patch("konden.assistant.host.external_messages.read_codex_chat", new=AsyncMock(return_value=delivered)), \
+            patch("konden.assistant.host.external_messages.send_codex_chat", new=AsyncMock(side_effect=native_send)) as send:
+        assert c.client.post("/api/codex/chats", json={"connection_id": "inactive"}).status_code == 409
+        prepared = c.client.post("/api/codex/chats", json={"connection_id": c.human_connection})
+        assert prepared.status_code == 201 and prepared.json() == {"identity": identity}
+        assert c.client.get(chat_path).status_code == 404
+        assert c.client.post(first_path, json={**body, "connection_id": "inactive"}).status_code == 409
+        assert c.client.post(first_path, json={**body, "text": "  "}).status_code == 422
+        send.side_effect = CodexChatUnavailable("Codex 尚未接纳首条消息")
+        assert c.client.post(first_path, json=body).status_code == 409
+        assert all(row["identity"] != identity for row in c.client.get(path).json())
+        send.reset_mock()
+        send.side_effect = native_send
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(c.client.post, first_path, json=body)
+            try:
+                assert accepted.wait(10)
+                assert any(row["identity"] == identity for row in c.client.get(path).json())
+                listing = c.client.portal.call(c.host._route, "list_codex_sessions", "coordinator", {})
+                assert [row["identity"] for row in listing["data"]["sessions"]] == [identity]
+                assert c.client.post(first_path, json=body).json() == delivered
+                assert not pending.done()
+            finally:
+                release.set()
+            assert pending.result(timeout=10).json() == delivered
+
+        send.assert_awaited_once()
+        assert c.client.get(chat_path).json() == delivered
         assert c.client.post(chat_path, json={"connection_id": "inactive", "text": text}).status_code == 409
         other = f"{path}/{c.identity}/codex/chat"
         assert c.client.post(other, json={"connection_id": c.human_connection, "text": text}).status_code == 404
         assert c.client.post(chat_path, json={"connection_id": c.human_connection, "text": "  "}).status_code == 422
         assert c.client.post(chat_path, json={"connection_id": c.human_connection, "text": text}).json() == delivered
-        send.assert_awaited_once_with(c.service.codex_link, identity, text)
+        assert send.await_args.args == (c.service.codex_link, identity, text)
+        assert not send.await_args.kwargs
     assert c.deliveries == [] and c.user_inputs == []
     assert c.call("get_context", chat=identity)["structuredContent"]["identity"] == identity
     rows = c.client.get(path).json()

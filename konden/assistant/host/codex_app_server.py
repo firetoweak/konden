@@ -86,7 +86,7 @@ class CodexAppServer:
             raise CodexRequestError(method, response["error"])
         return response["result"]
 
-    async def run_turn(self, thread_id, params, *, timeout):
+    async def run_turn(self, thread_id, params, *, timeout, on_accepted=None):
         if thread_id in self.turns:
             raise CodexRequestError("turn/start", {
                 "code": -32600, "message": f"thread {thread_id} already has an active writer",
@@ -95,9 +95,12 @@ class CodexAppServer:
         self.turns[thread_id] = done
         try:
             started = await self.request("turn/start", {"threadId": thread_id, **params})
+            turn_id = started["turn"]["id"]
+            if on_accepted is not None:
+                await on_accepted()
             async with asyncio.timeout(timeout):
                 terminal = await done
-            if terminal["id"] != started["turn"]["id"]:
+            if terminal["id"] != turn_id:
                 raise ValueError("Codex returned a different turn")
             return terminal
         finally:

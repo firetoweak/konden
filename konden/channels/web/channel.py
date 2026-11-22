@@ -85,13 +85,6 @@ class WebChannel:
     async def list_external_sessions(self):
         return await self._sessions.external_messages.list_sessions()
 
-    def list_a2a_bots(self):
-        return self._sessions.a2a_bots.list()
-
-    def create_a2a_bot(self, connection_id, name):
-        self._require_connection(connection_id)
-        return self._sessions.a2a_bots.create(name)
-
     async def external_session(self, identity):
         return await self._sessions.external_messages.view(identity)
 
@@ -111,9 +104,13 @@ class WebChannel:
         self._require_connection(connection_id)
         return await self._sessions.external_messages.import_local_codex(identity)
 
-    async def create_local_codex(self, connection_id, workspace_id):
+    async def prepare_local_codex(self, connection_id, workspace_id):
         self._require_connection(connection_id)
-        return await self._sessions.external_messages.create_local_codex(workspace_id)
+        return await self._sessions.external_messages.prepare_local_codex(workspace_id)
+
+    async def start_local_codex(self, connection_id, identity, text):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.start_local_codex(identity, text)
 
     async def local_codex_chat(self, identity):
         return await self._sessions.external_messages.read_local_codex(identity)

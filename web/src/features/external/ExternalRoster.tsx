@@ -1,12 +1,12 @@
-import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, ScrollArea, Select, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, ScrollArea, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { IconArchive, IconDots, IconFolderPlus, IconPlugConnected, IconPlus, IconRefresh, IconSearchOff, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useMatch } from "react-router-dom";
 
 import {
-  useCreateLocalCodexMutation, useDeleteExternalSessionMutation, useGetCodexConnectionQuery,
-  useGetExternalSessionsQuery, useGetNativeCodexChatsQuery, useGetWorkspacesQuery,
+  useDeleteExternalSessionMutation, useGetCodexConnectionQuery,
+  useGetExternalSessionsQuery, useGetNativeCodexChatsQuery,
   useImportLocalCodexMutation, useReconnectCodexMutation,
 } from "../../api/kondenApi";
 import type { ExternalSessionSummary } from "../../api/contracts";
@@ -19,7 +19,7 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
   const [showRevoked, setShowRevoked] = useState(false);
   const [menuIdentity, setMenuIdentity] = useState<string | null>(null);
   const [removing, setRemoving] = useState<ExternalSessionSummary | null>(null);
-  const [adding, setAdding] = useState<"create" | "import" | null>(null);
+  const [adding, setAdding] = useState(false);
   const revoked = sessions.filter((session) => !session.active && !session.local_codex);
   const visible = sessions.filter((session) => session.name.toLocaleLowerCase().includes(query));
   const entries = visible.filter((session) => session.active || session.local_codex || showRevoked || query !== "" || session.identity === identity);
@@ -36,25 +36,25 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
       : <Text c="dimmed" size="xs" px={10} py={8}>没有匹配的外部会话。</Text>;
   }
   function onAdded(identity: string) {
-    setAdding(null);
+    setAdding(false);
     onOpen(`/external/${encodeURIComponent(identity)}`);
   }
   const actions = <>
     <CodexConnectionButton />
     <Tooltip label="添加已有 Codex 会话">
-      <ActionIcon variant="subtle" color="gray" size="sm" aria-label="添加已有 Codex 会话" onClick={() => setAdding("import")}>
+      <ActionIcon variant="subtle" color="gray" size="sm" aria-label="添加已有 Codex 会话" onClick={() => setAdding(true)}>
         <IconFolderPlus size={17} />
       </ActionIcon>
     </Tooltip>
     <Tooltip label="新建 Codex 会话">
-      <ActionIcon variant="subtle" color="gray" size="sm" aria-label="新建 Codex 会话" onClick={() => setAdding("create")}>
+      <ActionIcon variant="subtle" color="gray" size="sm" aria-label="新建 Codex 会话"
+        aria-current={identity === "new" ? "page" : undefined} onClick={() => onOpen("/external/new")}>
         <IconPlus size={16} />
       </ActionIcon>
     </Tooltip>
   </>;
   return <section className="roster-section external-roster" aria-label="外部会话">
-    {adding === "create" ? <CreateLocalCodexModal onClose={() => setAdding(null)} onCreated={onAdded} /> : null}
-    {adding === "import" ? <ImportLocalCodexModal onClose={() => setAdding(null)} onAdded={onAdded} /> : null}
+    {adding ? <ImportLocalCodexModal onClose={() => setAdding(false)} onAdded={onAdded} /> : null}
     {removing === null ? null : <RemoveExternalSessionModal target={removing} onClose={() => setRemoving(null)} onRemoved={() => {
       if (identity === removing.identity) onOpen("/");
       setRemoving(null);
@@ -74,7 +74,7 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
           <Stack className="sidebar-agent-identity" gap={2}>
             <Text size="sm" truncate>{session.name}</Text>
             <Text c="dimmed" size="xs" truncate>
-              {session.local_codex ? "直聊" : sessionStatus(session)}
+              {session.local_codex ? "Codex" : sessionStatus(session)}
             </Text>
           </Stack>
         </Group>
@@ -156,39 +156,6 @@ function ImportLocalCodexModal({ onClose, onAdded }: { onClose: () => void; onAd
         <Button variant="default" disabled={isLoading} onClick={onClose}>取消</Button>
         <Button disabled={connectionId === null || selected === null || isFetching || Boolean(readError)}
           loading={isLoading} onClick={() => void submit()}>添加会话</Button>
-      </Group>
-    </Stack>
-  </Modal>;
-}
-
-function CreateLocalCodexModal({ onClose, onCreated }: { onClose: () => void; onCreated: (identity: string) => void }) {
-  const connectionId = useAppSelector((state) => state.runtime.connectionId);
-  const { data: workspaces = [] } = useGetWorkspacesQuery();
-  const [create, { isLoading }] = useCreateLocalCodexMutation();
-  const [workspace, setWorkspace] = useState("private");
-  const [error, setError] = useState<string | null>(null);
-  async function submit() {
-    if (connectionId === null || isLoading) return;
-    setError(null);
-    try {
-      const { identity } = await create({ connectionId, workspaceId: workspace === "private" ? null : workspace }).unwrap();
-      onCreated(identity);
-    } catch (cause) {
-      setError(typeof cause === "string" ? cause : "未能确认会话已创建。请先检查 Codex Desktop。");
-    }
-  }
-  return <Modal opened title="新建 Codex 会话" onClose={onClose}
-    closeOnClickOutside={!isLoading} closeOnEscape={!isLoading} withCloseButton={!isLoading}>
-    <Stack gap="md">
-      <Select label="工作目录" data={[{ value: "private", label: "新的独立目录" },
-        ...workspaces.map((item) => ({ value: item.workspace_id, label: item.task_root }))]}
-        value={workspace} allowDeselect={false} disabled={isLoading}
-        onChange={(value) => { if (value !== null) setWorkspace(value); }} />
-      <Text size="sm" c="dimmed">Codex 在该目录内工作。新会话也可在本机 Codex Desktop 打开。</Text>
-      {error === null ? null : <Alert color="red" role="alert">{error}</Alert>}
-      <Group justify="flex-end">
-        <Button variant="default" disabled={isLoading} onClick={onClose}>取消</Button>
-        <Button disabled={connectionId === null} loading={isLoading} onClick={() => void submit()}>创建</Button>
       </Group>
     </Stack>
   </Modal>;

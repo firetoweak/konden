@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 import sys
 
-from konden.assistant.a2a_bots import A2AToolset
+from konden.assistant.a2a import A2AToolset
 from konden.assistant.agent_messages import (
     MESSAGE_SCHEMAS,
     SEND_MESSAGE,

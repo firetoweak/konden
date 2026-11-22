@@ -19,7 +19,6 @@ import {
   attachmentRefSchema, type AttachmentRef,
   type ExternalSessionSummary,
   type ExternalConversation,
-  a2aBotSchema, type A2ABot,
   localCodexChatSchema,
   type LocalCodexChat,
   codexConnectionSchema, type CodexConnection,
@@ -133,7 +132,7 @@ function putConversation(
 export const kondenApi = createApi({
   reducerPath: "kondenApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities", "A2ABots", "CodexConnection", "LocalCodexChat"],
+  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities", "CodexConnection", "LocalCodexChat"],
   endpoints: (build) => ({
     getCapabilities: build.query<CapabilityInventory, void>({
       query: () => "/capabilities",
@@ -309,17 +308,6 @@ export const kondenApi = createApi({
       transformResponse: (value: unknown) => z.array(externalSessionSchema).parse(value),
       providesTags: ["ExternalSessions"],
     }),
-    getA2ABots: build.query<A2ABot[], void>({
-      query: () => "/a2a-bots",
-      transformResponse: (value: unknown) => z.array(a2aBotSchema).parse(value),
-      providesTags: ["A2ABots"],
-    }),
-    createA2ABot: build.mutation<A2ABot, { connectionId: string; name: string }>({
-      query: ({ connectionId, name }) => ({ url: "/a2a-bots", method: "POST", body: { connection_id: connectionId, name } }),
-      transformResponse: (value: unknown) => a2aBotSchema.parse(value),
-      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
-      invalidatesTags: (_result, error) => error === undefined ? ["A2ABots"] : [],
-    }),
     getExternalConversation: build.query<ExternalConversation, string>({
       query: (identity) => `/external-sessions/${encodeURIComponent(identity)}`,
       transformResponse: (value: unknown) => externalConversationSchema.parse(value),
@@ -349,14 +337,21 @@ export const kondenApi = createApi({
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
       invalidatesTags: (_result, error) => error === undefined ? ["ExternalSessions"] : [],
     }),
-    createLocalCodex: build.mutation<{ identity: string }, { connectionId: string; workspaceId: string | null }>({
+    prepareLocalCodex: build.mutation<{ identity: string }, { connectionId: string; workspaceId: string | null }>({
       query: ({ connectionId, workspaceId }) => ({
-        url: "/external-sessions/codex", method: "POST",
+        url: "/codex/chats", method: "POST",
         body: { connection_id: connectionId, workspace_id: workspaceId },
       }),
-      transformResponse: (value: unknown) => z.object({ identity: z.string().regex(/^[0-9a-f]{32}$/) }).strict().parse(value),
+      transformResponse: (value: unknown) => nativeCodexChatSchema.pick({ identity: true }).parse(value),
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
-      invalidatesTags: (_result, error) => error === undefined ? ["ExternalSessions"] : [],
+    }),
+    startLocalCodex: build.mutation<LocalCodexChat, { connectionId: string; identity: string; text: string }>({
+      query: ({ connectionId, identity, text }) => ({
+        url: "/codex/chats/first-message", method: "POST", body: { connection_id: connectionId, identity, text },
+      }),
+      transformResponse: (value: unknown) => localCodexChatSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: ["ExternalSessions"],
     }),
     getLocalCodexChat: build.query<LocalCodexChat, string>({
       query: (identity) => `/external-sessions/${encodeURIComponent(identity)}/codex/chat`,
@@ -806,14 +801,13 @@ export const {
   useSetCapabilityEnabledMutation,
   useGetExternalConnectionsQuery,
   useGetExternalSessionsQuery,
-  useGetA2ABotsQuery,
-  useCreateA2ABotMutation,
   useGetExternalConversationQuery,
   useGetCodexConnectionQuery,
   useReconnectCodexMutation,
   useGetNativeCodexChatsQuery,
   useImportLocalCodexMutation,
-  useCreateLocalCodexMutation,
+  usePrepareLocalCodexMutation,
+  useStartLocalCodexMutation,
   useGetLocalCodexChatQuery,
   useSendLocalCodexMutation,
   usePostExternalMessageMutation,

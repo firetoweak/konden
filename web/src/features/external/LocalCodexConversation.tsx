@@ -1,15 +1,87 @@
-import { ActionIcon, Alert, Button, Group, Loader, ScrollArea, Text, Textarea } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Loader, ScrollArea, Select, Text, Textarea } from "@mantine/core";
 import { IconArrowUp, IconPlugConnected } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import type { ExternalSessionSummary } from "../../api/contracts";
-import { apiErrorDetail, kondenApi, useGetLocalCodexChatQuery, useSendLocalCodexMutation } from "../../api/kondenApi";
+import {
+  apiErrorDetail, kondenApi, useGetLocalCodexChatQuery, useGetWorkspacesQuery,
+  usePrepareLocalCodexMutation, useSendLocalCodexMutation, useStartLocalCodexMutation,
+} from "../../api/kondenApi";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { MarkdownMessage } from "../conversation/MarkdownMessage";
 import { clearSentComposerText, restoreComposerText, saveComposerText } from "../conversation/composerDraft";
 import { useMessageReading } from "../conversation/useMessageReading";
 import { CodexDesktopLink } from "./CodexDesktopLink";
+
+const NEW_DRAFT = "local-codex:new";
+const PENDING_THREAD = "konden.codexFirstMessage.thread";
+const speakers = { user: "你的消息", codex: "Codex 的回复", delegation: "Konden Bot 的派单" };
+
+export function NewLocalCodexConversation() {
+  const navigate = useNavigate();
+  const connectionId = useAppSelector((state) => state.runtime.connectionId);
+  const { data: workspaces = [] } = useGetWorkspacesQuery();
+  const [prepare, { isLoading: preparing }] = usePrepareLocalCodexMutation({ fixedCacheKey: `${NEW_DRAFT}:prepare` });
+  const [start, { isLoading: starting }] = useStartLocalCodexMutation({ fixedCacheKey: `${NEW_DRAFT}:start` });
+  const [draft, setDraft] = useState(() => restoreComposerText(NEW_DRAFT));
+  const [workspace, setWorkspace] = useState("private");
+  const [pending, setPending] = useState(() => sessionStorage.getItem(PENDING_THREAD));
+  const [failure, setFailure] = useState<string | null>(null);
+  const sending = preparing || starting;
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  useEffect(() => { saveComposerText(NEW_DRAFT, draft); }, [draft]);
+
+  async function submit() {
+    if (connectionId === null || sending || !draft.trim()) return;
+    setFailure(null);
+    const text = draft;
+    try {
+      let identity = pending ?? sessionStorage.getItem(PENDING_THREAD);
+      if (identity === null) {
+        ({ identity } = await prepare({ connectionId, workspaceId: workspace === "private" ? null : workspace }).unwrap());
+        sessionStorage.setItem(PENDING_THREAD, identity);
+        if (active.current) setPending(identity);
+      }
+      const chat = await start({ connectionId, identity, text }).unwrap();
+      if (sessionStorage.getItem(PENDING_THREAD) === identity) {
+        if (chat.messages.some((message) => message.role === "user" && message.text === text)) {
+          clearSentComposerText(NEW_DRAFT, text);
+        }
+        sessionStorage.removeItem(PENDING_THREAD);
+      }
+      if (active.current) navigate(`/external/${encodeURIComponent(identity)}`, { replace: true });
+    } catch (cause) {
+      if (active.current) setFailure(typeof cause === "string" ? cause : "未确认发送结果。重试时会检查原会话。");
+    }
+  }
+
+  return <div className="session-page external-session-page">
+    <div className="session-main">
+      <header className="page-header session-header local-codex-header">
+        <Group gap={10} wrap="nowrap" className="session-header-identity">
+          <span className="agent-avatar agent-avatar-small" aria-hidden="true"><IconPlugConnected size={18} /></span>
+          <Text size="sm" fw={600}>新建 Codex 会话</Text>
+        </Group>
+        {pending === null ? <Select aria-label="工作目录" size="xs" w={230} maw="48%"
+          data={[{ value: "private", label: "新的独立目录" }, ...workspaces.map((item) => ({ value: item.workspace_id, label: item.task_root }))]}
+          value={workspace} allowDeselect={false} disabled={sending}
+          onChange={(value) => { if (value !== null) setWorkspace(value); }} /> : null}
+      </header>
+      <div className="group-chat-scroll">
+        <div className="group-chat-empty"><Text fw={500} size="lg">给 Codex 发条消息</Text></div>
+      </div>
+      {sending ? <Text ta="center" role="status" c="dimmed" size="sm">正在等待 Codex 回复…</Text> : null}
+      {failure === null ? null : <Alert color="orange" role="alert">{failure}</Alert>}
+      <CodexComposer draft={draft} onChange={setDraft} onSend={submit} sending={sending} readOnly={sending}
+        disabled={connectionId === null} />
+    </div>
+  </div>;
+}
 
 export function LocalCodexConversation({ session }: { session: ExternalSessionSummary }) {
   const identity = session.identity;
@@ -67,34 +139,45 @@ export function LocalCodexConversation({ session }: { session: ExternalSessionSu
           </div> : null}
           {data?.messages.map((message) => <div className="group-message-slot" key={message.id}>
             <article data-message-id={message.id} className={message.role === "user" ? "group-message is-human" : "group-message"}
-              aria-label={message.role === "user" ? "你的消息" : "Codex 的回复"}>
+              aria-label={speakers[message.role]}>
               <div className="message group-message-row">
                 {message.role === "user" ? <span className="agent-avatar human-avatar" aria-hidden="true">你</span>
                   : <span className="agent-avatar" aria-hidden="true"><IconPlugConnected size={18} /></span>}
-                <div className="group-message-bubble"><MarkdownMessage content={message.text} streaming={false} /></div>
+                <div className="group-message-bubble">
+                  {message.role === "delegation" ? <Text size="xs" fw={500} c="dimmed" mb={6}>Konden Bot · A2A 派单</Text> : null}
+                  <MarkdownMessage content={message.text} streaming={false} />
+                </div>
               </div>
             </article>
           </div>)}
-          {sending ? <Text role="status" c="dimmed" size="sm">正在等待 Codex 回复…</Text> : null}
+          {sending || data?.last_status === "inProgress" ? <Text role="status" c="dimmed" size="sm">正在等待 Codex 回复…</Text> : null}
           {!sending && (data?.last_status === "failed" || data?.last_status === "interrupted")
             ? <Alert color="orange">Codex 这一轮未完成。</Alert> : null}
         </div>
       </ScrollArea>
       {failure === null ? null : <Alert color="orange" role="alert">{failure}</Alert>}
-      <form className="composer local-codex-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        <Group align="flex-end" wrap="nowrap" gap={8}>
-          <Textarea aria-label="发给 Codex 的消息" placeholder="发消息给 Codex" autosize minRows={1} maxRows={6}
-            className="local-codex-input" value={draft} onChange={(event) => setDraft(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void submit();
-              }
-            }} />
-          <ActionIcon type="submit" aria-label="发送给 Codex" size="lg" loading={sending}
-            disabled={connectionId === null || !data || !draft.trim() || isFetching}><IconArrowUp size={17} /></ActionIcon>
-        </Group>
-      </form>
+      <CodexComposer draft={draft} onChange={setDraft} onSend={submit} sending={sending}
+        disabled={connectionId === null || !data || isFetching} />
     </div>
   </div>;
+}
+
+function CodexComposer({ draft, onChange, onSend, sending, disabled, readOnly = false }: {
+  draft: string; onChange: (text: string) => void; onSend: () => Promise<void>;
+  sending: boolean; disabled: boolean; readOnly?: boolean;
+}) {
+  return <form className="composer local-codex-composer" onSubmit={(event) => { event.preventDefault(); void onSend(); }}>
+    <Group align="flex-end" wrap="nowrap" gap={8}>
+      <Textarea aria-label="发给 Codex 的消息" placeholder="发消息给 Codex" autosize minRows={1} maxRows={6}
+        className="local-codex-input" value={draft} readOnly={readOnly} onChange={(event) => onChange(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            void onSend();
+          }
+        }} />
+      <ActionIcon type="submit" aria-label="发送给 Codex" size="lg" loading={sending}
+        disabled={disabled || !draft.trim()}><IconArrowUp size={17} /></ActionIcon>
+    </Group>
+  </form>;
 }

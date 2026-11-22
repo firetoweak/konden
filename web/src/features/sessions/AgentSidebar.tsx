@@ -9,7 +9,6 @@ import { CreateAgentModal } from "./CreateAgentModal";
 import { BotRoster } from "./BotRoster";
 import { AutoAuthorize } from "./AutoAuthorize";
 import { SettingsMenu } from "../settings/SettingsMenu";
-import { A2ABotRoster } from "../external/A2ABotRoster";
 import { ExternalRoster } from "../external/ExternalRoster";
 import { CapabilitiesIcon } from "../capabilities/CapabilitiesIcon";
 
@@ -63,7 +62,6 @@ export function AgentSidebar({ onNavigate, compact = false }: { onNavigate: () =
     </AppShell.Section>
     <AppShell.Section grow className="session-section">
       <ScrollArea className="session-scroll" type="hover"><BotRoster compact={compact} agents={agents.filter((agent) => agent.name.toLocaleLowerCase().includes(query))} chats={chats.filter((chat) => chat.name.toLocaleLowerCase().includes(query))} attentionSessionIds={new Set(inbox.map((item) => item.session_id))} sessionId={sessionId} groupId={groupId} searching={query !== ""} onOpen={open} />
-        <A2ABotRoster compact={compact} query={query} />
         <ExternalRoster compact={compact} query={query} onOpen={open} />
       </ScrollArea>
     </AppShell.Section>

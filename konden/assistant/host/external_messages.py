@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from bisect import bisect_right, insort_right
 from datetime import UTC, datetime
+from functools import partial
 from hashlib import sha256
 from itertools import islice
 import json
@@ -31,9 +32,9 @@ from konden.assistant.host.agent_messages import message_identity
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
 from konden.assistant.host.codex_app_server import CodexDisconnected, CodexLink
 from konden.assistant.host.codex_chat import (
-    create_codex_chat,
     list_codex_chats,
     native_codex_thread,
+    prepare_codex_chat,
     read_codex_chat,
     send_codex_chat,
 )
@@ -123,14 +124,22 @@ class ExternalMessages:
             self._changed.notify_all()
             await self.notify_changed()
 
-    async def create_local_codex(self, workspace_id: str | None):
+    async def prepare_local_codex(self, workspace_id: str | None):
         if workspace_id is None:
             workspace = self.host.home.root / "codex_workspaces" / uuid4().hex
             workspace.mkdir(parents=True)
         else:
             workspace = self.host.workspaces.get(workspace_id).task_root
-        identity = await create_codex_chat(self.codex_link, workspace)
-        return await self.bind_local_codex(identity)
+        return {"identity": await prepare_codex_chat(self.codex_link, workspace)}
+
+    async def start_local_codex(self, identity, text):
+        if self.has_local_codex(identity):
+            return await self.read_local_codex(identity)
+        history = await finish_on_cancel(send_codex_chat(
+            self.codex_link, identity, text, accept_first=partial(self.bind_local_codex, identity),
+        ))
+        await self.notify_changed()
+        return history
 
     async def bind_local_codex(self, identity):
         async with self._changed:

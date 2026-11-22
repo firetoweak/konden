@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from konden.assistant.a2a_bots import KondenWork
+from konden.assistant.a2a import KondenWork
 from konden.assistant.attachments import is_valid_attachment_id
 from konden.assistant.external_messages import SendExternal
 

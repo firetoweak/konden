@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Literal
 
-from konden.assistant.a2a_bots import A2A_COMPLETED, A2A_DELEGATE
+from konden.assistant.a2a import A2A_COMPLETED, A2A_DELEGATE
 from konden.assistant.agent_messages import SEND_FILE, SEND_MESSAGE
 from konden.assistant.agents import (
     COMMUNICATION_LIMIT_REACHED,
@@ -549,7 +549,7 @@ def _a2a_delivery(command_state, attachments, step_id, occurred_at) -> StepItem 
     command_id = command_state.command.command_id
     delivery = result["data"]
     files = tuple(attachments.files.describe(file["attachment_id"]) for file in delivery["files"])
-    title = f"{delivery['bot_name']} · A2A 交付"
+    title = f"{delivery.get('codex_session_name') or delivery['bot_name']} · A2A 交付"
     return StepItem("step", f"{step_id}:{command_id}", command_id,
                     "\n\n".join(filter(None, (title, delivery["report"]))), (), occurred_at, files=files,
                     codex_thread_id=delivery.get("codex_thread_id"))

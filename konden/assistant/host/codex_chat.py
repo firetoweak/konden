@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from uuid import UUID
 
+from konden.assistant.a2a import A2A_CODEX_INPUT
 from konden.assistant.external_messages import external_name
 from konden.assistant.host.codex_app_server import CodexDisconnected, CodexRequestError
 from konden.assistant.host.codex_titles import ThreadSummary
@@ -73,10 +74,10 @@ async def edit_codex_chat(server, *, identity: str | None = None, workspace: Pat
                 server.writers.remove(thread_id)
 
 
-async def create_codex_chat(link, workspace: Path) -> str:
+async def prepare_codex_chat(link, workspace: Path) -> str:
     server = await link.require()
     async with edit_codex_chat(server, workspace=workspace) as thread:
-        # Starting an empty native chat alone doesn't persist it across App Server restarts.
+        # The first send may have to resume this ID after a reconnect.
         await server.request("thread/inject_items", {"threadId": thread.id, "items": [{
             "type": "message", "role": "developer", "content": [{
                 "type": "input_text", "text": "这段 Codex 会话由用户在 Konden 创建。",
@@ -114,6 +115,8 @@ def _message(item):
     if item["type"] == "userMessage":
         text = "\n".join(block["text"] for block in item["content"] if block["type"] == "text")
         role = "user"
+    elif item["type"] == "functionCallOutput" and item.get("name") == A2A_CODEX_INPUT:
+        text, role = item["output"], "delegation"
     elif item["type"] == "agentMessage" and item.get("phase") in (None, "final_answer"):
         text, role = item["text"], "codex"
     else:
@@ -143,11 +146,17 @@ async def read_codex_chat(link, identity: str):
     return await _history(server, await native_codex_thread(server, identity))
 
 
-async def send_codex_chat(link, identity: str, text: str):
+async def send_codex_chat(link, identity: str, text: str, *, accept_first=None):
     server = await link.require()
     try:
         async with edit_codex_chat(server, identity=identity) as thread:
-            await server.run_turn(thread.id, {"input": [{"type": "text", "text": text}]}, timeout=900)
+            if accept_first is not None:
+                history = await _history(server, thread)
+                if any(message["role"] in {"user", "delegation"} for message in history["messages"]):
+                    await accept_first()
+                    return history
+            await server.run_turn(thread.id, {"input": [{"type": "text", "text": text}]},
+                                  timeout=900, on_accepted=accept_first)
             return await _history(server, thread)
     except (CodexDisconnected, TimeoutError) as error:
         raise CodexChatUnavailable("未收到 Codex 的确认。请重新连接并查看原会话后，再决定是否重发。") from error

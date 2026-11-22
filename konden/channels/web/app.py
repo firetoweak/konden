@@ -29,7 +29,6 @@ from konden.assistant.authorization import (
 )
 from konden.assistant.external_messages import PostExternal
 from konden.assistant.file_attachments import is_file_attachment_id
-from konden.assistant.host.a2a_bots import A2ABotName, A2ABotNameTaken
 from konden.assistant.host.agent_groups import (
     GroupDissolvedError,
     GroupNameTaken,
@@ -152,16 +151,12 @@ class ExternalMessageRequest(ConnectionRequest, PostExternal):
     pass
 
 
-class CreateLocalCodexRequest(ConnectionRequest):
+class PrepareLocalCodexRequest(ConnectionRequest):
     workspace_id: str | None = Field(default=None, min_length=1)
 
 
 class ImportLocalCodexRequest(ConnectionRequest):
     identity: str = Field(pattern=r"^[0-9a-f]{32}$")
-
-
-class CreateA2ABotRequest(ConnectionRequest, A2ABotName):
-    pass
 
 
 class LocalCodexMessageRequest(ConnectionRequest):
@@ -173,6 +168,10 @@ class LocalCodexMessageRequest(ConnectionRequest):
         if not value.strip():
             raise ValueError("消息不能为空白")
         return value
+
+
+class FirstLocalCodexMessageRequest(LocalCodexMessageRequest):
+    identity: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
 class ModelSettingsRequest(ConnectionRequest):
@@ -715,21 +714,6 @@ def create_web_app(
     async def external_sessions(request: Request):
         return await _channel(request).list_external_sessions()
 
-    @app.get("/api/a2a-bots")
-    async def list_a2a_bots(request: Request):
-        return _channel(request).list_a2a_bots()
-
-    @app.post("/api/a2a-bots", status_code=201)
-    async def create_a2a_bot(body: CreateA2ABotRequest, request: Request):
-        try:
-            return _channel(request).create_a2a_bot(body.connection_id, body.name)
-        except A2ABotNameTaken as error:
-            return JSONResponse(status_code=409, content={"detail": str(error)})
-
-    @app.post("/api/external-sessions/codex", status_code=201)
-    async def create_local_codex(body: CreateLocalCodexRequest, request: Request):
-        return await _channel(request).create_local_codex(body.connection_id, body.workspace_id)
-
     @app.get("/api/codex/connection")
     async def codex_connection(request: Request):
         return _channel(request).codex_connection()
@@ -741,6 +725,14 @@ def create_web_app(
     @app.get("/api/codex/chats")
     async def list_local_codex(request: Request, query: str = ""):
         return await _channel(request).list_local_codex(query)
+
+    @app.post("/api/codex/chats", status_code=201)
+    async def prepare_local_codex(body: PrepareLocalCodexRequest, request: Request):
+        return await _channel(request).prepare_local_codex(body.connection_id, body.workspace_id)
+
+    @app.post("/api/codex/chats/first-message")
+    async def start_local_codex(body: FirstLocalCodexMessageRequest, request: Request):
+        return await _channel(request).start_local_codex(body.connection_id, body.identity, body.text)
 
     @app.post("/api/external-sessions/codex/import")
     async def import_local_codex(body: ImportLocalCodexRequest, request: Request):

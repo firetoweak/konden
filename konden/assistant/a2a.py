@@ -1,4 +1,4 @@
-"""The Bot-facing directory and input contract for A2A delegation."""
+"""The model-facing contracts for A2A delegation."""
 
 from __future__ import annotations
 
@@ -10,10 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from konden.assistant.file_attachments import validate_attachment_name
 from konden.assistant.toolsets import LoadedTool, ToolsetDescriptor
 
-A2A_LIST = "list_a2a_bots"
+A2A_LIST = "list_codex_sessions"
 A2A_DELEGATE = "delegate_a2a_task"
 A2A_COMPLETED = "A2A_TASK_COMPLETED"
-A2A_TOOLSET = ToolsetDescriptor("a2a:codex", "查询已创建的 Codex Bot，并向它委派任务和接收文件成果。")
+A2A_CODEX_INPUT = "a2a_delegation"
+A2A_TOOLSET = ToolsetDescriptor("a2a:codex", "查询已接入的 Codex 会话，沿用或新建会话委派任务并接收成果。", revision=2)
 
 
 class A2AWork(BaseModel):
@@ -44,11 +45,7 @@ class A2AWork(BaseModel):
 
 class CodexWork(A2AWork):
     codex_session_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$",
-        description="沿用会话时填写从 list_a2a_bots 查到的会话 ID；开启新会话时省略。")
-
-
-class DelegateA2AWork(CodexWork):
-    bot_id: str = Field(pattern=r"^[0-9a-f]{32}$", description="从 list_a2a_bots 查到的目标 Bot ID。")
+        description="沿用会话时填写从 list_codex_sessions 查到的会话 ID。省略时为这项任务开启新会话。")
 
 
 class KondenWork(A2AWork):
@@ -70,27 +67,29 @@ class A2AToolset:
 
     async def load(self, toolset_id, revision):
         return (
-            LoadedTool(A2A_LIST, "查询可派单的 Codex Bot 和已关联的 Codex 会话，返回名称与对应 ID。",
+            LoadedTool(A2A_LIST, "查询可沿用的 Codex 会话，返回名称和会话 ID。",
                        {"type": "object", "properties": {}, "additionalProperties": False},
                        partial(self._call, A2A_LIST)),
             LoadedTool(A2A_DELEGATE,
-                       "把用户交办的任务交给指定 A2A Bot。可选择一个已关联的 Codex 会话继续，也可开启新会话。"
+                       "通过 A2A 把用户交办的任务交给 Codex。可沿用已关联的会话，也可为本次任务开启新会话。"
                        "报告、附件和用于打开原生 Codex 会话的链接会显示在当前对话。"
                        "若结果未确认，先告诉用户，避免重复派单。",
-                       DelegateA2AWork.model_json_schema(), partial(self._call, A2A_DELEGATE),
+                       CodexWork.model_json_schema(), partial(self._call, A2A_DELEGATE),
                        requires_authorization=True),
         )
 
     def restore(self, toolset_id, revision, tools):
+        if revision != A2A_TOOLSET.revision:
+            return ()
         return tuple(LoadedTool(tool.name, tool.description, dict(tool.parameters), partial(self._call, tool.name),
                                 tool.requires_authorization, tool.provider_data) for tool in tools)
 
     async def _call(self, operation, arguments):
         if operation == A2A_DELEGATE:
             try:
-                arguments = DelegateA2AWork.model_validate(dict(arguments)).model_dump()
+                arguments = CodexWork.model_validate(dict(arguments)).model_dump()
             except ValidationError as error:
                 return {"ok": False, "code": "INVALID_ARGUMENT", "error": str(error)}
         elif arguments:
-            return {"ok": False, "code": "INVALID_ARGUMENT", "error": "list_a2a_bots 不接受参数。"}
+            return {"ok": False, "code": "INVALID_ARGUMENT", "error": "list_codex_sessions 不接受参数。"}
         return await self.transport(operation, self.session_id, arguments)
