@@ -12,6 +12,7 @@ from pathlib import Path
 from konden.assistant.attachments import (
     AttachmentGateway,
     AttachmentRejected,
+    AttachmentSnapshot,
     is_file_attachment_id,
 )
 from konden.assistant.external_messages import (
@@ -36,6 +37,7 @@ from konden.assistant.host.external_attachments import (
     describe_attachments,
     snapshot_files,
 )
+from konden.assistant.host.ipc import finish_on_cancel
 from konden.runtime import AgentRuntime, DomainFactCommitted, Event, UserMessageReceived
 
 
@@ -324,6 +326,44 @@ class ExternalMessages:
             await self._notify()
         return await self.view(identity)
 
+    async def _share_was_committed(self, session_id, arguments):
+        events = await self.host.store.journal(session_id).snapshot(session_id)
+        accepted = next((event for event in events if event.delivery is not None
+                         and event.delivery.source == arguments["source"]
+                         and event.delivery.delivery_id == arguments["delivery_id"]), None)
+        if accepted is None:
+            return False
+        if accepted.payload != DomainFactCommitted(arguments["fact_type"], arguments["data"]):
+            raise ValueError("accepted external message conflicts with its snapshot")
+        return True
+
+    async def _commit_share(self, session_id, root, message):
+        if not message.attachment_paths:
+            await self.host.request("fact", session_id, message.arguments())
+            return message
+
+        store = self._store(session_id)
+        writes = AttachmentSnapshot()
+        arguments = None
+        try:
+            refs = await finish_on_cancel(asyncio.to_thread(snapshot_files, store, root, message.attachment_paths, writes))
+            message = message.model_copy(update={"artifact_refs": refs})
+            arguments = message.arguments()
+            await self.host.request("fact", session_id, arguments, settle_dispatched=True)
+        except BaseException as error:
+            try:
+                # IPC may fail after the Worker committed. A failed journal read
+                # leaves ownership unknown, so keep the bytes and surface both errors.
+                if arguments is not None and await self._share_was_committed(session_id, arguments):
+                    writes.publish()
+                else:
+                    writes.discard()
+            except BaseException as cleanup_error:
+                raise BaseExceptionGroup("attachment share and reconciliation failed", [error, cleanup_error]) from cleanup_error
+            raise
+        writes.publish()
+        return message
+
     async def send(self, connection, identity, arguments):
         message_id = "external-" + sha256(json.dumps(
             [connection.connection_id, identity, arguments.delivery_id]).encode()).hexdigest()
@@ -350,22 +390,21 @@ class ExternalMessages:
                 return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "没有这位同事，请用 get_context 查询当前名字。"}
             if not self._valid_reply(messages, recipient.session_id, arguments.reply_to):
                 return self.invalid_reply()
-            refs = []
+            root = None
             if arguments.files:
                 thread = (await read_codex_threads([identity])).get(identity)
                 if thread is None or thread.cwd is None or not Path(thread.cwd).is_absolute():
                     return {"ok": False, "code": "FILE_CONTEXT_UNAVAILABLE",
                             "error": "无法确认当前 Codex 聊天的工作目录，请在本机 Desktop 打开该聊天后重试。"}
-                try:
-                    refs = await asyncio.to_thread(snapshot_files, self._store(recipient.session_id), Path(thread.cwd), arguments.files)
-                except AttachmentRejected as error:
-                    return {"ok": False, "code": "ATTACHMENT_REJECTED", "error": str(error)}
+                root = Path(thread.cwd)
             names = await self._names([session])
             message = ExternalMessage(connection_id=connection.connection_id, identity=session.identity,
                 name=names[session.identity], message_id=message_id, sequence=len(messages) + 1, direction=direction,
-                reply_to=arguments.reply_to, text=arguments.text, artifact_refs=refs, attachment_paths=arguments.files)
+                reply_to=arguments.reply_to, text=arguments.text, attachment_paths=arguments.files)
             try:
-                await self.host.request("fact", recipient.session_id, message.arguments())
+                await self._commit_share(recipient.session_id, root, message)
+            except AttachmentRejected as error:
+                return {"ok": False, "code": "ATTACHMENT_REJECTED", "error": str(error)}
             except AgentDeletedError:
                 return {"ok": False, "code": "RECIPIENT_NOT_FOUND", "error": "这位同事已退出。"}
             await self._notify()
@@ -451,14 +490,13 @@ class ExternalMessages:
                 sender = await self.host.agents.by_session(session_id)
                 if sender is None:
                     raise ValueError("external message sender requires a Bot identity")
-                try:
-                    refs = await asyncio.to_thread(snapshot_files, self._store(session_id), sender.directory, arguments["files"])
-                except AttachmentRejected as error:
-                    return {"ok": False, "code": "ATTACHMENT_REJECTED", "error": str(error)}
                 message = ExternalMessage(connection_id=session.connection_id, identity=session.identity,
                     name=sender.name, message_id=message_id, sequence=len(messages) + 1, direction=direction,
-                    reply_to=arguments["reply_to"], text=arguments["text"], artifact_refs=refs, attachment_paths=arguments["files"])
-                await self.host.request("fact", session_id, message.arguments())
+                    reply_to=arguments["reply_to"], text=arguments["text"], attachment_paths=arguments["files"])
+                try:
+                    message = await self._commit_share(session_id, sender.directory, message)
+                except AttachmentRejected as error:
+                    return {"ok": False, "code": "ATTACHMENT_REJECTED", "error": str(error)}
             self._changed.notify_all()
             await self._notify()
         if message.calls_codex and await self.codex.notify(session.identity, message_id):

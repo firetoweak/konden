@@ -6,6 +6,7 @@ from pathlib import Path
 from konden.assistant.attachments import (
     MAX_SOURCE_BYTES,
     AttachmentRejected,
+    AttachmentSnapshot,
     is_file_attachment_id,
 )
 
@@ -13,7 +14,7 @@ IMAGE_MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                ".webp": "image/webp", ".gif": "image/gif"}
 
 
-def snapshot_files(store, root: Path, paths: list[str]) -> list[str]:
+def snapshot_files(store, root: Path, paths: list[str], snapshot: AttachmentSnapshot) -> list[str]:
     root = root.resolve()
     sources = []
     for relative in paths:
@@ -29,9 +30,11 @@ def snapshot_files(store, root: Path, paths: list[str]) -> list[str]:
         try:
             with source.open("rb") as stream:
                 mime = IMAGE_MIMES.get(source.suffix.lower())
-                ref = (store.save_image(stream.read(MAX_SOURCE_BYTES + 1), mime) if mime is not None
-                       else store.save_file_stream(stream, source.name))
+                ref = (store.save_image(stream.read(MAX_SOURCE_BYTES + 1), mime, snapshot=snapshot) if mime is not None
+                       else store.save_file_stream(stream, source.name, snapshot=snapshot))
         except (FileNotFoundError, PermissionError) as error:
+            if error.filename is None or Path(error.filename) != source:
+                raise
             raise AttachmentRejected("这个附件不存在或无法读取。") from error
         refs.append(ref.attachment_id)
     return refs

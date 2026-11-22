@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -67,7 +68,7 @@ class FileAttachmentStore:
         self.originals = originals
         self.materials = materials
 
-    def save_stream(self, stream: BinaryIO, name: str) -> FileAttachment:
+    def save_stream(self, stream: BinaryIO, name: str, *, rollback: ExitStack | None = None) -> FileAttachment:
         if not callable(getattr(stream, "read", None)):
             raise TypeError("file stream must be a binary IO")
         _validate_name(name)
@@ -78,11 +79,16 @@ class FileAttachmentStore:
             with staging.open("wb") as handle:
                 shutil.copyfileobj(stream, handle, length=_COPY_CHUNK)
             staging.replace(target)
-        except BaseException:
-            if staging.exists():
-                staging.unlink(missing_ok=True)
+            attachment = FileAttachment(attachment_id, name, target.stat().st_size)
+        except BaseException as error:
+            try:
+                shutil.rmtree(directory)
+            except OSError as cleanup_error:
+                raise BaseExceptionGroup("attachment write and cleanup failed", [error, cleanup_error]) from None
             raise
-        return FileAttachment(attachment_id, name, target.stat().st_size)
+        if rollback is not None:
+            rollback.callback(shutil.rmtree, directory)
+        return attachment
 
     async def save_async(self, read, name: str) -> FileAttachment:
         if not callable(read):

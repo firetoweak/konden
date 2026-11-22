@@ -56,7 +56,7 @@ def collaboration(tmp_path, tmp_path_factory):
     deliveries = []
     user_inputs = []
 
-    async def deliver(operation, session_id, arguments):
+    async def deliver(operation, session_id, arguments, *, settle_dispatched=False):
         assert operation == "fact"
         deliveries.append(arguments)
         await AgentRuntime(SqliteJournal(store.require(session_id)), None, {}).receive_domain_fact(session_id, **arguments)
