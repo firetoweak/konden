@@ -32,6 +32,7 @@ import {
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { kondenMark } from "../../app/brand";
 import { ConversationWelcome } from "../../app/ConversationWelcome";
+import { CodexDesktopLink } from "../external/CodexDesktopLink";
 import {
   controlNotice,
   viewing,
@@ -333,6 +334,7 @@ export function Conversation({ agentName, agentNames = [], ref }: {
                               ))}
                             </Group>
                           )}
+                          {reply.codexThreadId ? <Group><CodexDesktopLink threadId={reply.codexThreadId} /></Group> : null}
                         </Stack>
                         </MessageMenu>
                     </Box>

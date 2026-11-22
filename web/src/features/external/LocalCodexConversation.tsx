@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Button, Group, Loader, ScrollArea, Text, Textarea } from "@mantine/core";
-import { IconArrowUp, IconExternalLink, IconPlugConnected } from "@tabler/icons-react";
+import { IconArrowUp, IconPlugConnected } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -9,6 +9,7 @@ import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { MarkdownMessage } from "../conversation/MarkdownMessage";
 import { clearSentComposerText, restoreComposerText, saveComposerText } from "../conversation/composerDraft";
 import { useMessageReading } from "../conversation/useMessageReading";
+import { CodexDesktopLink } from "./CodexDesktopLink";
 
 export function LocalCodexConversation({ session }: { session: ExternalSessionSummary }) {
   const identity = session.identity;
@@ -52,8 +53,7 @@ export function LocalCodexConversation({ session }: { session: ExternalSessionSu
         <Group gap={4} wrap="nowrap">
           {session.active ? <Button component={Link} to="?view=shared" variant="subtle" size="compact-xs">三方对话</Button> : null}
           <Button variant="subtle" size="compact-xs" loading={isFetching} disabled={sending} onClick={() => void refetch()}>刷新</Button>
-          {data ? <Button component="a" href={`codex://threads/${data.thread_id}`} variant="subtle" size="compact-xs"
-            leftSection={<IconExternalLink size={13} />}>在 Desktop 打开</Button> : null}
+          {data ? <CodexDesktopLink threadId={data.thread_id} /> : null}
         </Group>
       </header>
       {readFailure !== null ? <Alert color="orange" role="alert">{readFailure}</Alert> : null}

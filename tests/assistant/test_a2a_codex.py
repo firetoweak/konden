@@ -12,11 +12,14 @@ from konden.paths import KondenHome
 
 
 def test_a2a_files_belong_to_the_requesting_conversation(monkeypatch, tmp_path):
-    async def produce(workspace, work):
+    thread_id = "12345678-abcd-7123-abcd-123456789abc"
+
+    async def produce(name, workspace, work):
+        assert name == "Codex 工程 Bot"
         assert work.brief == "交付图和数据"
         Image.new("RGB", (20, 10), color="blue").save(workspace / "chart.png")
         (workspace / "data.csv").write_bytes(b"day,count\nFri,10\n")
-        return "已生成图和数据。"
+        return a2a_codex.CodexDelivery(thread_id, "已生成图和数据。")
 
     monkeypatch.setattr(a2a_codex, "run_a2a_task", partial(a2a_codex.run_a2a_task, execute=produce))
     home = KondenHome(tmp_path)
@@ -31,6 +34,7 @@ def test_a2a_files_belong_to_the_requesting_conversation(monkeypatch, tmp_path):
 
     assert result["code"] == A2A_COMPLETED
     assert result["data"]["report"] == "已生成图和数据。"
+    assert result["data"]["codex_thread_id"] == thread_id
     image, csv = result["data"]["files"]
     assert [image["name"], csv["name"]] == ["chart.png", "data.csv"]
     store = bots.attachments.for_session("coordinator")
@@ -41,9 +45,9 @@ def test_a2a_files_belong_to_the_requesting_conversation(monkeypatch, tmp_path):
 
 
 def test_a2a_task_without_a_declared_artifact_cannot_publish_a_partial_delivery(monkeypatch, tmp_path):
-    async def produce(workspace, work):
+    async def produce(_name, workspace, _work):
         (workspace / "first.csv").write_bytes(b"1,2")
-        return "已完成。"
+        return a2a_codex.CodexDelivery("00000000-0000-0000-0000-000000000001", "已完成。")
 
     monkeypatch.setattr(a2a_codex, "run_a2a_task", partial(a2a_codex.run_a2a_task, execute=produce))
     home = KondenHome(tmp_path)

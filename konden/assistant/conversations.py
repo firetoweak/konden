@@ -167,6 +167,7 @@ class StepItem:
     thinking: str | None = None
     files: tuple[FileAttachment, ...] = ()
     clarification: ClarificationView | None = None
+    codex_thread_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -550,7 +551,8 @@ def _a2a_delivery(command_state, attachments, step_id, occurred_at) -> StepItem 
     files = tuple(attachments.files.describe(file["attachment_id"]) for file in delivery["files"])
     title = f"{delivery['bot_name']} · A2A 交付"
     return StepItem("step", f"{step_id}:{command_id}", command_id,
-                    "\n\n".join(filter(None, (title, delivery["report"]))), (), occurred_at, files=files)
+                    "\n\n".join(filter(None, (title, delivery["report"]))), (), occurred_at, files=files,
+                    codex_thread_id=delivery.get("codex_thread_id"))
 
 
 def project_conversation(

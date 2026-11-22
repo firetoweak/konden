@@ -365,6 +365,7 @@ export const conversationViewSchema = z
             kind: z.literal("step"),
             step_id: z.string().min(1),
             output_id: z.string().min(1),
+            codex_thread_id: z.string().uuid().nullish(),
             clarification: z.object({
               question_id: z.string().min(1),
               options: z.array(z.string().min(1)),

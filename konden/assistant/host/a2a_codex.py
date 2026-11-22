@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager, contextmanager, suppress
+from dataclasses import dataclass
 from hmac import compare_digest
 from mimetypes import guess_type
 from pathlib import Path
 from secrets import token_urlsafe
 import socket
+from uuid import UUID
 
 from a2a.helpers import get_message_text, new_task, new_text_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -44,13 +46,20 @@ from konden.assistant.host.codex_app_server import open_codex_app_server
 from konden.assistant.host.codex_continuation import default_codex_executable
 
 MAX_ARTIFACT_BYTES = 8 * 1024 * 1024
+CODEX_THREAD_ID = "codex_thread_id"
 
 
 class WorkFailed(ValueError):
     """The task or delivery is known to have failed."""
 
 
-async def execute_codex(workspace: Path, work: A2AWork) -> str:
+@dataclass(frozen=True, slots=True)
+class CodexDelivery:
+    thread_id: str
+    report: str
+
+
+async def execute_codex(name: str, workspace: Path, work: A2AWork) -> CodexDelivery:
     brief = work.brief
     if work.output_files:
         brief += "\n\n在当前目录完成并交付这些文件：" + "、".join(work.output_files)
@@ -64,7 +73,10 @@ async def execute_codex(workspace: Path, work: A2AWork) -> str:
                     "报告写文件名即可，实际文件会另作为附件交付。"
                 ),
             })
-            thread_id = started["thread"]["id"]
+            thread_id = str(UUID(started["thread"]["id"]))
+            await server.request("thread/name/set", {
+                "threadId": thread_id, "name": f"{name} · A2A {thread_id[-8:]}",
+            })
             turn = await server.request("turn/start", {
                 "threadId": thread_id, "input": [], "toolOutput": {"name": "a2a_delegation", "output": brief},
             })
@@ -79,8 +91,9 @@ async def execute_codex(workspace: Path, work: A2AWork) -> str:
         (completed,) = history["data"]
         if completed["id"] != turn_id:
             raise ValueError("Codex returned a different turn")
-        return "\n\n".join(item["text"] for item in completed["items"]
-                          if item["type"] == "agentMessage" and item.get("phase") in (None, "final_answer"))
+        report = "\n\n".join(item["text"] for item in completed["items"]
+                             if item["type"] == "agentMessage" and item.get("phase") in (None, "final_answer"))
+        return CodexDelivery(thread_id, report)
 
 
 def _artifact_parts(workspace: Path, names: list[str]) -> list[Part]:
@@ -103,7 +116,8 @@ def _artifact_parts(workspace: Path, names: list[str]) -> list[Part]:
 
 
 class CodexExecutor(AgentExecutor):
-    def __init__(self, workspace, execute):
+    def __init__(self, name, workspace, execute):
+        self.name = name
         self.workspace = workspace
         self.execute_work = execute
         self.running = None
@@ -125,12 +139,12 @@ class CodexExecutor(AgentExecutor):
         self.running = asyncio.current_task()
         try:
             try:
-                report = await self.execute_work(self.workspace, work)
+                delivery = await self.execute_work(self.name, self.workspace, work)
             except FileNotFoundError as error:
                 raise WorkFailed("找不到本机 Codex。请安装并登录 Codex 后再派单。") from error
             parts = _artifact_parts(self.workspace, work.output_files)
-            if report.strip():
-                await updater.add_artifact([Part(text=report.strip()[:6000])], name="Codex 报告")
+            await updater.add_artifact([Part(text=delivery.report.strip()[:6000])], name="Codex 报告",
+                                       metadata={CODEX_THREAD_ID: delivery.thread_id})
             for part in parts:
                 await updater.add_artifact([part], name=part.filename)
             await updater.complete()
@@ -207,7 +221,7 @@ async def _endpoint(name, executor):
 async def run_a2a_task(name: str, workspace: Path, work: A2AWork, *, execute=execute_codex) -> Task:
     message = new_text_message(work.brief, role=Role.ROLE_USER)
     message.metadata.update({"output_files": work.output_files})
-    async with _endpoint(name, CodexExecutor(workspace, execute)) as (url, token):
+    async with _endpoint(name, CodexExecutor(name, workspace, execute)) as (url, token):
         task = await send_task(url, token, message)
     if task.status.state == TaskState.TASK_STATE_FAILED:
         raise WorkFailed(get_message_text(task.status.message))

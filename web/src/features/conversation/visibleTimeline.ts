@@ -27,6 +27,7 @@ export type VisibleStep = {
   key: string;
   kind: "step";
   outputId: string;
+  codexThreadId?: string | null;
   occurredAt: string | null;
   // 还在跑的那一步还没有 step_id。
   stepId: string | null;
@@ -111,6 +112,7 @@ export function visibleTimeline(
       key: `output:${item.output_id}`,
       kind: "step",
       outputId: item.output_id,
+      codexThreadId: item.codex_thread_id,
       occurredAt: item.occurred_at,
       stepId: item.step_id,
       text: item.text,

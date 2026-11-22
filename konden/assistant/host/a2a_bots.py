@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import asdict
 from io import BytesIO
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -80,14 +80,17 @@ class A2ABots:
         except ResultUnknown as error:
             return {"ok": None, "code": "A2A_RESULT_UNKNOWN", "error": str(error), "data": {"task_id": error.task_id}}
 
-        files, report = await asyncio.to_thread(self._receive_delivery, session_id, work.output_files, task)
+        files, report, thread_id = await asyncio.to_thread(self._receive_delivery, session_id, work.output_files, task)
         return {"ok": True, "code": A2A_COMPLETED, "data": {
-            "bot_name": bot.name, "task_id": task.id, "report": report, "files": files,
+            "bot_name": bot.name, "task_id": task.id, "report": report, "files": files, "codex_thread_id": thread_id,
         }}
 
     def _receive_delivery(self, session_id, requested_names, task):
-        from konden.assistant.host.a2a_codex import MAX_ARTIFACT_BYTES
+        from konden.assistant.host.a2a_codex import CODEX_THREAD_ID, MAX_ARTIFACT_BYTES
 
+        (native_id,) = (artifact.metadata[CODEX_THREAD_ID] for artifact in task.artifacts
+                        if CODEX_THREAD_ID in artifact.metadata)
+        thread_id = str(UUID(native_id))
         parts = [part for artifact in task.artifacts for part in artifact.parts]
         incoming = [part for part in parts if part.HasField("raw")]
         if sorted(part.filename for part in incoming) != sorted(requested_names):
@@ -106,4 +109,5 @@ class A2ABots:
                 raise BaseExceptionGroup("A2A attachment write and cleanup failed", [error, cleanup_error]) from None
             raise
         snapshot.publish()
-        return [asdict(file) | {"path": str(store.files.materialize(file.attachment_id))} for file in saved], report
+        files = [asdict(file) | {"path": str(store.files.materialize(file.attachment_id))} for file in saved]
+        return files, report, thread_id

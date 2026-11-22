@@ -6,7 +6,7 @@
 
 ## Sub-features
 
-- `a2a-codex`：在已有普通 Bot 的 Web 名册中，从「新建 Bot」选择「Codex（A2A）」并命名。普通 Bot 按名找到它并实际委派，Konden 在发起对话展示回传报告。核对图片能放大，普通附件能下载，刷新后同一结果仍可查看；用只读的会话和附件响应核对任务结果及文件字节。
+- `a2a-codex`：在已有普通 Bot 的 Web 名册中，从「新建 Bot」选择「Codex（A2A）」并命名。普通 Bot 按名找到它并实际委派，Konden 在发起对话展示回传报告。核对图片能放大，普通附件能下载，刷新后同一结果仍可查看；用只读的会话和附件响应核对任务结果及文件字节。用与 Desktop 共享的 Codex 历史运行，核对交付卡的「在 Desktop 打开」指向同一段原生会话。首次打开后，检查 Desktop「最近」的标题和会话正文。
 - `local-codex`：从「外部会话 → 新建 Codex 会话」选择目录并创建，空聊天即可从侧栏打开。在同一输入框直发两轮并核对上下文，在 Desktop 按会话名搜索并检查原文和回复。单独检查「在 Desktop 打开」能否跳转。Desktop 使用该聊天时，Web 发送应有提示且保留草稿。Desktop 续聊后刷新 Web，核对 `GET /api/external-sessions/<identity>/codex/chat` 与页面一致，侧栏仍只有一条。
 - `register`：`get_context` 从原生标识自动登记当前聊天，登记后即在侧栏出现，允许尚无消息；新聊天自动分开，原聊天和重连保持同一身份，收发工具不接收 identity。默认显示本机 Codex 标题，原生改名后刷新列表和会话页应更新；显式 name 别名优先，无法取得标题时保留简短标识。长标题不撑开名册，悬停可查看全名。
 - `duplex`：外部用 `send_message` 向同事发送正文，Bot 用 `send_external_message` 按外部 identity 发言；可引用此前消息，也可独立继续话题。Bot 用 `list_external_sessions` 查询已登记对象。
