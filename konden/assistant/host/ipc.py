@@ -14,6 +14,25 @@ from konden.assistant.authorization import (
 )
 from konden.assistant.inputs import InputConflict
 
+
+async def finish_on_cancel(awaitable):
+    """Keep ownership until a dispatched Host operation finishes."""
+    work = asyncio.ensure_future(awaitable)
+    try:
+        return await asyncio.shield(work)
+    except asyncio.CancelledError as cancelled:
+        try:
+            while not work.done():
+                try:
+                    await asyncio.shield(work)
+                except asyncio.CancelledError:
+                    continue
+            work.result()
+        except BaseException as error:
+            raise BaseExceptionGroup("Host operation failed during cancellation", [cancelled, error]) from error
+        raise
+
+
 _REQUEST_ERRORS = {
     "authorization_target_not_found": AuthorizationTargetNotFound,
     "authorization_conflict": AuthorizationConflict,
