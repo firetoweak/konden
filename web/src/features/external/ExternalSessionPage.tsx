@@ -14,6 +14,7 @@ import { formatMessageTime } from "../conversation/messageTime";
 import { useMessageReading } from "../conversation/useMessageReading";
 import { CodexContinuation } from "./CodexContinuation";
 import { ExternalComposer } from "./ExternalComposer";
+import { LocalCodexConversation } from "./LocalCodexConversation";
 import { sessionStatus } from "./sessionStatus";
 
 const EMPTY_MESSAGES: ExternalConversationMessage[] = [];
@@ -22,6 +23,10 @@ export function ExternalSessionPage() {
   const identity = useParams().identity!;
   const [search, setSearch] = useSearchParams();
   const bot = search.get("bot");
+  const { data } = useGetExternalConversationQuery(identity);
+  if (data?.session.local_codex && bot === null && search.get("view") !== "shared") {
+    return <LocalCodexConversation key={identity} session={data.session} />;
+  }
   return <ExternalConversationView key={`${identity}:${bot}`} identity={identity} bot={bot}
     onBot={(value) => setSearch({ bot: value }, { replace: bot === null })} />;
 }
@@ -60,9 +65,10 @@ function ExternalConversationView({ identity, bot, onBot }: { identity: string; 
             <span className="agent-avatar agent-avatar-small" aria-hidden="true"><IconPlugConnected size={18} /></span>
             <div className="session-header-name">
               <Text fw={600} size="sm" truncate>{session.name}</Text>
-              <Text c="dimmed" fz={11}>Codex · {sessionStatus(session)}</Text>
+              <Text c="dimmed" fz={11}>Codex · {session.local_codex && session.active ? "三方对话" : sessionStatus(session)}</Text>
             </div>
           </Group>
+          {session.local_codex ? <Button component={Link} to={`/external/${encodeURIComponent(identity)}`} size="compact-xs" variant="subtle">返回 Codex 直聊</Button> : null}
           {messages.length === 0 ? null : <Text c="dimmed" fz={11} className="external-session-last-activity"
             title={formatMessageTime(messages[messages.length - 1].occurred_at).full}>最近消息 {formatMessageTime(messages[messages.length - 1].occurred_at).short}</Text>}
         </header>

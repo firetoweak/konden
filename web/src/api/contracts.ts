@@ -131,10 +131,24 @@ export const externalSessionSchema = z.object({
   created_at: z.string().datetime({ offset: true }),
   last_activity_at: z.string().datetime({ offset: true }),
   active: z.boolean(),
+  local_codex: z.literal(true).optional(),
   codex_status: codexContinuationStatusSchema,
   peers: z.array(z.object({ name: z.string().min(1), session_id: z.string().min(1), deleted: z.boolean() }).strict()),
 }).strict();
 export type ExternalSessionSummary = z.infer<typeof externalSessionSchema>;
+
+export const localCodexChatSchema = z.object({
+  thread_id: z.string().uuid(),
+  workspace: z.string().min(1),
+  messages: z.array(z.object({
+    id: z.string().min(1),
+    role: z.enum(["user", "codex"]),
+    text: z.string().min(1),
+  }).strict()),
+  last_status: z.enum(["completed", "failed", "interrupted", "inProgress"]).nullable(),
+  has_earlier: z.boolean(),
+}).strict();
+export type LocalCodexChat = z.infer<typeof localCodexChatSchema>;
 export const attachmentRefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("image"), attachment_id: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     name: z.string().min(1), size: z.number().int().nonnegative(),

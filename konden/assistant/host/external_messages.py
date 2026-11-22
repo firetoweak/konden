@@ -8,6 +8,7 @@ from hashlib import sha256
 from itertools import islice
 import json
 from pathlib import Path
+from uuid import uuid4
 
 from konden.assistant.attachments import (
     AttachmentGateway,
@@ -27,6 +28,11 @@ from konden.assistant.external_messages import (
 )
 from konden.assistant.host.agent_messages import message_identity
 from konden.assistant.host.agent_roster import AgentDeletedError, AgentNotFound
+from konden.assistant.host.codex_chat import (
+    create_codex_chat,
+    read_codex_chat,
+    send_codex_chat,
+)
 from konden.assistant.host.codex_continuation import (
     CodexContinuationInvalid,
     CodexContinuations,
@@ -112,6 +118,31 @@ class ExternalMessages:
             self._changed.notify_all()
             await self._notify()
 
+    async def create_local_codex(self, workspace_id: str | None):
+        if workspace_id is None:
+            workspace = self.host.home.root / "codex_workspaces" / uuid4().hex
+            workspace.mkdir(parents=True)
+        else:
+            workspace = self.host.workspaces.get(workspace_id).task_root
+        identity = await create_codex_chat(workspace)
+        async with self._changed:
+            self.sessions.add(ExternalSession(identity=identity, created_at=datetime.now(UTC), local_codex=True))
+        await self._notify()
+        return {"identity": identity}
+
+    def _require_local_codex(self, identity):
+        session = next((item for item in self.sessions.read().sessions if item.identity == identity), None)
+        if session is None or not session.local_codex:
+            raise ExternalSessionNotFound(identity)
+
+    async def read_local_codex(self, identity):
+        self._require_local_codex(identity)
+        return await read_codex_chat(identity)
+
+    async def send_local_codex(self, identity, text):
+        self._require_local_codex(identity)
+        return await finish_on_cancel(send_codex_chat(identity, text))
+
     def _active(self, connection_id):
         return any(item.connection_id == connection_id for item in self.connections.read().connections)
 
@@ -179,7 +210,8 @@ class ExternalMessages:
                 "created_at": session.created_at.isoformat(),
                 "last_activity_at": max([session.created_at, *(event.occurred_at for _, event, _ in messages)]).isoformat(),
                 "active": session.connection_id in active_connections, "peers": list(peers.values()),
-                "codex_status": continuation_status(bindings.get(session.identity), latest)}
+                "codex_status": continuation_status(bindings.get(session.identity), latest),
+                **({"local_codex": True} if session.local_codex else {})}
 
     async def list_sessions(self):
         sessions = self.sessions.read().sessions
@@ -242,7 +274,7 @@ class ExternalMessages:
         sessions = await self.list_sessions()
         return {"ok": True, "code": "EXTERNAL_SESSIONS_READ", "data": {"sessions": [
             {key: item[key] for key in ("identity", "name", "active", "last_activity_at", "codex_status")}
-            for item in sessions]}}
+            for item in sessions if item["active"] or not item.get("local_codex")]}}
 
     async def context(self, connection, identity, name=None):
         async with self._changed:

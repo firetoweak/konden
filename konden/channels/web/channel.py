@@ -88,6 +88,17 @@ class WebChannel:
     async def external_session(self, identity):
         return await self._sessions.external_messages.view(identity)
 
+    async def create_local_codex(self, connection_id, workspace_id):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.create_local_codex(workspace_id)
+
+    async def local_codex_chat(self, identity):
+        return await self._sessions.external_messages.read_local_codex(identity)
+
+    async def send_local_codex(self, connection_id, identity, text):
+        self._require_connection(connection_id)
+        return await self._sessions.external_messages.send_local_codex(identity, text)
+
     async def post_external_message(self, connection_id, identity, arguments):
         self._require_connection(connection_id)
         return await self._sessions.external_messages.post_user(identity, arguments)

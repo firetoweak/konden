@@ -1,9 +1,9 @@
-import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconArchive, IconDots, IconPlugConnected, IconRefresh, IconSearchOff, IconTrash } from "@tabler/icons-react";
+import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, Select, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { IconArchive, IconDots, IconPlugConnected, IconPlus, IconRefresh, IconSearchOff, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useMatch } from "react-router-dom";
 
-import { useDeleteExternalSessionMutation, useGetExternalSessionsQuery } from "../../api/kondenApi";
+import { useCreateLocalCodexMutation, useDeleteExternalSessionMutation, useGetExternalSessionsQuery, useGetWorkspacesQuery } from "../../api/kondenApi";
 import type { ExternalSessionSummary } from "../../api/contracts";
 import { useAppSelector } from "../../app/hooks";
 import { sessionStatus } from "./sessionStatus";
@@ -14,9 +14,10 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
   const [showRevoked, setShowRevoked] = useState(false);
   const [menuIdentity, setMenuIdentity] = useState<string | null>(null);
   const [removing, setRemoving] = useState<ExternalSessionSummary | null>(null);
-  const revoked = sessions.filter((session) => !session.active);
+  const [creating, setCreating] = useState(false);
+  const revoked = sessions.filter((session) => !session.active && !session.local_codex);
   const visible = sessions.filter((session) => session.name.toLocaleLowerCase().includes(query));
-  const entries = visible.filter((session) => session.active || showRevoked || query !== "" || session.identity === identity);
+  const entries = visible.filter((session) => session.active || session.local_codex || showRevoked || query !== "" || session.identity === identity);
   let notice = null;
   if (error !== undefined) {
     notice = compact
@@ -29,14 +30,23 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
     notice = compact ? <Tooltip label="没有匹配的外部会话"><span className="sidebar-compact-notice" role="status" aria-label="没有匹配的外部会话"><IconSearchOff size={18} /></span></Tooltip>
       : <Text c="dimmed" size="xs" px={10} py={8}>没有匹配的外部会话。</Text>;
   }
+  const createButton = <Tooltip label="新建 Codex 会话">
+    <ActionIcon variant="subtle" color="gray" size="sm" aria-label="新建 Codex 会话" onClick={() => setCreating(true)}>
+      <IconPlus size={16} />
+    </ActionIcon>
+  </Tooltip>;
   return <section className="roster-section external-roster" aria-label="外部会话">
+    {creating ? <CreateLocalCodexModal onClose={() => setCreating(false)} onCreated={(identity) => {
+      setCreating(false);
+      onOpen(`/external/${encodeURIComponent(identity)}`);
+    }} /> : null}
     {removing === null ? null : <RemoveExternalSessionModal target={removing} onClose={() => setRemoving(null)} onRemoved={() => {
       if (identity === removing.identity) onOpen("/");
       setRemoving(null);
     }} />}
-    <Group className="roster-section-header">
-      <Text fz={11}>外部会话</Text>
-    </Group>
+    {compact ? createButton : <Group className="roster-section-header" justify="space-between">
+      <Text fz={11}>外部会话</Text>{createButton}
+    </Group>}
     {notice}
     <Stack gap={3}>{entries.map((session) => <div key={session.identity}
       className={identity === session.identity ? "session-row is-active" : "session-row"}
@@ -49,7 +59,7 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
           <Stack className="sidebar-agent-identity" gap={2}>
             <Text size="sm" truncate>{session.name}</Text>
             <Text c="dimmed" size="xs" truncate>
-              {sessionStatus(session)}
+              {session.local_codex ? "直聊" : sessionStatus(session)}
             </Text>
           </Stack>
         </Group>
@@ -68,8 +78,41 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
   </section>;
 }
 
+function CreateLocalCodexModal({ onClose, onCreated }: { onClose: () => void; onCreated: (identity: string) => void }) {
+  const connectionId = useAppSelector((state) => state.runtime.connectionId);
+  const { data: workspaces = [] } = useGetWorkspacesQuery();
+  const [create, { isLoading }] = useCreateLocalCodexMutation();
+  const [workspace, setWorkspace] = useState("private");
+  const [error, setError] = useState<string | null>(null);
+  async function submit() {
+    if (connectionId === null || isLoading) return;
+    setError(null);
+    try {
+      const { identity } = await create({ connectionId, workspaceId: workspace === "private" ? null : workspace }).unwrap();
+      onCreated(identity);
+    } catch (cause) {
+      setError(typeof cause === "string" ? cause : "未能确认会话已创建。请先检查 Codex Desktop。");
+    }
+  }
+  return <Modal opened title="新建 Codex 会话" onClose={onClose}
+    closeOnClickOutside={!isLoading} closeOnEscape={!isLoading} withCloseButton={!isLoading}>
+    <Stack gap="md">
+      <Select label="工作目录" data={[{ value: "private", label: "新的独立目录" },
+        ...workspaces.map((item) => ({ value: item.workspace_id, label: item.task_root }))]}
+        value={workspace} allowDeselect={false} disabled={isLoading}
+        onChange={(value) => { if (value !== null) setWorkspace(value); }} />
+      <Text size="sm" c="dimmed">Codex 在该目录内工作。新会话也可在本机 Codex Desktop 打开。</Text>
+      {error === null ? null : <Alert color="red" role="alert">{error}</Alert>}
+      <Group justify="flex-end">
+        <Button variant="default" disabled={isLoading} onClick={onClose}>取消</Button>
+        <Button disabled={connectionId === null} loading={isLoading} onClick={() => void submit()}>创建</Button>
+      </Group>
+    </Stack>
+  </Modal>;
+}
+
 function RemoveExternalSessionModal({ target, onClose, onRemoved }: {
-  target: Pick<ExternalSessionSummary, "identity" | "name">; onClose: () => void; onRemoved: () => void;
+  target: ExternalSessionSummary; onClose: () => void; onRemoved: () => void;
 }) {
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
   const [remove, { isLoading }] = useDeleteExternalSessionMutation();
@@ -87,8 +130,11 @@ function RemoveExternalSessionModal({ target, onClose, onRemoved }: {
   return <Modal opened title={`删除外部会话「${target.name}」？`} onClose={onClose}
     closeOnClickOutside={!isLoading} closeOnEscape={!isLoading} withCloseButton={!isLoading}>
     <Stack gap="md">
-      <Text size="sm">删除 konden 中的接入记录，停止收发和自动接续。Bot 对话中的已有往来保留。</Text>
-      <Text size="sm" c="dimmed">原生聊天以后主动重新接入时，会话会重新出现在侧栏。</Text>
+      {target.local_codex ? <Text size="sm">从 konden 移除此会话。会话和聊天记录可以继续在 Codex Desktop 查看。</Text>
+        : <>
+          <Text size="sm">删除 konden 中的接入记录，停止收发和自动接续。Bot 对话中的已有往来保留。</Text>
+          <Text size="sm" c="dimmed">原生聊天以后主动重新接入时，会话会重新出现在侧栏。</Text>
+        </>}
       {error === null ? null : <Alert color="red" role="alert">{error}</Alert>}
       <Group justify="flex-end">
         <Button data-autofocus variant="default" disabled={isLoading} onClick={onClose}>取消</Button>

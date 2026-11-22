@@ -9,7 +9,7 @@ from typing import Literal
 from uuid import uuid4
 
 from filelock import FileLock
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from konden.assistant.attachments import is_valid_attachment_id
 from konden.config import write_json
@@ -139,9 +139,16 @@ def external_name(identity: str) -> str:
 
 
 class ExternalSession(ExternalIdentity):
-    connection_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    connection_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     created_at: datetime
     label: str | None = Field(default=None, min_length=1, max_length=80)
+    local_codex: bool = False
+
+    @model_validator(mode="after")
+    def check_connection(self) -> ExternalSession:
+        if self.connection_id is None and not self.local_codex:
+            raise ValueError("external conversation has no connection")
+        return self
 
     @property
     def name(self) -> str:

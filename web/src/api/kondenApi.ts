@@ -19,6 +19,8 @@ import {
   attachmentRefSchema, type AttachmentRef,
   type ExternalSessionSummary,
   type ExternalConversation,
+  localCodexChatSchema,
+  type LocalCodexChat,
   avatarSelectionSchema,
   avatarsSchema,
   type AvatarSelection,
@@ -308,6 +310,27 @@ export const kondenApi = createApi({
       query: (identity) => `/external-sessions/${encodeURIComponent(identity)}`,
       transformResponse: (value: unknown) => externalConversationSchema.parse(value),
       providesTags: ["ExternalSessions"],
+    }),
+    createLocalCodex: build.mutation<{ identity: string }, { connectionId: string; workspaceId: string | null }>({
+      query: ({ connectionId, workspaceId }) => ({
+        url: "/external-sessions/codex", method: "POST",
+        body: { connection_id: connectionId, workspace_id: workspaceId },
+      }),
+      transformResponse: (value: unknown) => z.object({ identity: z.string().regex(/^[0-9a-f]{32}$/) }).strict().parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: (_result, error) => error === undefined ? ["ExternalSessions"] : [],
+    }),
+    getLocalCodexChat: build.query<LocalCodexChat, string>({
+      query: (identity) => `/external-sessions/${encodeURIComponent(identity)}/codex/chat`,
+      transformResponse: (value: unknown) => localCodexChatSchema.parse(value),
+    }),
+    sendLocalCodex: build.mutation<LocalCodexChat, { connectionId: string; identity: string; text: string }>({
+      query: ({ connectionId, identity, text }) => ({
+        url: `/external-sessions/${encodeURIComponent(identity)}/codex/chat`, method: "POST",
+        body: { connection_id: connectionId, text },
+      }),
+      transformResponse: (value: unknown) => localCodexChatSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
     }),
     postExternalMessage: build.mutation<ExternalConversation, {
       connectionId: string; identity: string; botSessionId: string;
@@ -745,6 +768,9 @@ export const {
   useGetExternalConnectionsQuery,
   useGetExternalSessionsQuery,
   useGetExternalConversationQuery,
+  useCreateLocalCodexMutation,
+  useGetLocalCodexChatQuery,
+  useSendLocalCodexMutation,
   usePostExternalMessageMutation,
   useDeleteExternalSessionMutation,
   useSetExternalCodexMutation,

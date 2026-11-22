@@ -40,6 +40,7 @@ from konden.assistant.host.agent_roster import (
     AgentNameTaken,
     AgentNotFound,
 )
+from konden.assistant.host.codex_chat import CodexChatUnavailable
 from konden.assistant.host.codex_continuation import (
     CodexContinuationInvalid,
     CodexExecutable,
@@ -147,6 +148,21 @@ class CodexContinuationRequest(ConnectionRequest, CodexExecutable):
 
 class ExternalMessageRequest(ConnectionRequest, PostExternal):
     pass
+
+
+class CreateLocalCodexRequest(ConnectionRequest):
+    workspace_id: str | None = Field(default=None, min_length=1)
+
+
+class LocalCodexMessageRequest(ConnectionRequest):
+    text: str = Field(min_length=1)
+
+    @field_validator("text")
+    @classmethod
+    def nonblank_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("消息不能为空白")
+        return value
 
 
 class ModelSettingsRequest(ConnectionRequest):
@@ -685,9 +701,25 @@ def create_web_app(
     async def external_sessions(request: Request):
         return await _channel(request).list_external_sessions()
 
+    @app.post("/api/external-sessions/codex", status_code=201)
+    async def create_local_codex(body: CreateLocalCodexRequest, request: Request):
+        return await _channel(request).create_local_codex(body.connection_id, body.workspace_id)
+
     @app.get("/api/external-sessions/{identity}")
     async def external_session(identity: str, request: Request):
         return await _channel(request).external_session(identity)
+
+    @app.get("/api/external-sessions/{identity}/codex/chat")
+    async def local_codex_chat(identity: str, request: Request):
+        return await _channel(request).local_codex_chat(identity)
+
+    @app.post("/api/external-sessions/{identity}/codex/chat")
+    async def send_local_codex(identity: str, body: LocalCodexMessageRequest, request: Request):
+        return await _channel(request).send_local_codex(body.connection_id, identity, body.text)
+
+    @app.exception_handler(CodexChatUnavailable)
+    async def codex_chat_unavailable(request, error):
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.post("/api/external-sessions/{identity}/messages")
     async def post_external_message(identity: str, body: ExternalMessageRequest, request: Request):
