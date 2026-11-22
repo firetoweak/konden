@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from ipaddress import ip_address
 import logging
 from pathlib import Path
 from typing import Literal
@@ -60,6 +61,7 @@ from konden.assistant.shared_memory import SharedMemoryStore, UpdateSharedMemory
 from konden.automation.routines import RoutineNotFound
 from konden.bootstrap import bootstrap_assistant
 from konden.channels.mcp import create_mcp_app
+from konden.channels.mcp.install import CodexInstallUnavailable
 from konden.channels.web.avatars import AvatarImageNotFound, AvatarStore
 from konden.channels.web.capabilities import CapabilityViews
 from konden.channels.web.channel import (
@@ -136,6 +138,10 @@ class ExternalConnectionRequest(ConnectionRequest):
         if not value.strip():
             raise ValueError("接入名称不能为空")
         return value.strip()
+
+
+class CodexInstallRequest(ConnectionRequest):
+    external_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 
 class AbsenceAnswer(ConnectionRequest):
@@ -752,6 +758,7 @@ def create_web_app(
 
     @app.exception_handler(CodexDisconnected)
     @app.exception_handler(CodexChatUnavailable)
+    @app.exception_handler(CodexInstallUnavailable)
     async def codex_chat_unavailable(request, error):
         return JSONResponse(status_code=409, content={"detail": str(error)})
 
@@ -790,21 +797,21 @@ def create_web_app(
     async def retry_external_codex(identity: str, body: ConnectionRequest, request: Request):
         return await _channel(request).retry_external_codex(body.connection_id, identity)
 
-    @app.post("/api/external-connections", status_code=201)
-    async def create_external_connection(body: ExternalConnectionRequest, request: Request):
-        created = await _channel(request).create_external_connection(body.connection_id, body.name)
-        return JSONResponse(status_code=201, content={**created, "url": str(request.base_url) + "mcp/"},
-                            headers={"Cache-Control": "no-store"})
+    @app.put("/api/external-connections/codex")
+    async def install_codex_mcp(body: CodexInstallRequest, request: Request):
+        try:
+            local = request.client is not None and ip_address(request.client.host).is_loopback
+        except ValueError:
+            local = False
+        if not local:
+            return JSONResponse(status_code=403, content={"detail": "请在运行 Konden 的电脑上打开本机页面，再安装 Codex 接入。"})
+        host, port = request.scope["server"]
+        loopback = "[::1]" if ":" in host else "127.0.0.1"
+        return await _channel(request).install_codex_mcp(body.connection_id, f"ws://{loopback}:{port}/mcp/ws", body.external_id)
 
     @app.exception_handler(ExternalConnectionNotFound)
     async def external_connection_missing(request, error):
         return JSONResponse(status_code=404, content={"detail": "没有这份连接配置，可能已撤销。"})
-
-    @app.post("/api/external-connections/{external_id}/configuration")
-    async def external_connection_configuration(external_id: str, body: ConnectionRequest, request: Request):
-        config = await _channel(request).external_connection_configuration(body.connection_id, external_id)
-        return JSONResponse(content={**config, "url": str(request.base_url) + "mcp/"},
-                            headers={"Cache-Control": "no-store"})
 
     @app.put("/api/external-connections/{external_id}/name")
     async def rename_external_connection(external_id: str, body: ExternalConnectionRequest, request: Request):

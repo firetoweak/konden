@@ -11,6 +11,7 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 from konden.assistant.agents import AgentCreated, fact_arguments
 from konden.assistant.attachments import AttachmentGateway
@@ -74,7 +75,7 @@ def collaboration(tmp_path, tmp_path_factory):
             patch.object(CodexLink, "require", new=AsyncMock(side_effect=CodexDisconnected("offline"))), \
             patch.object(host, "request", side_effect=deliver), \
             patch.object(host, "receive_user_message", side_effect=user_input):
-        with TestClient(app, base_url="http://127.0.0.1:8876") as client:
+        with TestClient(app, base_url="http://127.0.0.1:8876", client=("127.0.0.1", 50000)) as client:
             human = client.portal.call(web.connect)
 
             native_identity = "0123456789ab7def8123456789abcdef"
@@ -126,44 +127,90 @@ def collaboration(tmp_path, tmp_path_factory):
 def test_web_manages_named_access(collaboration):
     c = collaboration
     path = "/api/external-connections"
-    assert c.client.post(path, json={"connection_id": "inactive", "name": "test"}).status_code == 409
+    install_path = f"{path}/codex"
+    assert c.client.put(install_path, json={"connection_id": "inactive"}).status_code == 409
     before = c.client.get(path).json()
-    for fields in ({}, {"name": ""}, {"name": "   "}):
-        assert c.client.post(path, json={"connection_id": c.human_connection, **fields}).status_code == 422
+    assert c.client.put(install_path, json={"connection_id": c.human_connection, "external_id": "bad"}).status_code == 422
     assert c.client.get(path).json() == before
-    created = c.client.post(path, json={"connection_id": c.human_connection, "name": "笔记本 Codex"})
-    assert created.status_code == 201 and created.headers["cache-control"] == "no-store"
-    credential = created.json()
-    assert credential["url"] == "http://127.0.0.1:8876/mcp/"
-    entries = c.client.get(path).json()
-    assert credential["connection"] in entries and all(set(item) == {"connection_id", "name"} for item in entries)
-    assert credential["token"] not in str(entries)
-    context = c.call("get_context", credential=credential["token"], chat="3" * 32)["structuredContent"]
+    writer = SimpleNamespace(request=AsyncMock(return_value={"status": "ok"}))
+    body = {"connection_id": c.human_connection}
+    with patch.object(c.service.codex_link, "reconnect", new=AsyncMock(return_value=writer)):
+        installed = c.client.put(install_path, json=body)
+        assert installed.status_code == 200
+        item = installed.json()
+        external_id = item["connection_id"]
+        assert item["name"] == "本机 Codex"
+        assert c.client.put(install_path, json=body).json() == item
+        assert c.client.get(path).json() == [*before, item]
+        assert set(item) == {"connection_id", "name"}
+        credential = c.service.connections.get(external_id)
+        method, config = writer.request.await_args.args
+        assert method == "config/value/write" and config["keyPath"] == "mcp_servers.konden"
+        assert config["value"]["args"][-3:] == ["ws://127.0.0.1:8876/mcp/ws", str(c.service.connections.path), external_id]
+        assert credential.token not in str(config) and credential.token not in installed.text
+        reused = c.client.put(install_path, json={**body, "external_id": c.connection.connection_id})
+        assert reused.json() == c.connection.view()
+        assert writer.request.await_args.args[1]["value"]["args"][-1] == c.connection.connection_id
+        assert c.client.get(path).json() == [*before, item]
+
+    context = c.call("get_context", credential=credential.token, chat="3" * 32)["structuredContent"]
     assert {item["name"] for item in context["colleagues"]} == {"协调员", "其他 Bot"}
-    external_id = credential["connection"]["connection_id"]
-    config_path = f"{path}/{external_id}/configuration"
-    assert c.client.post(config_path, json={"connection_id": "inactive"}).status_code == 409
-    config = c.client.post(config_path, json={"connection_id": c.human_connection})
-    assert config.headers["cache-control"] == "no-store"
-    assert config.json() == credential
-    restarted = ExternalMessages(c.host)
-    assert restarted.connection_configuration(external_id)["token"] == credential["token"]
+    assert ExternalMessages(c.host).connections.get(external_id).token == credential.token
     rename_path = f"{path}/{external_id}/name"
     assert c.client.put(rename_path, json={"connection_id": "inactive", "name": "x"}).status_code == 409
     assert c.client.put(rename_path, json={"connection_id": c.human_connection, "name": "x" * 81}).status_code == 422
     renamed = c.client.put(rename_path, json={"connection_id": c.human_connection, "name": " 台式机 Codex "})
     assert renamed.status_code == 200
     assert renamed.json()["name"] == "台式机 Codex"
-    c.call("read_messages", {"wait_seconds": 0}, credential["token"], chat=context["identity"])
+    c.call("read_messages", {"wait_seconds": 0}, credential.token, chat=context["identity"])
     restored = ExternalMessages(c.host).list_connections()
     item = next(item for item in restored if item["connection_id"] == external_id)
     assert item["name"] == "台式机 Codex"
-    assert credential["token"] not in str(restored) and "token_hash" not in str(restored)
+    assert credential.token not in str(restored) and "token_hash" not in str(restored)
     assert c.client.request("DELETE", f"{path}/{external_id}", json={"connection_id": c.human_connection}).status_code == 204
     assert c.client.put(rename_path, json={"connection_id": c.human_connection, "name": "x"}).status_code == 404
-    assert c.client.post(config_path, json={"connection_id": c.human_connection}).status_code == 404
     assert c.client.request("DELETE", f"{path}/{external_id}", json={"connection_id": c.human_connection}).status_code == 404
-    assert c.client.post("/mcp/", headers={"Authorization": "Bearer " + credential["token"]}, json={}).status_code == 401
+    assert c.client.post("/mcp/", headers={"Authorization": "Bearer " + credential.token}, json={}).status_code == 401
+
+
+def test_websocket_mcp_reauthenticates_and_keeps_native_conversation(collaboration):
+    c = collaboration
+    path = "/mcp/ws"
+    headers = {"Authorization": f"Bearer {c.token}"}
+
+    def initialize(socket):
+        socket.send_json({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+            "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"},
+        }})
+        assert socket.receive_json()["result"]["protocolVersion"] == "2025-11-25"
+        socket.send_json({"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+    def call(socket, name, arguments):
+        socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": name, "arguments": arguments, "_meta": {"threadId": str(UUID(c.identity))},
+        }})
+        return socket.receive_json()["result"]["structuredContent"]
+
+    with pytest.raises(WebSocketDisconnect), c.client.websocket_connect(path):
+        pytest.fail("Anonymous WebSocket accepted")
+    with c.client.websocket_connect(path, headers=headers) as socket:
+        initialize(socket)
+        assert call(socket, "get_context", {}) == c.context
+        outgoing = call(socket, "send_message", {"recipient": "协调员", "text": "来自 WebSocket", "delivery_id": "ws-one"})
+        assert outgoing["ok"]
+        c.reply(reply_to=outgoing["message_id"])
+        read = call(socket, "read_messages", {"wait_seconds": 0})
+        assert any(item["text"] == "收到，我们可以继续讨论。" for item in read["messages"])
+    with c.client.websocket_connect(path, headers=headers) as socket:
+        initialize(socket)
+        assert call(socket, "get_context", {})["identity"] == c.identity
+        assert call(socket, "read_messages", {"wait_seconds": 0, "after": read["next_cursor"]})["messages"] == []
+        revoked = c.client.request("DELETE", f"/api/external-connections/{c.connection.connection_id}",
+                                   json={"connection_id": c.human_connection})
+        assert revoked.status_code == 204
+        assert call(socket, "read_messages", {"wait_seconds": 0})["ok"] is False
+    with pytest.raises(WebSocketDisconnect), c.client.websocket_connect(path, headers=headers):
+        pytest.fail("Revoked WebSocket accepted")
 
 
 def test_registration_is_visible_before_messages_and_reconnection_preserves_identity(collaboration):

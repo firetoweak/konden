@@ -117,12 +117,6 @@ export const externalConnectionSchema = z.object({
   name: z.string(),
 }).strict();
 export type ExternalConnection = z.infer<typeof externalConnectionSchema>;
-export const createdExternalConnectionSchema = z.object({
-  connection: externalConnectionSchema,
-  token: z.string().min(1),
-  url: z.url(),
-}).strict();
-export type CreatedExternalConnection = z.infer<typeof createdExternalConnectionSchema>;
 
 export const codexContinuationStatusSchema = z.enum(["disabled", "ready", "pending", "queued", "failed", "unknown"]);
 export const externalSessionSchema = z.object({

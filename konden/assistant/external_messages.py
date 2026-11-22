@@ -85,9 +85,10 @@ class ExternalConnection(BaseModel):
     connection_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     token: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=80)
+    local_codex_default: bool = False
 
     def view(self):
-        return self.model_dump(mode="json", exclude={"token"})
+        return self.model_dump(mode="json", include={"connection_id", "name"})
 
 
 class ExternalConnections(BaseModel):
@@ -108,12 +109,20 @@ class ConnectionStore:
         return next((item for item in self.read().connections
                      if secrets.compare_digest(item.token.encode(), token.encode())), None)
 
-    def create(self, name: str) -> tuple[ExternalConnection, str]:
-        token = secrets.token_urlsafe(32)
-        connection = ExternalConnection(connection_id=uuid4().hex, token=token, name=name)
+    def get(self, connection_id: str) -> ExternalConnection | None:
+        return next((item for item in self.read().connections if item.connection_id == connection_id), None)
+
+    def create(self, name: str | None = None) -> tuple[ExternalConnection, str]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(str(self.path) + ".lock"):
             saved = self.read()
+            if name is None:
+                existing = next((item for item in saved.connections if item.local_codex_default), None)
+                if existing is not None:
+                    return existing, existing.token
+            token = secrets.token_urlsafe(32)
+            connection = ExternalConnection(connection_id=uuid4().hex, token=token,
+                name="本机 Codex" if name is None else name, local_codex_default=name is None)
             saved.connections.append(connection)
             write_json(self.path, saved.model_dump(mode="json"))
         return connection, token

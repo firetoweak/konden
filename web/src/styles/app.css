@@ -643,7 +643,6 @@ body.is-resizing-bot-details { cursor: col-resize; user-select: none; }
   .external-composer .composer-meta { flex-wrap: wrap; }
   .external-composer .group-composer-recipients { flex-basis: 100%; }
 }
-.external-connection-config { font-family: var(--mantine-font-family-monospace); font-size: var(--mantine-font-size-xs); }
 .external-connection-name { min-width: 0; overflow-wrap: anywhere; }
 .private-message-peer { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; text-decoration: none; overflow-wrap: anywhere; }
 .private-message-peer .agent-avatar { flex: 0 0 18px; width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }

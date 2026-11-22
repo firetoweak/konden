@@ -11,9 +11,7 @@ import {
 import {
   agentRosterEntrySchema,
   externalConnectionSchema,
-  createdExternalConnectionSchema,
   type ExternalConnection,
-  type CreatedExternalConnection,
   externalSessionSchema,
   externalConversationSchema,
   attachmentRefSchema, type AttachmentRef,
@@ -409,20 +407,13 @@ export const kondenApi = createApi({
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
       invalidatesTags: (_result, error) => error === undefined ? ["ExternalSessions"] : [],
     }),
-    createExternalConnection: build.mutation<CreatedExternalConnection, { connectionId: string; name: string }>({
-      query: ({ connectionId, name }) => ({
-        url: "/external-connections", method: "POST", body: { connection_id: connectionId, name },
-      }),
-      transformResponse: (value: unknown) => createdExternalConnectionSchema.parse(value),
-      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
-      invalidatesTags: (_result, error) => error === undefined ? ["ExternalConnections"] : [],
-    }),
-    viewExternalConnection: build.mutation<CreatedExternalConnection, { connectionId: string; externalId: string }>({
+    installCodexMcp: build.mutation<ExternalConnection, { connectionId: string; externalId?: string }>({
       query: ({ connectionId, externalId }) => ({
-        url: `/external-connections/${externalId}/configuration`, method: "POST", body: { connection_id: connectionId },
+        url: "/external-connections/codex", method: "PUT", body: { connection_id: connectionId, external_id: externalId },
       }),
-      transformResponse: (value: unknown) => createdExternalConnectionSchema.parse(value),
+      transformResponse: (value: unknown) => externalConnectionSchema.parse(value),
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      invalidatesTags: ["ExternalConnections"],
     }),
     renameExternalConnection: build.mutation<ExternalConnection, { connectionId: string; externalId: string; name: string }>({
       query: ({ connectionId, externalId, name }) => ({
@@ -814,8 +805,7 @@ export const {
   useDeleteExternalSessionMutation,
   useSetExternalCodexMutation,
   useRetryExternalCodexMutation,
-  useCreateExternalConnectionMutation,
-  useViewExternalConnectionMutation,
+  useInstallCodexMcpMutation,
   useRevokeExternalConnectionMutation,
   useRenameExternalConnectionMutation,
   useGetBackgroundCommandsQuery,
