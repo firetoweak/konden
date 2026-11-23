@@ -34,6 +34,8 @@ import {
   groupViewSchema,
   modelSettingsSchema,
   modelCatalogSchema, type ModelCatalog,
+  modelCatalogErrorSchema,
+  chatGPTAuthorizationStartSchema, chatGPTAuthorizationStatusSchema, type ChatGPTAuthorizationStatus,
   searchConfigSchema, type SearchConfig, searchResultSchema, type SearchResult,
   imageConfigSchema, type ImageConfig, imageCatalogSchema, type ImageCatalog,
   sharedMemorySchema,
@@ -198,8 +200,22 @@ export const kondenApi = createApi({
     getModelCatalog: build.query<ModelCatalog, string>({
       query: (provider) => `/model-settings/catalog/${encodeURIComponent(provider)}`,
       transformResponse: (value: unknown) => modelCatalogSchema.parse(value),
-      transformErrorResponse: (response) => response.status === 400 || response.status === 502
-        ? z.object({ detail: z.string() }).strict().parse(response.data).detail : response,
+      transformErrorResponse: (response) => {
+        if (response.status !== 400 && response.status !== 502) return response;
+        const error = modelCatalogErrorSchema.parse(response.data);
+        return error.code ? error : error.detail;
+      },
+    }),
+    startChatGPTAuthorization: build.mutation<{ authorization_id: string }, string>({
+      query: (connectionId) => ({
+        url: "/model-settings/chatgpt/authorization", method: "POST", body: { connection_id: connectionId },
+      }),
+      transformResponse: (value: unknown) => chatGPTAuthorizationStartSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+    }),
+    getChatGPTAuthorization: build.query<ChatGPTAuthorizationStatus, string>({
+      query: (id) => `/model-settings/chatgpt/authorization/${encodeURIComponent(id)}`,
+      transformResponse: (value: unknown) => chatGPTAuthorizationStatusSchema.parse(value),
     }),
     getImageConfig: build.query<ImageConfig, void>({
       query: () => "/model-settings/images",
@@ -816,6 +832,8 @@ export const {
   useLinkProjectMutation,
   useUnlinkProjectMutation,
   useGetModelSettingsQuery,
+  useGetChatGPTAuthorizationQuery,
+  useStartChatGPTAuthorizationMutation,
   useGetSharedMemoryQuery,
   useSaveSharedMemoryMutation,
   useGetPersonalMemoryQuery,

@@ -524,6 +524,18 @@ export const modelCatalogSchema = z.object({
 }).strict().array();
 export type ModelCatalog = z.infer<typeof modelCatalogSchema>;
 
+export const modelCatalogErrorSchema = z.object({
+  detail: z.string(),
+  code: z.literal("chatgpt_reauthorization_required").optional(),
+}).strict();
+export const chatGPTAuthorizationStartSchema = z.object({ authorization_id: z.string().min(1) }).strict();
+export const chatGPTAuthorizationStatusSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("waiting") }).strict(),
+  z.object({ state: z.literal("connected") }).strict(),
+  z.object({ state: z.literal("failed"), message: z.string() }).strict(),
+]);
+export type ChatGPTAuthorizationStatus = z.infer<typeof chatGPTAuthorizationStatusSchema>;
+
 export const searchConfigSchema = z.object({
   enabled: z.boolean(), provider: z.enum(["deepseek", "openai"]), openai_model: z.string().nullable(),
 }).strict();

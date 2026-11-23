@@ -16,6 +16,8 @@ from thinllm import (
     list_models,
     resolve_endpoint,
 )
+from thinllm.auth import ChatGPTSignIn, chatgpt_auth_path
+from thinllm.errors import ChatGPTReauthorizationRequired
 
 
 class ModelConfigurationError(ValueError):
@@ -23,7 +25,9 @@ class ModelConfigurationError(ValueError):
 
 
 class ModelCatalogUnavailable(RuntimeError):
-    pass
+    def __init__(self, message: str, *, reauthorize: bool = False):
+        super().__init__(message)
+        self.reauthorize = reauthorize
 
 
 class ModelSettings:
@@ -60,6 +64,10 @@ class ModelSettings:
     def config(self):
         return load_app_config(self.path)
 
+    def begin_chatgpt_sign_in(self, redirect_uri: str) -> ChatGPTSignIn:
+        connection = load_connections(self.connections_path)["openai-chatgpt"]
+        return ChatGPTSignIn(chatgpt_auth_path(connection["auth_file"]), redirect_uri)
+
     @staticmethod
     def _choice(profile: ModelConfig | None) -> dict:
         return {"model": None if profile is None else profile.model,
@@ -74,7 +82,7 @@ class ModelSettings:
         except MissingProviderSetting as error:
             raise ModelConfigurationError(f"请配置 {provider}.{error.setting}") from error
         except (LLMProviderError, LLMTransientError, InvalidLLMResponse) as error:
-            raise ModelCatalogUnavailable(str(error)) from error
+            raise ModelCatalogUnavailable(str(error), reauthorize=isinstance(error, ChatGPTReauthorizationRequired)) from error
 
     async def validate_profiles(self, profiles: list[ModelConfig]) -> None:
         providers = {item.model.partition("/")[0] for item in profiles if item.reasoning_effort is not None}

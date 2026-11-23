@@ -4,19 +4,26 @@ import logging
 import os
 from pathlib import Path
 import subprocess
+from urllib.parse import unquote
 
 import uvicorn
 
 from konden.assistant.host.process_env import host_process_environment
 from konden.channels.web import create_web_app
+from konden.channels.web.chatgpt_authorization import CALLBACK_PATH
 
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "dist"
 
 
-class _FailedRequestFilter(logging.Filter):
-    def filter(self, record):
-        # Uvicorn access records use the same five fields as its AccessFormatter.
-        return record.args[4] >= 400
+class _RequestLogFilter(logging.Filter):
+    def __init__(self, development: bool):
+        super().__init__()
+        self.development = development
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Uvicorn records include the query string, which carries the OAuth code.
+        path = unquote(record.args[2].partition("?")[0])
+        return path != CALLBACK_PATH and (self.development or record.args[4] >= 400)
 
 
 def production_app(workspace_path: Path | None = None):
@@ -57,9 +64,8 @@ def main(argv: list[str] | None = None) -> None:
     reload_backend = args.dev and os.name != "nt"
 
     log_config = deepcopy(uvicorn.config.LOGGING_CONFIG)
-    if not args.dev:
-        log_config["filters"] = {"failed_requests": {"()": _FailedRequestFilter}}
-        log_config["handlers"]["access"]["filters"] = ["failed_requests"]
+    log_config["filters"] = {"requests": {"()": _RequestLogFilter, "development": args.dev}}
+    log_config["handlers"]["access"]["filters"] = ["requests"]
 
     frontend = None
     if args.dev:

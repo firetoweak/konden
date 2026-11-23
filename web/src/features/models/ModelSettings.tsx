@@ -7,6 +7,7 @@ import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { catalogModels, configuredModel, configFrom, preferencesFrom, type ModelSettingsApi, type Preferences } from "./modelUi";
 import type { SearchApi, SearchSettings } from "./searchTypes";
 import type { ImageApi } from "./ImageSettingsPanel";
+import { useChatGPTAuthorization } from "./useChatGPTAuthorization";
 import "./models.css";
 
 function searchFrom(value: SearchConfig): SearchSettings {
@@ -19,6 +20,7 @@ function searchConfig(value: SearchSettings): SearchConfig {
 export function ModelSettings({ active = true }: { active?: boolean }) {
   const dispatch = useAppDispatch();
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
+  const chatGPT = useChatGPTAuthorization(connectionId);
   const {data, error} = useGetModelSettingsQuery(undefined, {skip:!active, pollingInterval:active ? 5000 : 0});
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   useEffect(() => { if (data) setPreferences(preferencesFrom(data.config)); }, [data]);
@@ -68,5 +70,5 @@ export function ModelSettings({ active = true }: { active?: boolean }) {
   if (!data || !preferences) return <Stack p="lg"><Skeleton height={50}/><Skeleton height={150}/></Stack>;
   return <ModelSettingsPanel active={active} connected={connectionId !== null} preferences={preferences}
     allModels={data.config.model.candidates.map(configuredModel)} onSaved={setPreferences} api={api}
-    searchApi={searchApi} imageApi={imageApi} connections={data.providers} />;
+    searchApi={searchApi} imageApi={imageApi} connections={data.providers} chatGPT={chatGPT} />;
 }

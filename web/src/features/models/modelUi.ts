@@ -1,4 +1,4 @@
-import type { ModelCatalog, ModelConfig, ModelProfile } from "../../api/contracts";
+import { modelCatalogErrorSchema, type ModelCatalog, type ModelConfig, type ModelProfile } from "../../api/contracts";
 
 export type Effort = { value: string; label: string };
 export type CatalogModel = { id: string; provider: string; name: string; description: string;
@@ -11,9 +11,10 @@ export type ModelSettingsApi = {
   savePreferences(value: Preferences): Promise<Preferences>;
   testModel(model: CatalogModel, effort: string | null): Promise<ModelTestResult>;
 };
+export const CHATGPT_PROVIDER = "openai-chatgpt";
 export const PROVIDERS = [
   { value: "openai", label: "OpenAI", caption: "API Key" },
-  { value: "openai-chatgpt", label: "ChatGPT 订阅", caption: "ChatGPT 登录" },
+  { value: CHATGPT_PROVIDER, label: "ChatGPT 订阅", caption: "ChatGPT 登录" },
   { value: "deepseek", label: "DeepSeek", caption: "API Key" },
   { value: "stepfun", label: "StepFun", caption: "API Key" },
   { value: "qwen", label: "Qwen", caption: "百炼" },
@@ -23,6 +24,10 @@ export const PROVIDERS = [
 ];
 const EFFORTS: Record<string, string> = {none:"关闭思考", minimal:"最少", low:"低", medium:"中", high:"高", xhigh:"极高", max:"最高", ultra:"超高"};
 export function providerName(id: string) { return PROVIDERS.find((item) => item.value === id)!.label; }
+export function catalogFailure(cause: unknown) {
+  const parsed = modelCatalogErrorSchema.safeParse(cause);
+  return parsed.success ? parsed.data : { detail: cause instanceof Error ? cause.message : String(cause), code: undefined };
+}
 export function effortName(model: CatalogModel, value: string | null) {
   return model.efforts.find((choice) => choice.value === (value ?? model.defaultEffort))?.label ?? "供应商默认";
 }

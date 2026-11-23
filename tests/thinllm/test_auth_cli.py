@@ -23,12 +23,14 @@ def oauth_server(monkeypatch):
     login = {"scope": "offline_access resource.invoke chatgpt.tokens.use.direct"}
     attempts = []
 
-    def authorize(params):
+    def authorize(path):
+        sign_in = auth.ChatGPTSignIn(path, "http://127.0.0.1:12345/auth/callback")
+        params = {key: value[0] for key, value in parse_qs(urlsplit(sign_in.authorization_url).query).items()}
         attempts.append(params)
         callback = {"code": ["authorization"], "state": [params["state"]]}
         if params["client_id"] == "dynamic_agent_client":
             callback["client_id"] = ["oaiapp_test"]
-        return "http://127.0.0.1:12345/auth/callback", callback
+        return sign_in, callback
 
     def exchange(url, *, data, timeout):
         params = attempts[-1]
@@ -92,6 +94,11 @@ def test_valid_identity_without_plan_permission_cannot_be_used_for_inference(tmp
     assert attempts[1]["prompt"] == "consent"
     auth.require_chatgpt_login(path)
 
+    authorized = path.read_bytes()
+    login["scope"] = "openid profile email"
+    assert main(args) == 1
+    assert path.read_bytes() == authorized
+
 
 def test_signed_identity_with_wrong_nonce_cannot_replace_active_credentials(tmp_path, capsys, oauth_server):
     login, _ = oauth_server
@@ -106,7 +113,7 @@ def test_signed_identity_with_wrong_nonce_cannot_replace_active_credentials(tmp_
     assert path.read_bytes() == original
 
 
-def test_loopback_ignores_mismatched_state_and_never_logs_callback_codes(monkeypatch, capsys):
+def test_loopback_ignores_mismatched_state_and_never_logs_callback_codes(monkeypatch, capsys, tmp_path):
     with ThreadPoolExecutor(max_workers=1) as browser:
         def visit(authorization_url):
             params = parse_qs(urlsplit(authorization_url).query)
@@ -114,7 +121,7 @@ def test_loopback_ignores_mismatched_state_and_never_logs_callback_codes(monkeyp
             assert redirect.startswith("http://127.0.0.1:")
             with httpx.Client(trust_env=False) as client:
                 bad = client.get(redirect, params={"state": "different", "code": "bad-code"})
-                good = client.get(redirect, params={"state": "pending", "code": "good-code"})
+                good = client.get(redirect, params={"state": params["state"][0], "code": "good-code"})
             assert bad.status_code == 400 and good.status_code == 200
             assert "good-code" not in good.text
 
@@ -125,7 +132,7 @@ def test_loopback_ignores_mismatched_state_and_never_logs_callback_codes(monkeyp
             return True
 
         monkeypatch.setattr(auth.webbrowser, "open", open_browser)
-        _, result = auth._browser_callback({"state": "pending"})
+        _, result = auth._browser_callback(tmp_path / "chatgpt.json")
         callbacks[0].result(timeout=10)
     assert result["code"] == ["good-code"]
     assert "code" not in capsys.readouterr().err
