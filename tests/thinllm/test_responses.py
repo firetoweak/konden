@@ -5,28 +5,25 @@ import httpx
 import pytest
 
 from thinllm import (
-    Endpoint,
     InvalidLLMResponse,
     LLMAuthenticationError,
     LLMContextLengthError,
     LLMProviderError,
-    MissingProviderSetting,
     ResponsesClient,
     create_client,
     resolve_endpoint,
 )
 
-MODEL = "openai-codex/test-model"
-ENDPOINT = Endpoint("openai-codex", "https://chatgpt.com/backend-api/codex", "token", False, "account")
 REASONING = {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "opaque"}
 CALL = {"type": "function_call", "call_id": "call_1", "name": "lookup", "arguments": '{"key":"answer"}'}
 
 
-@pytest.fixture(params=["openai", "openai-codex"])
-def responses_connection(request):
-    if request.param == "openai-codex":
-        return ENDPOINT, MODEL
-    return resolve_endpoint("openai/gpt-6.1-terra", {"api_key": "existing-key"}), "openai/gpt-6.1-terra"
+@pytest.fixture(params=["openai", "openai-chatgpt"])
+def responses_connection(request, chatgpt_login):
+    model = request.param + "/gpt-6.1-terra"
+    connection = {"auth_file": str(chatgpt_login())} if request.param == "openai-chatgpt" else {"api_key": "existing-key"}
+    header = "Bearer private-access" if request.param == "openai-chatgpt" else "Bearer existing-key"
+    return resolve_endpoint(model, connection), model, header
 
 
 def completed(output=None):
@@ -69,58 +66,8 @@ def test_openai_search_keeps_auto_choice_and_distinguishes_direct_answers(search
     asyncio.run(run())
 
 
-def write_auth(path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data), encoding="utf-8")
-
-
-@pytest.fixture
-def auth_file(tmp_path, monkeypatch):
-    monkeypatch.setattr("thinllm.auth.Path.home", lambda: tmp_path)
-    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
-    path = tmp_path / "auth.json"
-    write_auth(path, {"auth_mode": "chatgpt", "tokens": {"access_token": "first", "account_id": "account"}})
-    return path
-
-
-def test_auth_resolution_reads_latest_login_without_modifying_it(auth_file, tmp_path):
-    before = auth_file.read_bytes()
-    endpoint = resolve_endpoint(MODEL, {"auth_file": ""})
-    assert endpoint.api_key == "first"
-    assert endpoint.account_id == "account"
-    assert auth_file.read_bytes() == before
-    write_auth(auth_file, {"tokens": {"access_token": "updated", "account_id": "other"}})
-    assert resolve_endpoint(MODEL, {"auth_file": str(auth_file)}).api_key == "updated"
-    with pytest.raises(MissingProviderSetting, match="thinllm auth codex"):
-        resolve_endpoint(MODEL, {"auth_file": str(tmp_path / "missing.json")})
-    write_auth(auth_file, {"auth_mode": "apikey", "OPENAI_API_KEY": "not-a-chatgpt-login"})
-    with pytest.raises(MissingProviderSetting, match="ChatGPT"):
-        resolve_endpoint(MODEL, {"auth_file": ""})
-    auth_file.write_text("{", encoding="utf-8")
-    with pytest.raises(json.JSONDecodeError):
-        resolve_endpoint(MODEL, {"auth_file": ""})
-
-
-def test_default_auth_location_and_explicit_path_are_independent(tmp_path, monkeypatch):
-    monkeypatch.delenv("CODEX_HOME", raising=False)
-    monkeypatch.setattr("thinllm.auth.Path.home", lambda: tmp_path)
-    path = tmp_path / ".codex" / "auth.json"
-    write_auth(path, {"tokens": {"access_token": "default", "account_id": "account"}})
-    assert resolve_endpoint(MODEL, {"auth_file": ""}).api_key == "default"
-    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "other"))
-    assert resolve_endpoint(MODEL, {"auth_file": str(path)}).api_key == "default"
-
-
-@pytest.mark.parametrize("auth", [[], {"tokens": []}, {"tokens": {"access_token": True, "account_id": "a"}},
-                                 {"auth_mode": "damaged", "tokens": {"access_token": "a", "account_id": "b"}}])
-def test_damaged_auth_is_exposed_without_echoing_credentials(auth_file, auth):
-    write_auth(auth_file, auth)
-    with pytest.raises(ValueError):
-        resolve_endpoint(MODEL, {"auth_file": ""})
-
-
 def test_stream_and_tool_history_use_responses_without_losing_native_output(responses_connection):
-    endpoint, model = responses_connection
+    endpoint, model, header = responses_connection
 
     async def run():
         requests = []
@@ -163,19 +110,21 @@ def test_stream_and_tool_history_use_responses_without_losing_native_output(resp
             }, *[{"role": "tool", "tool_call_id": "command_" + call.id, "content": "42"}
                  for call in first.response.calls]], model, tools)
         assert second.response.content == "OK"
-        assert str(requests[0].url) == endpoint.base_url + "/responses"
-        assert requests[0].headers["authorization"] == "Bearer " + endpoint.api_key
-        if endpoint.provider == "openai-codex":
-            assert requests[0].headers["chatgpt-account-id"] == "account"
-        else:
-            assert "chatgpt-account-id" not in requests[0].headers
-            assert "originator" not in requests[0].headers
+        assert str(requests[0].url) == "https://api.openai.com/v1/responses"
+        assert requests[0].headers["authorization"] == header
         payload = json.loads(requests[0].content)
         assert payload["instructions"] == "help" and payload["model"] == model.partition("/")[2]
         assert payload["store"] is False and payload["stream"] is True
         assert "messages" not in payload and "stream_options" not in payload
         assert payload["reasoning"] == {"effort": "high", "summary": "auto"}
-        assert payload["tools"] == [{"type": "function", "strict": False, **tools[0]["function"]}]
+        functions = [{"type": "function", "strict": False, **tools[0]["function"]}]
+        if endpoint.provider == "openai-chatgpt":
+            additional_tools = [{"type": "additional_tools", "role": "developer", "tools": functions}]
+            assert payload["input"][1:] == additional_tools
+            assert "tools" not in payload
+        else:
+            additional_tools = []
+            assert payload["tools"] == functions
         assert payload["input"][0]["content"][1] == {
             "type": "input_image", "image_url": "data:image/png;base64,AA==", "detail": "low",
         }
@@ -186,13 +135,14 @@ def test_stream_and_tool_history_use_responses_without_losing_native_output(resp
             {**CALL, "call_id": "command_call_1"}, {**CALL, "call_id": "command_call_2"},
             {"type": "function_call_output", "call_id": "command_call_1", "output": "42"},
             {"type": "function_call_output", "call_id": "command_call_2", "output": "42"},
+            *additional_tools,
         ]
 
     asyncio.run(run())
 
 
 def test_replayed_control_call_does_not_create_an_unpaired_tool_call(responses_connection):
-    endpoint, model = responses_connection
+    endpoint, model, _ = responses_connection
 
     async def run():
         requests = []
@@ -224,7 +174,7 @@ def test_replayed_control_call_does_not_create_an_unpaired_tool_call(responses_c
     b"data: {\n\n", b"data: [DONE]\n\n",
 ])
 def test_incomplete_or_malformed_stream_is_never_a_success(body, responses_connection):
-    endpoint, model = responses_connection
+    endpoint, model, _ = responses_connection
 
     async def run():
         async with create_client(endpoint, transport=httpx.MockTransport(lambda _: httpx.Response(200, content=body))) as client:
@@ -242,7 +192,7 @@ def test_incomplete_or_malformed_stream_is_never_a_success(body, responses_conne
     (200, sse({"type": "error", "code": "server_error", "message": "failed"}), LLMProviderError),
 ])
 def test_upstream_errors_keep_the_existing_error_contract(status, body, error, responses_connection):
-    endpoint, model = responses_connection
+    endpoint, model, _ = responses_connection
 
     async def run():
         async with create_client(endpoint, transport=httpx.MockTransport(lambda _: httpx.Response(status, content=body))) as client:
@@ -252,8 +202,31 @@ def test_upstream_errors_keep_the_existing_error_contract(status, body, error, r
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+def test_subscription_limit_explains_usage_without_retrying(chatgpt_login, streaming):
+    """Quota exhaustion can arrive before the stream or as its terminal event."""
+    error = {"code": "subscription_sharing_usage_limit_exceeded", "message": "limit reached"}
+    attempts = []
+
+    def handle(request):
+        attempts.append(request.url)
+        if streaming:
+            return httpx.Response(200, content=sse({"type": "response.failed", "response": {"error": error}}))
+        return httpx.Response(429, json={"error": error})
+
+    async def run():
+        model = "openai-chatgpt/gpt-6.2-sol"
+        endpoint = resolve_endpoint(model, {"auth_file": str(chatgpt_login())})
+        async with create_client(endpoint, transport=httpx.MockTransport(handle)) as client:
+            with pytest.raises(LLMProviderError, match=r"https://chatgpt\.com/settings/usage"):
+                await client.chat([], model)
+
+    asyncio.run(run())
+    assert len(attempts) == 1
+
+
 def test_callback_errors_are_not_reclassified_as_upstream_corruption(responses_connection):
-    endpoint, model = responses_connection
+    endpoint, model, _ = responses_connection
 
     async def run():
         error = TypeError("caller bug")

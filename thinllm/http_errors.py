@@ -25,7 +25,7 @@ def describe_transport_error(error: httpx.TransportError) -> str:
     request = error.request
     url = request.url.copy_with(username=None, password=None, query=None, fragment=None)
     secrets = []
-    for header in ("authorization", "proxy-authorization", "x-api-key", "cookie", "chatgpt-account-id"):
+    for header in ("authorization", "proxy-authorization", "x-api-key", "cookie"):
         value = request.headers.get(header)
         if value:
             secrets.extend((value, value.partition(" ")[2]))

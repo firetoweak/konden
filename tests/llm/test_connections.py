@@ -90,32 +90,37 @@ class ConnectionsTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(LLMAuthenticationError):
             await self.connections.chat([], "deepseek/pro")
 
-    async def test_codex_login_rotation_is_read_by_the_host_factory_without_writing_auth(self):
-        auth_file = self.path.with_name("auth.json")
-        write_json(auth_file, {"tokens": {"access_token": "first", "account_id": "account"}})
-        self.settings["openai-codex"]["auth_file"] = str(auth_file)
-        write_json(self.path, self.settings)
-        headers = []
 
-        def handle(request):
-            headers.append(request.headers["authorization"])
-            event = {"type": "response.completed", "response": {
-                "status": "completed", "output": [{"type": "message", "content": [
-                    {"type": "output_text", "text": "OK"},
-                ]}], "usage": {"input_tokens": 1, "output_tokens": 1},
-            }}
-            return httpx.Response(200, content="data: " + json.dumps(event) + "\n\n")
+def test_chatgpt_login_rotation_is_read_by_the_host_without_writing_auth(tmp_path, chatgpt_login):
+    auth_file = chatgpt_login("first")
+    path = tmp_path / "connections.json"
+    settings = initial_connections()
+    settings["openai-chatgpt"]["auth_file"] = str(auth_file)
+    write_json(path, settings)
+    headers = []
 
-        http_client = httpx.AsyncClient
+    def handle(request):
+        headers.append(request.headers["authorization"])
+        event = {"type": "response.completed", "response": {
+            "status": "completed", "output": [{"type": "message", "content": [
+                {"type": "output_text", "text": "OK"},
+            ]}], "usage": {"input_tokens": 1, "output_tokens": 1},
+        }}
+        return httpx.Response(200, content="data: " + json.dumps(event) + "\n\n")
 
-        def factory(**kwargs):
-            return http_client(**{**kwargs, "transport": httpx.MockTransport(handle)})
+    http_client = httpx.AsyncClient
 
-        with patch("thinllm.chat_completions.httpx.AsyncClient", side_effect=factory):
-            async with ModelConnections(self.path) as connections:
-                await connections.chat([], "openai-codex/test")
-                write_json(auth_file, {"tokens": {"access_token": "rotated", "account_id": "account"}})
-                before = auth_file.read_bytes()
-                await connections.chat([], "openai-codex/test")
-                self.assertEqual(auth_file.read_bytes(), before)
-        self.assertEqual(headers, ["Bearer first", "Bearer rotated"])
+    def factory(**kwargs):
+        return http_client(**{**kwargs, "transport": httpx.MockTransport(handle)})
+
+    async def run():
+        async with ModelConnections(path) as connections:
+            await connections.chat([], "openai-chatgpt/test")
+            chatgpt_login("rotated", path=auth_file)
+            before = auth_file.read_bytes()
+            await connections.chat([], "openai-chatgpt/test")
+            assert auth_file.read_bytes() == before
+
+    with patch("thinllm.chat_completions.httpx.AsyncClient", side_effect=factory):
+        asyncio.run(run())
+    assert headers == ["Bearer first", "Bearer rotated"]

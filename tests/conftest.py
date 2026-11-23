@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+import time
 
 import pytest
 
@@ -68,6 +70,26 @@ def pytest_collection_modifyitems(config, items):
 def _isolate_konden_home(monkeypatch):
     """测试进程可能由一个设了 KONDEN_HOME 的 konden 实例派生。"""
     monkeypatch.delenv("KONDEN_HOME", raising=False)
+
+
+@pytest.fixture
+def chatgpt_login(tmp_path):
+    def write_grant(access_token="private-access", *, path=None, expires_at=None):
+        path = tmp_path / "chatgpt.json" if path is None else path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "host_id": "urn:uuid:41d8e051-6e08-4e68-8d75-1d6f7da9b306",
+            "account": {
+                "client_id": "oaiapp_test", "subject": "user", "id_token": "identity",
+                "grant": {
+                    "access_token": access_token, "refresh_token": "private-refresh",
+                    "expires_at": int(time.time()) + 3600 if expires_at is None else expires_at,
+                    "scope": "offline_access resource.invoke chatgpt.tokens.use.direct",
+                },
+            },
+        }), encoding="utf-8")
+        return path
+    return write_grant
 
 
 def pytest_report_header(config):

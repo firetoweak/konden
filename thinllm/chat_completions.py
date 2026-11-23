@@ -70,8 +70,6 @@ class ChatCompletionsClient:
         headers = {"Accept": "text/event-stream"}
         if endpoint.api_key is not None:
             headers["Authorization"] = f"Bearer {endpoint.api_key}"
-        if endpoint.account_id is not None:
-            headers.update({"ChatGPT-Account-Id": endpoint.account_id, "originator": "konden"})
         self._client = httpx.AsyncClient(
             base_url=f"{endpoint.base_url}/",
             headers=headers,
@@ -460,8 +458,6 @@ class ChatCompletionsClient:
         detail += f": {message}"
 
         if status_code in {401, 403}:
-            if self._endpoint.account_id is not None:
-                detail += "；请检查账号权限，或运行 python -m thinllm auth codex --login 并更新连接配置"
             raise LLMAuthenticationError(detail)
         if code == "context_length_exceeded":
             raise LLMContextLengthError(detail)
