@@ -44,7 +44,7 @@ sh scripts/setup.sh
 
 准备脚本会补齐 Python、Node.js 等运行工具，不修改系统 PATH；参数说明见[准备选项](docs/运行指南.md#准备选项)。
 
-setup 完成后，先按[个人连接文件说明](docs/模型配置.md#个人连接文件)填写模型密钥。打开终端打印的「模型连接配置」文件（默认 Windows 为 `%USERPROFILE%\.konden\connections.json`，Linux/macOS 为 `~/.konden/connections.json`），在所用供应商项的 `api_key` 中填入自己的 API Key 并保存，保留其他供应商项。本地服务地址也在这个文件中配置；Codex 登录方式见[复用 Codex 登录额度](docs/模型配置.md#复用-codex-登录额度)。
+setup 完成后，先按[个人连接文件说明](docs/模型配置.md#个人连接文件)填写模型密钥。打开终端打印的「模型连接配置」文件（默认 Windows 为 `%USERPROFILE%\.konden\connections.json`，Linux/macOS 为 `~/.konden/connections.json`），在所用供应商项的 `api_key` 中填入自己的 API Key 并保存，保留其他供应商项。本地服务地址也在这个文件中配置。订阅账号见[使用 ChatGPT 订阅额度](docs/模型配置.md#使用-chatgpt-订阅额度)。
 
 填好后再启动：
 

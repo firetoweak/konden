@@ -1,10 +1,10 @@
 import asyncio
 import errno
-import json
 import socket
 import ssl
 
 import httpx
+from pydantic import ValidationError
 import pytest
 
 from thinllm import (
@@ -12,7 +12,6 @@ from thinllm import (
     LLMAuthenticationError,
     LLMProviderError,
     LLMTransientError,
-    list_codex_models,
     list_models,
 )
 
@@ -25,10 +24,8 @@ def model(slug="MixedCase-ID", **overrides):
 
 
 @pytest.fixture
-def auth_file(tmp_path):
-    path = tmp_path / "auth.json"
-    path.write_text(json.dumps({"tokens": {"access_token": "private-access", "account_id": "account"}}), encoding="utf-8")
-    return path
+def auth_file(chatgpt_login):
+    return chatgpt_login()
 
 
 def test_lists_account_models_without_hidden_entries_or_prompt_metadata(auth_file):
@@ -37,24 +34,21 @@ def test_lists_account_models_without_hidden_entries_or_prompt_metadata(auth_fil
 
     def handle(request):
         requests.append(request)
-        assert str(request.url).startswith("https://chatgpt.com/backend-api/codex/models?")
-        assert request.url.params["client_version"]
+        assert str(request.url) == "https://api.openai.com/v1/models"
         assert request.headers["Authorization"] == "Bearer private-access"
-        assert request.headers["ChatGPT-Account-Id"] == "account"
         return httpx.Response(200, json={"models": [model(), model("hidden", visibility="hide"),
-                                                   model("unknown-capacity", context_window=None,
-                                                         supported_reasoning_levels=[], default_reasoning_level=None)]})
+                                                   {"slug": "another-model", "display_name": "Another", "visibility": "list"}]})
 
-    result = asyncio.run(list_codex_models({"auth_file": str(auth_file)}, transport=httpx.MockTransport(handle)))
+    result = asyncio.run(list_models("openai-chatgpt", {"auth_file": str(auth_file)}, transport=httpx.MockTransport(handle)))
     assert len(requests) == 1
-    assert result == [{"slug": "MixedCase-ID", "display_name": "Display name", "context_window": 500000,
-                       "default_reasoning_level": "low", "supported_reasoning_levels": [{"effort": "low"}, {"effort": "high"}]},
-                      {"slug": "unknown-capacity", "display_name": "Display name", "context_window": None,
-                       "default_reasoning_level": None, "supported_reasoning_levels": []}]
+    assert result == [{"model": "openai-chatgpt/MixedCase-ID", "name": "Display name", "context_window": 500000,
+                       "default_reasoning_effort": "low", "reasoning_levels": ["low", "high"], "web_search": False},
+                      {"model": "openai-chatgpt/another-model", "name": "Another", "context_window": None,
+                       "default_reasoning_effort": None, "reasoning_levels": [], "web_search": False}]
     assert auth_file.read_bytes() == before
 
 
-@pytest.mark.parametrize("provider", ["openai", "openai-codex"])
+@pytest.mark.parametrize("provider", ["openai", "openai-chatgpt"])
 @pytest.mark.parametrize(("status", "error", "reason", "action"), [
     (401, LLMAuthenticationError, "认证未通过", "connections.json"),
     (403, LLMAuthenticationError, "拒绝访问", "账号权限"),
@@ -73,21 +67,23 @@ def test_provider_failure_identifies_reason_and_recovery_without_secrets(auth_fi
     with pytest.raises(error) as caught:
         asyncio.run(list_models(provider, {"auth_file": str(auth_file), "api_key": "private-key"}, transport=transport))
     message = str(caught.value)
-    assert reason in message and action in message and f"HTTP {status}" in message
+    assert reason in message and f"HTTP {status}" in message
     assert "private-response" not in message and "private-key" not in message
-    if status == 401:
-        assert ("--login" if provider == "openai-codex" else "openai.api_key") in message
+    if status == 401 and provider == "openai-chatgpt":
+        assert "python -m thinllm auth chatgpt" in message
+    else:
+        assert action in message
 
 
 @pytest.mark.parametrize("payload", [{}, {"models": {}}, {"models": [model(context_window=True)]},
                                      {"models": [model(supported_reasoning_levels=[{"effort": 1}])]}])
 def test_malformed_catalog_has_a_protocol_error(auth_file, payload):
     with pytest.raises(InvalidLLMResponse, match="模型列表格式"):
-        asyncio.run(list_codex_models({"auth_file": str(auth_file)}, transport=httpx.MockTransport(
+        asyncio.run(list_models("openai-chatgpt", {"auth_file": str(auth_file)}, transport=httpx.MockTransport(
             lambda _: httpx.Response(200, json=payload))))
 
 
-def test_new_request_reads_new_credentials_and_catalog_without_local_cache(auth_file):
+def test_new_request_reads_new_credentials_and_catalog_without_local_cache(auth_file, chatgpt_login):
     tokens = []
 
     def handle(request):
@@ -97,16 +93,16 @@ def test_new_request_reads_new_credentials_and_catalog_without_local_cache(auth_
     async def run():
         settings = {"auth_file": str(auth_file)}
         transport = httpx.MockTransport(handle)
-        first = await list_codex_models(settings, transport=transport)
-        auth_file.write_text(json.dumps({"tokens": {"access_token": "rotated", "account_id": "other-account"}}), encoding="utf-8")
-        second = await list_codex_models(settings, transport=transport)
-        assert first[0]["slug"] == "model-1" and second[0]["slug"] == "model-2"
+        first = await list_models("openai-chatgpt", settings, transport=transport)
+        chatgpt_login("rotated", path=auth_file)
+        second = await list_models("openai-chatgpt", settings, transport=transport)
+        assert first[0]["model"] == "openai-chatgpt/model-1" and second[0]["model"] == "openai-chatgpt/model-2"
 
     asyncio.run(run())
     assert tokens == ["Bearer private-access", "Bearer rotated"]
 
 
-@pytest.mark.parametrize("provider", ["openai", "openai-codex"])
+@pytest.mark.parametrize("provider", ["openai", "openai-chatgpt"])
 @pytest.mark.parametrize(("error", "reason", "action"), [
     (httpx.ConnectTimeout, "请求超时", "网络或代理"),
     (httpx.ReadTimeout, "请求超时", "网络或代理"),
@@ -119,14 +115,14 @@ def test_new_request_reads_new_credentials_and_catalog_without_local_cache(auth_
 def test_transport_failures_do_not_claim_credentials_are_invalid(auth_file, provider, error, reason, action):
     """A missing catalog response cannot establish whether the supplied credential is valid."""
     def fail(request):
-        credential = "private-access" if provider == "openai-codex" else "private-key"
+        credential = "private-access" if provider == "openai-chatgpt" else "private-key"
         raise error(f"connection failed with {credential}", request=request)
 
     with pytest.raises(LLMTransientError) as caught:
         asyncio.run(list_models(provider, {"auth_file": str(auth_file), "api_key": "private-key"},
                                 transport=httpx.MockTransport(fail)))
     message = str(caught.value)
-    credential = "登录凭据" if provider == "openai-codex" else "密钥"
+    credential = "登录凭据" if provider == "openai-chatgpt" else "密钥"
     assert reason in message and action in message
     assert f"无法判断{credential}是否有效" in message
     assert "connection failed with" in message
@@ -161,7 +157,7 @@ def test_transport_diagnostics_redact_credentials_and_url_secrets():
     from thinllm import describe_transport_error
 
     request = httpx.Request("GET", "https://url-user:url-password@api.example/models?key=query-secret", headers={
-        "Authorization": "Bearer header-secret", "ChatGPT-Account-Id": "account-secret"})
+        "Authorization": "Bearer header-secret", "Cookie": "account-secret"})
     error = httpx.ProxyError(
         f"407 Proxy Authentication Required; {request.url}; http://proxy-user:proxy-password@proxy.example; "
         "Bearer header-secret; Basic proxy-encoded-secret; account-secret", request=request)
@@ -203,13 +199,13 @@ def test_corrupt_credentials_and_unknown_errors_propagate(auth_file):
     def fail(request):
         raise RuntimeError("internal failure")
 
-    for provider in ("openai", "openai-codex"):
+    for provider in ("openai", "openai-chatgpt"):
         with pytest.raises(RuntimeError, match="internal failure"):
             asyncio.run(list_models(provider, {"auth_file": str(auth_file), "api_key": "private-key"},
                                     transport=httpx.MockTransport(fail)))
     auth_file.write_text("{", encoding="utf-8")
-    with pytest.raises(json.JSONDecodeError):
-        asyncio.run(list_codex_models({"auth_file": str(auth_file)}, transport=httpx.MockTransport(fail)))
+    with pytest.raises(ValidationError):
+        asyncio.run(list_models("openai-chatgpt", {"auth_file": str(auth_file)}, transport=httpx.MockTransport(fail)))
 
 
 @pytest.mark.parametrize(("provider", "entry", "levels", "default"), [

@@ -713,25 +713,25 @@ class WebFirstSliceTest(unittest.TestCase):
         catalog = [{"slug": "actual-id", "display_name": "Actual model", "context_window": 500000,
                     "supported_reasoning_levels": [{"effort": "high"}], "default_reasoning_level": "high"}]
         with patch("konden.model_settings.list_models", new=AsyncMock(return_value=catalog)) as lookup:
-            response = self.client.get("/api/model-settings/catalog/openai-codex")
+            response = self.client.get("/api/model-settings/catalog/openai-chatgpt")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), catalog)
-        lookup.assert_awaited_once_with("openai-codex", json.loads(before)["openai-codex"])
+        lookup.assert_awaited_once_with("openai-chatgpt", json.loads(before)["openai-chatgpt"])
         self.assertEqual(self.models.connections_path.read_bytes(), before)
 
     def test_codex_catalog_reports_known_failures_and_exposes_unknown_errors(self):
         for error in [LLMAuthenticationError("请重新授权"), LLMTransientError("请重试")]:
             with self.subTest(error=error), patch("konden.model_settings.list_models", new=AsyncMock(side_effect=error)), \
                     self.assertLogs("uvicorn.error", level="WARNING") as logged:
-                response = self.client.get("/api/model-settings/catalog/openai-codex")
+                response = self.client.get("/api/model-settings/catalog/openai-chatgpt")
                 self.assertEqual(response.status_code, 502)
                 self.assertEqual(response.json(), {"detail": str(error)})
-            self.assertIn("/api/model-settings/catalog/openai-codex", logged.output[0])
+            self.assertIn("/api/model-settings/catalog/openai-chatgpt", logged.output[0])
             self.assertIn("konden HTTP 502", logged.output[0])
             self.assertIn(str(error), logged.output[0])
         with patch("konden.model_settings.list_models", new=AsyncMock(side_effect=LookupError("unknown"))):
             with self.assertRaisesRegex(LookupError, "unknown"):
-                self.client.get("/api/model-settings/catalog/openai-codex")
+                self.client.get("/api/model-settings/catalog/openai-chatgpt")
 
     def test_session_model_selection_and_invalid_model_boundary(self):
         response = self.client.get("/api/sessions/session-old/model")

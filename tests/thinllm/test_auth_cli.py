@@ -1,186 +1,131 @@
-import base64
-import hashlib
-import io
+from base64 import urlsafe_b64encode
+from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
 import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-import threading
+import time
 from urllib.parse import parse_qs, urlsplit
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 import httpx
-from oauth_cli_kit import flow, server
-from oauth_cli_kit.models import OAuthToken
+import jwt
+from jwt.algorithms import RSAAlgorithm
 import pytest
 
-from thinllm import __main__ as cli
-from thinllm import auth
+from thinllm import MissingProviderSetting, auth
+from thinllm.__main__ import main
 
 
 @pytest.fixture
-def codex_home(tmp_path, monkeypatch):
-    monkeypatch.setattr(auth.Path, "home", lambda: tmp_path)
-    root = tmp_path / "Codex 登录 示例"
-    root.mkdir()
-    monkeypatch.setenv("CODEX_HOME", str(root))
-    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)
-    return root
+def oauth_server(monkeypatch):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = {**RSAAlgorithm.to_jwk(key.public_key(), as_dict=True), "kid": "test"}
+    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", lambda _: {"keys": [public_key]})
+    login = {"scope": "offline_access resource.invoke chatgpt.tokens.use.direct"}
+    attempts = []
+
+    def authorize(params):
+        attempts.append(params)
+        callback = {"code": ["authorization"], "state": [params["state"]]}
+        if params["client_id"] == "dynamic_agent_client":
+            callback["client_id"] = ["oaiapp_test"]
+        return "http://127.0.0.1:12345/auth/callback", callback
+
+    def exchange(url, *, data, timeout):
+        params = attempts[-1]
+        assert url == "https://auth.openai.com/api/accounts/oauth/token"
+        assert data["client_id"] == "oaiapp_test"
+        assert data["grant_type"] == "authorization_code"
+        assert data["redirect_uri"] == "http://127.0.0.1:12345/auth/callback"
+        assert data["code"] == "authorization"
+        assert data["resource"] == "https://api.openai.com/v1"
+        challenge = urlsafe_b64encode(sha256(data["code_verifier"].encode()).digest()).decode().rstrip("=")
+        assert challenge == params["code_challenge"] and params["code_challenge_method"] == "S256"
+        id_token = jwt.encode({
+            "iss": "https://auth.openai.com", "aud": "oaiapp_test", "sub": "user",
+            "nonce": login.get("nonce", params["nonce"]), "exp": int(time.time()) + 300,
+        }, key, algorithm="RS256", headers={"kid": "test"})
+        return httpx.Response(200, json={"id_token": id_token, "access_token": "test-access",
+                                         "refresh_token": "test-refresh", "expires_in": 3600,
+                                         "scope": login["scope"]})
+
+    monkeypatch.setattr(auth, "_browser_callback", authorize)
+    monkeypatch.setattr(httpx, "post", exchange)
+    return login, attempts
 
 
-def write_login(root, token="private-access"):
-    (root / "auth.json").write_text(json.dumps({
-        "auth_mode": "chatgpt", "tokens": {"access_token": token, "account_id": "private-account"},
-    }), encoding="utf-8")
-
-
-def test_existing_login_exports_only_a_reference_without_oauth_or_file_writes(codex_home, monkeypatch, capsys):
-    write_login(codex_home)
-    path = codex_home / "auth.json"
-    before = (path.read_bytes(), path.stat().st_mtime_ns)
-    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False)
-    monkeypatch.setattr(cli, "login_oauth_interactive", lambda **k: pytest.fail("must reuse login"))
-    assert cli.main(["auth", "codex"]) == 0
+def test_login_reuses_the_issued_client_and_exports_only_the_file_reference(tmp_path, capsys, oauth_server):
+    _, attempts = oauth_server
+    path = tmp_path / "订阅 登录" / "chatgpt.json"
+    args = ["auth", "chatgpt", "--auth-file", str(path)]
+    assert main(args) == 0
     output = capsys.readouterr()
-    assert json.loads(output.out) == {"openai-codex": {"auth_file": path.resolve().as_posix()}}
-    assert "private-" not in output.out + output.err
-    assert output.err == ""
-    assert (path.read_bytes(), path.stat().st_mtime_ns) == before
-    assert not auth.thinllm_auth_path().exists()
+    assert json.loads(output.out) == {"openai-chatgpt": {"auth_file": path.as_posix()}}
+    assert "test-access" not in (output.out + output.err)
+    assert "test-refresh" not in (output.out + output.err)
+    assert attempts[0]["client_id"] == "dynamic_agent_client"
+    assert attempts[0]["agent_name_hint"] == "konden"
+    assert set(attempts[0]["scope"].split()) >= {"openid", "offline_access", "chatgpt.tokens.use.direct"}
+    assert attempts[0]["ext_agent_host_id"].startswith("urn:uuid:")
+    auth.require_chatgpt_login(path)
+
+    assert main(args) == 0
+    assert attempts[1]["client_id"] == "oaiapp_test"
+    assert attempts[1]["ext_agent_host_id"] == attempts[0]["ext_agent_host_id"]
+    assert attempts[1]["state"] != attempts[0]["state"]
+    assert "agent_name_hint" not in attempts[1]
 
 
-@pytest.mark.parametrize("existing", [None, {"auth_mode": "apikey", "OPENAI_API_KEY": "private-key"}])
-def test_first_login_saves_separate_credentials_and_keeps_stdout_copyable(codex_home, monkeypatch, capsys, existing):
-    shared = codex_home / "auth.json"
-    if existing is not None:
-        shared.write_text(json.dumps(existing), encoding="utf-8")
-    before = shared.read_bytes() if shared.exists() else None
-
-    def login(*, print_fn, prompt_fn, storage, originator):
-        assert originator == "thinllm"
-        print_fn("[cyan]浏览器授权完成[/cyan]")
-        storage.save(OAuthToken("private-access", "private-refresh", 10**15, "private-account"))
-
-    monkeypatch.setattr(cli, "login_oauth_interactive", login)
-    assert cli.main(["auth", "codex"]) == 0
+def test_valid_identity_without_plan_permission_cannot_be_used_for_inference(tmp_path, capsys, oauth_server):
+    login, attempts = oauth_server
+    login["scope"] = "openid profile email"
+    path = tmp_path / "chatgpt.json"
+    args = ["auth", "chatgpt", "--auth-file", str(path)]
+    assert main(args) == 1
     output = capsys.readouterr()
-    assert json.loads(output.out)["openai-codex"]["auth_file"] == auth.thinllm_auth_path().resolve().as_posix()
-    assert "浏览器授权完成" in output.err and "[cyan]" not in output.err
-    assert "private-" not in output.out + output.err
-    assert auth.load_codex_auth(auth.thinllm_auth_path()) == ("private-access", "private-account")
-    assert (shared.read_bytes() if shared.exists() else None) == before
+    assert output.out == "" and "尚未授权" in output.err
+    with pytest.raises(MissingProviderSetting):
+        auth.require_chatgpt_login(path)
+
+    login["scope"] += " offline_access resource.invoke chatgpt.tokens.use.direct"
+    assert main(args) == 0
+    assert attempts[1]["client_id"] == "oaiapp_test"
+    assert attempts[1]["prompt"] == "consent"
+    auth.require_chatgpt_login(path)
 
 
-def test_explicit_login_creates_owned_session_without_replacing_codex(codex_home, monkeypatch, capsys):
-    write_login(codex_home)
-    before = (codex_home / "auth.json").read_bytes()
-    monkeypatch.setattr(cli, "login_oauth_interactive", lambda **kw: kw["storage"].save(
-        OAuthToken("new-access", "new-refresh", 10**15, "new-account")))
-    assert cli.main(["auth", "codex", "--login"]) == 0
-    assert json.loads(capsys.readouterr().out)["openai-codex"]["auth_file"] == auth.thinllm_auth_path().as_posix()
-    assert (codex_home / "auth.json").read_bytes() == before
-    monkeypatch.setattr(cli, "login_oauth_interactive", lambda **kw: pytest.fail("must reuse owned login"))
-    assert cli.main(["auth", "codex"]) == 0
-
-
-def test_noninteractive_missing_login_does_not_wait_or_export(codex_home, monkeypatch, capsys):
-    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False)
-    monkeypatch.setattr(cli, "login_oauth_interactive", lambda **k: pytest.fail("must not wait"))
-    assert cli.main(["auth", "codex"]) == 1
-    output = capsys.readouterr()
-    assert output.out == "" and "交互终端" in output.err
-    assert not auth.thinllm_auth_path().exists()
-
-
-def test_corrupt_persisted_auth_is_exposed_without_starting_login(codex_home, monkeypatch):
-    path = codex_home / "auth.json"
-    path.write_text("{", encoding="utf-8")
-    monkeypatch.setattr(cli, "login_oauth_interactive", lambda **k: pytest.fail("must not hide corruption"))
-    with pytest.raises(json.JSONDecodeError):
-        cli.main(["auth", "codex"])
-    assert path.read_text(encoding="utf-8") == "{"
-
-
-@pytest.mark.parametrize("error", [KeyboardInterrupt(), RuntimeError("OAuth refused")])
-def test_failed_login_keeps_existing_credentials_without_export(codex_home, monkeypatch, capsys, error):
-    storage = auth.CodexTokenStorage(auth.thinllm_auth_path())
-    storage.save(OAuthToken("old", "refresh", 10**15, "account"))
-    before = storage.path.read_bytes()
-
-    def fail(**kwargs):
-        raise error
-
-    monkeypatch.setattr(cli, "login_oauth_interactive", fail)
-    if isinstance(error, KeyboardInterrupt):
-        assert cli.main(["auth", "codex", "--login"]) == 130
-    else:
-        with pytest.raises(RuntimeError, match="OAuth refused"):
-            cli.main(["auth", "codex", "--login"])
+def test_signed_identity_with_wrong_nonce_cannot_replace_active_credentials(tmp_path, capsys, oauth_server):
+    login, _ = oauth_server
+    path = tmp_path / "chatgpt.json"
+    args = ["auth", "chatgpt", "--auth-file", str(path)]
+    assert main(args) == 0
+    original = path.read_bytes()
+    capsys.readouterr()
+    login["nonce"] = "different-attempt"
+    assert main(args) == 1
     assert capsys.readouterr().out == ""
-    assert storage.path.read_bytes() == before
+    assert path.read_bytes() == original
 
 
-@pytest.mark.parametrize("value", ["code-only", "http://localhost:1455/auth/callback?code=x",
-                                  "https://evil.invalid/?code=x&state=y"])
-def test_manual_callback_requires_full_url_and_state(monkeypatch, value):
-    monkeypatch.setattr(cli.sys, "stdin", io.StringIO(value + "\n"))
-    with pytest.raises(ValueError, match="完整授权回调"):
-        cli._prompt_callback("paste")
+def test_loopback_ignores_mismatched_state_and_never_logs_callback_codes(monkeypatch, capsys):
+    with ThreadPoolExecutor(max_workers=1) as browser:
+        def visit(authorization_url):
+            params = parse_qs(urlsplit(authorization_url).query)
+            redirect = params["redirect_uri"][0]
+            assert redirect.startswith("http://127.0.0.1:")
+            with httpx.Client(trust_env=False) as client:
+                bad = client.get(redirect, params={"state": "different", "code": "bad-code"})
+                good = client.get(redirect, params={"state": "pending", "code": "good-code"})
+            assert bad.status_code == 400 and good.status_code == 200
+            assert "good-code" not in good.text
 
+        callbacks = []
 
-def test_oauth_pkce_uses_real_loopback_callback_and_storage_without_codex(codex_home, monkeypatch, capsys):
-    urls = []
-    listeners = []
+        def open_browser(url):
+            callbacks.append(browser.submit(visit, url))
+            return True
 
-    def start(state, on_code):
-        listener = server._OAuthServer(("127.0.0.1", 0), state, on_code)
-        threading.Thread(target=listener.serve_forever, daemon=True).start()
-        listeners.append(listener)
-        return listener, None
-
-    def open_browser(url):
-        urls.append(url)
-        params = parse_qs(urlsplit(url).query)
-        callback = f"http://127.0.0.1:{listeners[0].server_port}/auth/callback"
-        with httpx.Client(trust_env=False) as client:
-            assert client.get(callback, params={"code": "invalid", "state": "wrong"}).status_code == 400
-            assert client.get(callback, params={"code": "test-code", "state": params["state"][0]}).status_code == 200
-        return True
-
-    def exchange(request):
-        params = parse_qs(request.content.decode())
-        authorize = parse_qs(urlsplit(urls[0]).query)
-        challenge = base64.urlsafe_b64encode(hashlib.sha256(params["code_verifier"][0].encode()).digest()).rstrip(b"=").decode()
-        assert request.url == "https://auth.openai.com/oauth/token"
-        assert params["code"] == ["test-code"] and params["grant_type"] == ["authorization_code"]
-        assert params["redirect_uri"] == authorize["redirect_uri"]
-        assert authorize["code_challenge"] == [challenge] and authorize["code_challenge_method"] == ["S256"]
-        claims = base64.urlsafe_b64encode(json.dumps({"https://api.openai.com/auth": {"chatgpt_account_id": "account"}}).encode()).rstrip(b"=").decode()
-        return httpx.Response(200, json={"access_token": f"e30.{claims}.sig", "refresh_token": "refresh", "expires_in": 3600})
-
-    async_client = httpx.AsyncClient
-    monkeypatch.setattr(flow, "_start_local_server", start)
-    monkeypatch.setattr(flow.webbrowser, "open", open_browser)
-    monkeypatch.setattr(flow, "_should_open_browser", lambda: True)
-    monkeypatch.setattr(flow.httpx, "AsyncClient", lambda **kw: async_client(transport=httpx.MockTransport(exchange)))
-    assert cli.main(["auth", "codex"]) == 0
-    output = capsys.readouterr()
-    assert json.loads(output.out)["openai-codex"]["auth_file"] == auth.thinllm_auth_path().as_posix()
-    assert auth.CodexTokenStorage(auth.thinllm_auth_path()).load().account_id == "account"
-    assert "refresh_token" not in output.out + output.err
-
-
-@pytest.mark.process
-def test_python_module_command_exports_valid_configuration(codex_home):
-    write_login(codex_home)
-    result = subprocess.run(
-        [sys.executable, "-m", "thinllm", "auth", "codex"],
-        cwd=Path(__file__).resolve().parents[2],
-        env={**os.environ, "CODEX_HOME": str(codex_home), "USERPROFILE": str(codex_home.parent),
-             "HOME": str(codex_home.parent)},
-        capture_output=True, text=True, encoding="utf-8", check=True,
-    )
-    assert json.loads(result.stdout) == {"openai-codex": {
-        "auth_file": (codex_home / "auth.json").resolve().as_posix(),
-    }}
-    assert result.stderr == "" and "private-" not in result.stdout
+        monkeypatch.setattr(auth.webbrowser, "open", open_browser)
+        _, result = auth._browser_callback({"state": "pending"})
+        callbacks[0].result(timeout=10)
+    assert result["code"] == ["good-code"]
+    assert "code" not in capsys.readouterr().err

@@ -1,4 +1,4 @@
-"""Account-specific Codex model choices; no local catalog or CLI process."""
+"""Model choices and capabilities available to the configured connections."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -7,7 +7,7 @@ from datetime import date, datetime
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from thinllm.auth import CodexAuth, codex_auth_path
+from thinllm.auth import ChatGPTAuth
 from thinllm.errors import (
     InvalidLLMResponse,
     LLMAuthenticationError,
@@ -16,15 +16,13 @@ from thinllm.errors import (
 )
 from thinllm.http_errors import describe_transport_error
 from thinllm.model_metadata import openai_conversation_model, openai_metadata
-from thinllm.providers import PROVIDERS, resolve_endpoint
+from thinllm.providers import resolve_endpoint
 
-# The catalog endpoint requires the Codex catalog protocol's client version.
-# https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/endpoint/models.rs
-_CATALOG_CLIENT_VERSION = "0.164.0"
+_CHATGPT = "ChatGPT 订阅"
 
 
 def _catalog_transport_error(provider: str, error: httpx.TransportError) -> LLMTransientError:
-    credential = "登录凭据" if provider == "Codex" else "密钥"
+    credential = "登录凭据" if provider == _CHATGPT else "密钥"
     return LLMTransientError(
         f"{provider} 模型目录读取失败：{describe_transport_error(error)}\n"
         f"未取得供应商的完整 HTTP 响应，无法判断{credential}是否有效。")
@@ -35,8 +33,8 @@ def _check_catalog_response(provider: str, response: httpx.Response) -> None:
     if status == 200:
         return
     if status == 401:
-        action = ("请运行 python -m thinllm auth codex --login 重新登录，并更新 connections.json 中的 auth_file。"
-                  if provider == "Codex" else
+        action = ("请运行 python -m thinllm auth chatgpt 重新授权。"
+                  if provider == _CHATGPT else
                   f"请检查 connections.json 中的 {provider}.api_key，确认密钥正确且未失效后重新加载。")
         raise LLMAuthenticationError(f"{provider} 模型目录认证未通过（HTTP 401）。{action}")
     if status == 403:
@@ -59,38 +57,40 @@ class _ReasoningLevel(BaseModel):
     effort: str = Field(min_length=1)
 
 
-class _Model(BaseModel):
+class _ChatGPTModel(BaseModel):
     model_config = ConfigDict(strict=True)
     slug: str = Field(min_length=1)
     display_name: str = Field(min_length=1)
-    context_window: int | None = Field(gt=0)
-    default_reasoning_level: str | None
-    supported_reasoning_levels: list[_ReasoningLevel]
-    visibility: str = Field(min_length=1, exclude=True)
+    context_window: int | None = Field(default=None, gt=0)
+    default_reasoning_level: str | None = None
+    supported_reasoning_levels: list[_ReasoningLevel] = Field(default_factory=list)
+    visibility: str = Field(min_length=1)
 
 
-class _Catalog(BaseModel):
+class _ChatGPTCatalog(BaseModel):
     model_config = ConfigDict(strict=True)
-    models: list[_Model]
+    models: list[_ChatGPTModel]
 
 
-async def list_codex_models(connection: Mapping[str, str], *, transport: httpx.AsyncBaseTransport | None = None) -> list[dict]:
-    """Return picker-visible models using the same credentials as inference."""
-    path = codex_auth_path(connection["auth_file"]).resolve()
+async def _chatgpt_models(endpoint, transport: httpx.AsyncBaseTransport | None) -> list[dict]:
     try:
         async with httpx.AsyncClient(
-            base_url=PROVIDERS["openai-codex"].base_url + "/",
-            auth=CodexAuth(path), headers={"originator": "thinllm"}, timeout=30, transport=transport,
+            base_url=endpoint.base_url + "/", auth=ChatGPTAuth(endpoint.auth_file), timeout=30, transport=transport,
         ) as client:
-            response = await client.get("models", params={"client_version": _CATALOG_CLIENT_VERSION})
+            response = await client.get("models")
     except httpx.TransportError as error:
-        raise _catalog_transport_error("Codex", error) from error
-    _check_catalog_response("Codex", response)
+        raise _catalog_transport_error(_CHATGPT, error) from error
+    _check_catalog_response(_CHATGPT, response)
     try:
-        catalog = _Catalog.model_validate_json(response.content)
+        catalog = _ChatGPTCatalog.model_validate_json(response.content)
     except ValidationError as error:
-        raise InvalidLLMResponse("invalid_model_catalog", "Codex 模型列表格式不符合约定。") from error
-    return [model.model_dump() for model in catalog.models if model.visibility == "list"]
+        raise InvalidLLMResponse("invalid_model_catalog", f"{_CHATGPT}模型列表格式不符合约定。") from error
+    return [
+        {"model": endpoint.provider + "/" + item.slug, "name": item.display_name,
+         "context_window": item.context_window, "reasoning_levels": [level.effort for level in item.supported_reasoning_levels],
+         "default_reasoning_effort": item.default_reasoning_level, "web_search": False}
+        for item in catalog.models if item.visibility == "list"
+    ]
 
 
 class _Effort(BaseModel):
@@ -127,13 +127,9 @@ class _ApiCatalog(BaseModel):
 async def list_models(provider: str, connection: Mapping[str, str], *,
                       transport: httpx.AsyncBaseTransport | None = None) -> list[dict]:
     """Discover account-visible conversation models and native reasoning levels."""
-    if provider == "openai-codex":
-        return [{"model": provider + "/" + item["slug"], "name": item["display_name"],
-                 "context_window": item["context_window"],
-                 "reasoning_levels": [level["effort"] for level in item["supported_reasoning_levels"]],
-                 "default_reasoning_effort": item["default_reasoning_level"], "web_search": False}
-                for item in await list_codex_models(connection, transport=transport)]
     endpoint = resolve_endpoint(provider + "/catalog", connection)
+    if endpoint.auth_file is not None:
+        return await _chatgpt_models(endpoint, transport)
     headers = {} if endpoint.api_key is None else {"Authorization": f"Bearer {endpoint.api_key}"}
     try:
         async with httpx.AsyncClient(base_url=endpoint.base_url + "/", headers=headers,

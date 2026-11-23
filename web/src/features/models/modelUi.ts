@@ -13,7 +13,7 @@ export type ModelSettingsApi = {
 };
 export const PROVIDERS = [
   { value: "openai", label: "OpenAI", caption: "API Key" },
-  { value: "openai-codex", label: "Codex", caption: "ChatGPT 登录" },
+  { value: "openai-chatgpt", label: "ChatGPT 订阅", caption: "ChatGPT 登录" },
   { value: "deepseek", label: "DeepSeek", caption: "API Key" },
   { value: "stepfun", label: "StepFun", caption: "API Key" },
   { value: "qwen", label: "Qwen", caption: "百炼" },

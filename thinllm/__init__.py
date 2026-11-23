@@ -4,9 +4,9 @@ Stays thin: no cross-provider fallback, load balancing, circuit breaking,
 cost tracking, or user-defined providers.
 """
 
-from thinllm.catalog import list_codex_models, list_models
+from thinllm.catalog import list_models
 from thinllm.chat_completions import ChatCompletionsClient
-from thinllm.codex import CodexResponsesClient
+from thinllm.chatgpt import ChatGPTResponsesClient
 from thinllm.errors import (
     InvalidLLMResponse,
     LLMAuthenticationError,
@@ -33,7 +33,6 @@ from thinllm.types import (
 __all__ = [
     "PROVIDERS",
     "ChatCompletionsClient",
-    "CodexResponsesClient",
     "ContentDeltaSink",
     "Endpoint",
     "InvalidLLMResponse",
@@ -49,7 +48,6 @@ __all__ = [
     "ToolCall",
     "create_client",
     "describe_transport_error",
-    "list_codex_models",
     "list_models",
     "resolve_endpoint",
 ]
@@ -57,5 +55,5 @@ __all__ = [
 
 def create_client(endpoint, **kwargs):
     """Select the built-in wire protocol without involving product code."""
-    clients = {"openai": ResponsesClient, "openai-codex": CodexResponsesClient}
+    clients = {"openai": ResponsesClient, "openai-chatgpt": ChatGPTResponsesClient}
     return clients.get(endpoint.provider, ChatCompletionsClient)(endpoint, **kwargs)

@@ -72,7 +72,7 @@ async def _run_mode(app, prompt: str, thinking: bool, repeats: int):
 async def run(args: argparse.Namespace) -> dict[str, object]:
     config_started = time.perf_counter()
     app = load_app_config()
-    if app.default_model.partition("/")[0] in {"openai", "openai-codex"}:
+    if app.default_model.partition("/")[0] in {"openai", "openai-chatgpt"}:
         raise ValueError("本实验使用 Chat Completions 专用参数；Responses 模型请使用 tests/live 验证。")
     config_seconds = time.perf_counter() - config_started
     modes = (

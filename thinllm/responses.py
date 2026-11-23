@@ -1,4 +1,4 @@
-"""Responses wire adapter shared by OpenAI API and Codex connections."""
+"""Responses wire adapter shared by OpenAI API and ChatGPT plan usage."""
 from __future__ import annotations
 
 import json

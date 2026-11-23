@@ -46,7 +46,7 @@ class ModelConfig:
 
 def initial_connections() -> dict:
     defaults = {"vllm": "http://127.0.0.1:8000/v1", "ollama": "http://127.0.0.1:11434/v1"}
-    return {name: ({"auth_file": ""} if provider.uses_codex_auth else
+    return {name: ({"auth_file": ""} if provider.uses_chatgpt_auth else
                   {"api_key": ""} if provider.base_url is not None else
                    {"api_key": "", "base_url": defaults[name]})
             for name, provider in PROVIDERS.items()}
@@ -57,7 +57,7 @@ def parse_connections(data: object) -> dict[str, dict[str, str]]:
         raise ValueError("connections.json 必须包含全部内置供应商")
     for name, provider in PROVIDERS.items():
         connection = data[name]
-        fields = ({"auth_file"} if provider.uses_codex_auth else
+        fields = ({"auth_file"} if provider.uses_chatgpt_auth else
                   {"api_key"} if provider.base_url is not None else {"api_key", "base_url"})
         if type(connection) is not dict or set(connection) != fields:
             raise ValueError(f"{name} 连接字段必须是 {'/'.join(sorted(fields))}")
