@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="#快速开始">快速开始</a> ·
-  <a href="#codex-接入mcp">接入 Codex</a> ·
+  <a href="#codex-接入">接入 Codex</a> ·
   <a href="docs/README.md">文档</a>
 </p>
 
@@ -72,17 +72,18 @@ Bot 可按需使用随环境安装的 Chrome DevTools MCP、Playwright 和应用
 
 内置 PDF Reader（AnyMD）可提取文字与目录，按页查看 PDF 原始画面，并放大局部。双栏、图表和扫描页由支持视觉的聊天模型结合图片理解，无需配置 OCR；Bot 按需加载工具与阅读指南。
 
-## Codex 接入（MCP）
+## Codex 接入
 
-1. 打开「设置」→「Codex 接入」，生成 MCP 连接配置，配置到 Codex 中。
-2. Codex 聊天首次调用 `get_context` 后，即可在 Web 侧栏「外部会话」看到它；聊天身份自动识别，新聊天分别登记，原聊天重连时接续。
-3. 联系长期 Bot 讨论需求、开展调查或交接工作，持续读取它们的答复与后续消息。普通交流无需代码项目或版本。
+安装并登录同一台电脑上的 Codex Desktop 后，可以在 konden 的「外部会话」中继续使用 Codex 原生会话。
 
-可以这样向 Codex 说明任务：
+- **从 konden 开始。** 点「新建 Codex 会话」，首条消息被 Codex 接收后，会话就会出现在列表中。也可以点「添加已有 Codex 会话」按名称接入。通过「在 Desktop 打开」可以回到同一个聊天。
+- **从 Codex 开始。** 首次在 konden 打开「设置 → Codex 接入」，点「安装到本机 Codex」，再重启一次 Codex Desktop 载入 MCP 配置。之后在任意旧会话或新会话里说「连上 Konden」，如有工具授权提示，按提示确认。
 
-> 请通过已连接的 konden 联系xx，先讨论这个需求并持续收取回复。
+一份 MCP 配置可供多个会话共用，每条会话独立登记并保留自己的往来。Codex 与 konden 的日常消息通过 WebSocket 收发。Codex 侧断线时，在原会话里再次联系 konden 即可重连。konden 侧与本机 Codex 断开时，点击「重新连接 Codex」。**后续接入会话和断线重连都无需重启 Desktop。**
 
-连接配置可复用于多个 Codex 聊天，各聊天自动保持各自身份。共用凭据下的身份用于分流，不提供权限隔离；外部消息也不能代你批准命令或读取无关私聊。配置位置、工具调用、自动接续与撤销方式见[Codex 会话接入指南](docs/外部协作.md)。
+konden Bot 和 Codex 可以通过 A2A 互相派单。konden Bot 根据任务选择新建 Codex 会话或沿用已有会话。报告和文件回到发起派单的对话，图片可在 konden 中预览，文件可下载。
+
+使用示例、权限范围、自动接续与撤销方式见[Codex 会话接入指南](docs/外部协作.md)。
 
 ## 开发与文档
 
@@ -92,7 +93,7 @@ Bot 可按需使用随环境安装的 Chrome DevTools MCP、Playwright 和应用
 | --- | --- |
 | 产品解决的问题、当前场景与边界 | [产品定位](docs/产品定位.md) |
 | 安装参数、运行环境与数据位置 | [运行指南](docs/运行指南.md) |
-| Codex 接入长期 Bot 对话 | [Codex 会话接入指南](docs/外部协作.md) |
+| Codex 会话接入、派单与文件交付 | [Codex 会话接入指南](docs/外部协作.md) |
 | 在外部对话中交付独立验证 | [独立验证](docs/外部协作.md#独立验证) |
 | 模型连接与切换 | [模型配置](docs/模型配置.md) |
 | 源码验证入口 | [统一验证脚本](scripts/ci.py) |
