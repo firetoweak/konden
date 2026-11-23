@@ -69,6 +69,10 @@ from konden.channels.web.channel import (
     WebConnectionInactive,
     WebInputInvalid,
 )
+from konden.channels.web.chatgpt_authorization import (
+    ChatGPTAuthorization,
+    require_local_browser,
+)
 from konden.channels.web.directory_picker import (
     DirectoryPickerUnavailable,
     select_directory,
@@ -354,6 +358,7 @@ def create_web_app(
         mcp_app = create_mcp_app(lambda: app.state.external_messages)
         app.state.collaboration_mcp = mcp_app
         app.state.hub = events
+        app.state.chatgpt_authorization = ChatGPTAuthorization()
         app.state.external_messages = external_messages
         if external_messages is not None:
             external_messages.changed_sink = events.external_sessions_changed
@@ -452,7 +457,10 @@ def create_web_app(
     @app.exception_handler(ImageProviderError)
     async def unavailable_model_catalog(request: Request, error: ModelCatalogUnavailable | ImageProviderError):
         _LOGGER.warning("模型目录读取失败 [%s %s，konden HTTP 502]\n%s", request.method, request.url.path, error)
-        return JSONResponse(status_code=502, content={"detail": str(error)})
+        content = {"detail": str(error)}
+        if isinstance(error, ModelCatalogUnavailable) and error.reauthorize:
+            content["code"] = "chatgpt_reauthorization_required"
+        return JSONResponse(status_code=502, content=content)
 
     @app.exception_handler(SessionNotFoundError)
     async def session_not_found(_request: Request, error: SessionNotFoundError):
@@ -581,6 +589,28 @@ def create_web_app(
     @app.get("/api/model-settings/catalog/{provider}")
     async def model_catalog(provider: str, request: Request):
         return await request.app.state.models.catalog(provider)
+
+    @app.post("/api/model-settings/chatgpt/authorization", status_code=201)
+    async def start_chatgpt_authorization(body: ConnectionRequest, request: Request):
+        port = require_local_browser(request)
+        _channel(request)._require_connection(body.connection_id)
+        return await request.app.state.chatgpt_authorization.start(request.app.state.models.begin_chatgpt_sign_in, port)
+
+    @app.get("/api/model-settings/chatgpt/authorization/{authorization_id}")
+    async def chatgpt_authorization_status(authorization_id: str, request: Request):
+        require_local_browser(request)
+        status = request.app.state.chatgpt_authorization.status(authorization_id)
+        return JSONResponse(content=status, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/model-settings/chatgpt/authorization/{authorization_id}/open")
+    async def open_chatgpt_authorization(authorization_id: str, request: Request):
+        require_local_browser(request)
+        return request.app.state.chatgpt_authorization.open(authorization_id)
+
+    @app.get("/auth/callback", include_in_schema=False)
+    async def chatgpt_authorization_callback(request: Request):
+        require_local_browser(request)
+        return await request.app.state.chatgpt_authorization.callback(request)
 
     @app.get("/api/model-settings/search")
     async def search_settings(request: Request):

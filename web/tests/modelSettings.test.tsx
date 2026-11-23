@@ -9,6 +9,7 @@ import type { CatalogModel, ModelSettingsApi, ModelTestResult, Preferences } fro
 import type { SearchApi, SearchSettings, SearchTestResult } from "../src/features/models/searchTypes";
 
 const CONNECTIONS = [{provider:"openai",configured:true},{provider:"deepseek",configured:true}];
+const CHATGPT = { local: true, waiting: false, message: null, completed: null, start: () => {} };
 const MODELS: CatalogModel[] = [
   { id: "openai/alpha", provider: "openai", webSearch:true, name: "Alpha", description: "alpha", contextTokens: 100_000,
     efforts: [{ value: "medium", label: "中" }, { value: "high", label: "高" }], defaultEffort: "medium" },
@@ -41,7 +42,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); Reflect.deleteProperty(docum
 it("常用模型先编辑草稿，撤销不保存，保存才提交偏好", async () => {
   const api = fakeApi();
   const saved = vi.fn();
-  render(<MantineProvider env="test"><ModelSettingsDrawer active connected imageApi={fakeImageApi()} searchApi={fakeSearchApi()} connections={CONNECTIONS} preferences={PREFERENCES}
+  render(<MantineProvider env="test"><ModelSettingsDrawer active connected chatGPT={CHATGPT} imageApi={fakeImageApi()} searchApi={fakeSearchApi()} connections={CONNECTIONS} preferences={PREFERENCES}
     allModels={MODELS} onSaved={saved} api={api} /></MantineProvider>);
   const checkbox = await screen.findByRole("checkbox", { name: "在输入框显示 OpenAI Plain" });
   fireEvent.click(checkbox);
@@ -71,14 +72,46 @@ it("切换供应商后，迟到的旧目录不会覆盖新目录", async () => {
   api.loadModels = vi.fn((provider) => provider === "openai"
     ? new Promise<CatalogModel[]>((resolve) => { resolveOpenAi = resolve; })
     : Promise.resolve(MODELS.filter((item) => item.provider === provider)));
-  render(<MantineProvider env="test"><ModelSettingsDrawer active connected imageApi={fakeImageApi()} searchApi={fakeSearchApi()} connections={CONNECTIONS} preferences={PREFERENCES}
+  render(<MantineProvider env="test"><ModelSettingsDrawer active connected chatGPT={CHATGPT} imageApi={fakeImageApi()} searchApi={fakeSearchApi()} connections={CONNECTIONS} preferences={PREFERENCES}
     allModels={MODELS} onSaved={() => {}} api={api} /></MantineProvider>);
-  fireEvent.click(screen.getByRole("combobox", { name: "供应商" }));
-  fireEvent.click(await screen.findByRole("option", { name: "DeepSeek · API Key" }));
+  fireEvent.click(screen.getByRole("button", { name: "供应商" }));
+  fireEvent.click(await screen.findByRole("button", { name: "DeepSeek · API Key" }));
   expect(await screen.findByRole("checkbox", { name: "在输入框显示 DeepSeek Beta" })).toBeVisible();
   await act(async () => { resolveOpenAi(MODELS.filter((item) => item.provider === "openai")); });
   expect(screen.queryByRole("checkbox", { name: "在输入框显示 OpenAI Alpha" })).not.toBeInTheDocument();
   expect(screen.getByRole("checkbox", { name: "在输入框显示 DeepSeek Beta" })).toBeVisible();
+});
+
+it("在供应商行独立授权，成功后显示连接勾并加载当前 ChatGPT 目录", async () => {
+  const api = fakeApi();
+  const start = vi.fn();
+  const chatModel = { ...MODELS[0], id: "openai-chatgpt/example", name: "示例模型", provider: "openai-chatgpt" };
+  api.loadModels = vi.fn(async (provider) => provider === "openai-chatgpt" ? [chatModel] : MODELS);
+  const pane = (waiting: boolean, configured: boolean) => <MantineProvider env="test">
+    <ModelSettingsDrawer active connected imageApi={fakeImageApi()} searchApi={fakeSearchApi()}
+      chatGPT={{ ...CHATGPT, start, waiting, completed: configured ? "completed-attempt" : null }}
+      connections={[...CONNECTIONS, { provider: "openai-chatgpt", configured }]} preferences={PREFERENCES}
+      allModels={MODELS} onSaved={() => {}} api={api} />
+  </MantineProvider>;
+  const view = render(pane(false, false));
+  const picker = screen.getByRole("button", { name: "供应商" });
+  fireEvent.click(picker);
+  const chatGPT = await screen.findByRole("button", { name: "ChatGPT 订阅 · ChatGPT 登录" });
+  fireEvent.click(chatGPT);
+  expect(screen.getByText("在供应商下拉列表连接 ChatGPT 后，即可查看模型。")).toBeVisible();
+  expect(api.loadModels).not.toHaveBeenCalledWith("openai-chatgpt");
+  fireEvent.click(picker);
+  fireEvent.click(await screen.findByRole("button", { name: "Continue with ChatGPT" }));
+  expect(start).toHaveBeenCalledOnce();
+  expect(screen.getByRole("button", { name: "ChatGPT 订阅 · ChatGPT 登录", pressed: true })).toBeVisible();
+  view.rerender(pane(true, false));
+  expect(screen.getByText("等待授权…")).toBeVisible();
+  view.rerender(pane(false, true));
+  expect(screen.getByRole("img", { name: "ChatGPT 订阅已连接" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Continue with ChatGPT" })).not.toBeInTheDocument();
+  expect(api.savePreferences).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "ChatGPT 订阅 · ChatGPT 登录" }));
+  expect(await screen.findByRole("checkbox", { name: "在输入框显示 ChatGPT 订阅 示例模型" })).toBeVisible();
 });
 
 it("折叠菜单按需展示生效提示与勾选模型，推理子菜单保留供应商自己的档位", async () => {
@@ -119,7 +152,7 @@ it("已选模型按当前强度独立测试，切换分页保留进度，失败�
     return Promise.resolve<ModelTestResult>(++betaAttempts === 1
       ? { ok: false, message: "示例连接超时" } : { ok: true, latencyMs: 420 });
   });
-  render(<MantineProvider env="test"><ModelSettingsDrawer active connected imageApi={fakeImageApi()} searchApi={fakeSearchApi()} connections={CONNECTIONS} preferences={PREFERENCES}
+  render(<MantineProvider env="test"><ModelSettingsDrawer active connected chatGPT={CHATGPT} imageApi={fakeImageApi()} searchApi={fakeSearchApi()} connections={CONNECTIONS} preferences={PREFERENCES}
     allModels={MODELS} onSaved={() => {}} api={api} /></MantineProvider>);
   fireEvent.click(screen.getByRole("tab", { name: /已选模型/ }));
   const alpha = () => within(screen.getByRole("listitem", { name: "OpenAI Alpha" }));
@@ -221,7 +254,7 @@ it("图片配置按需读取，目录失败可重试，跨页草稿保留且独�
     {model:"openai/gpt-image-1.5",name:"gpt-image-1.5"}]);
   imageApi.saveSettings = vi.fn().mockRejectedValueOnce("保存失败").mockImplementation(async (value) => value);
   const api = fakeApi();
-  render(<MantineProvider env="test"><ModelSettingsDrawer active connected imageApi={imageApi}
+  render(<MantineProvider env="test"><ModelSettingsDrawer active connected chatGPT={CHATGPT} imageApi={imageApi}
     searchApi={fakeSearchApi()} connections={CONNECTIONS} preferences={PREFERENCES}
     allModels={MODELS} onSaved={vi.fn()} api={api}/></MantineProvider>);
   await screen.findByRole("checkbox", {name:"在输入框显示 OpenAI Plain"});

@@ -27,3 +27,7 @@ class LLMProviderError(RuntimeError):
 
 class LLMAuthenticationError(LLMProviderError):
     pass
+
+
+class ChatGPTReauthorizationRequired(LLMAuthenticationError):
+    pass

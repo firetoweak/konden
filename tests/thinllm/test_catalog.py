@@ -70,7 +70,7 @@ def test_provider_failure_identifies_reason_and_recovery_without_secrets(auth_fi
     assert reason in message and f"HTTP {status}" in message
     assert "private-response" not in message and "private-key" not in message
     if status == 401 and provider == "openai-chatgpt":
-        assert "python -m thinllm auth chatgpt" in message
+        assert "请重新授权" in message
     else:
         assert action in message
 

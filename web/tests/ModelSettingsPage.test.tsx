@@ -11,6 +11,8 @@ const {data,dispatch} = vi.hoisted(() => ({
 vi.mock("../src/app/hooks",()=>({useAppSelector:()=>"connection",useAppDispatch:()=>dispatch}));
 vi.mock("../src/api/kondenApi",()=>({
   useGetModelSettingsQuery:()=>({data}),
+  useGetChatGPTAuthorizationQuery:()=>({}),
+  useStartChatGPTAuthorizationMutation:()=>[vi.fn(),{isLoading:false}],
   kondenApi:{endpoints:Object.fromEntries(["getModelCatalog","saveModelSettings","getSearchConfig"].map((kind)=>[kind,{initiate:(value:unknown)=>({kind,value})}]))},
 }));
 beforeEach(()=>{

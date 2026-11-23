@@ -25,6 +25,19 @@
 .catalog-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 14px; }
 .catalog-filters .mantine-InputWrapper-label { margin-bottom: 7px; font-size: 12px; color: var(--mantine-color-dimmed); font-weight: 400; }
 .catalog-filters .mantine-Button-label { font-weight: 400; font-size: 12px; }
+.provider-trigger { text-align: start; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.provider-dropdown { padding: 4px; max-height: min(320px, 52dvh); overflow: auto; }
+.provider-option-row { display: flex; align-items: center; gap: 5px; padding-inline-end: 5px; border-radius: 4px; }
+.provider-option-row:hover, .provider-option-row[data-selected] { background: var(--konden-hover); }
+.provider-option { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; min-height: 33px; padding: 4px 8px; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.provider-option-check { flex: none; color: var(--mantine-color-dimmed); visibility: hidden; }
+.provider-option-row[data-selected] .provider-option-check { visibility: visible; }
+.provider-authorization { flex: none; max-width: 60%; padding-block: 3px; }
+.provider-authorization .mantine-Button-root { max-width: 100%; min-height: 27px; height: auto; padding-block: 4px; }
+.provider-authorization .mantine-Button-label { white-space: normal; line-height: 1.25; }
+.provider-authorization-wait { color: var(--mantine-color-dimmed); font-size: 12px; }
+.provider-authorization-check { display: flex; padding-inline: 6px; color: var(--mantine-color-teal-text); }
+.provider-authorization-message { padding: 5px 8px; overflow-wrap: anywhere; }
 .catalog-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 28px 20px; scrollbar-color: var(--konden-border-strong) transparent; }
 .catalog-column-head, .catalog-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; column-gap: 12px; }
 .catalog-column-head, .selected-models-column-head { position: sticky; top: 0; z-index: 1; padding: 13px 9px 12px; background: var(--konden-panel); border-bottom: 1px solid var(--konden-border); font-size: 11px; color: var(--mantine-color-dimmed); }

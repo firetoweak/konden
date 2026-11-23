@@ -22,6 +22,7 @@ import jwt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from thinllm.errors import (
+    ChatGPTReauthorizationRequired,
     InvalidLLMResponse,
     LLMAuthenticationError,
     LLMTransientError,
@@ -33,8 +34,8 @@ _RESOURCE = "https://api.openai.com/v1"
 _REGISTRATION_CLIENT = "dynamic_agent_client"
 _PLAN_SCOPES = frozenset({"offline_access", "resource.invoke", "chatgpt.tokens.use.direct"})
 _SCOPES = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
-_LOGIN = "python -m thinllm auth chatgpt"
 _CALLBACK = "/auth/callback"
+CHATGPT_SIGN_IN_TIMEOUT = 300
 _REFRESH_REJECTED = frozenset({
     "invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired",
     "refresh_token_invalidated", "refresh_token_reused",
@@ -73,10 +74,6 @@ class _Registration(BaseModel):
     account: _Account | None = None
 
 
-class _RefreshRejected(LLMAuthenticationError):
-    pass
-
-
 def chatgpt_auth_path(setting: str = "") -> Path:
     path = Path(setting.strip()).expanduser() if setting.strip() else Path.home() / ".thinllm" / "chatgpt.json"
     return path.resolve()
@@ -86,7 +83,7 @@ def _read_registration(path: Path) -> _Registration:
     try:
         return _Registration.model_validate_json(path.read_bytes())
     except FileNotFoundError as error:
-        raise MissingProviderSetting(f"ChatGPT 登录（请运行 {_LOGIN}）") from error
+        raise MissingProviderSetting("ChatGPT 登录") from error
 
 
 def _save_registration(path: Path, registration: _Registration) -> None:
@@ -106,7 +103,7 @@ def _save_registration(path: Path, registration: _Registration) -> None:
 def _account(registration: _Registration) -> _Account:
     account = registration.account
     if account is None or account.grant is None:
-        raise MissingProviderSetting(f"ChatGPT 订阅授权（请运行 {_LOGIN}）")
+        raise MissingProviderSetting("ChatGPT 订阅授权")
     return account
 
 
@@ -135,7 +132,7 @@ def _token_request(form: dict[str, str]) -> _Tokens:
         error = body.get("error") if type(body) is dict else None
         code = error.get("code") if type(error) is dict else error
         if type(code) is str and code in _REFRESH_REJECTED:
-            raise _RefreshRejected(f"ChatGPT 授权已失效，请运行 {_LOGIN} 重新授权。")
+            raise ChatGPTReauthorizationRequired("ChatGPT 授权已失效，请重新授权。")
     raise LLMAuthenticationError(f"ChatGPT 授权服务拒绝了请求（HTTP {status}）。请检查账号与授权。")
 
 
@@ -161,8 +158,8 @@ def _access_token(path: Path) -> str:
                                      "refresh_token": grant.refresh_token})
             scope = grant.scope if tokens.scope is None else tokens.scope
             if not _PLAN_SCOPES.issubset(scope.split()):
-                raise _RefreshRejected(f"ChatGPT 订阅权限已失效，请运行 {_LOGIN} 重新授权。")
-        except _RefreshRejected:
+                raise ChatGPTReauthorizationRequired("ChatGPT 订阅权限已失效，请重新授权。")
+        except ChatGPTReauthorizationRequired:
             registration.account = account.model_copy(update={"grant": None})
             _save_registration(path, registration)
             raise
@@ -179,12 +176,12 @@ class ChatGPTAuth(httpx.Auth):
         try:
             token = await asyncio.to_thread(_access_token, self.path)
         except MissingProviderSetting as error:
-            raise LLMAuthenticationError(error.setting) from error
+            raise ChatGPTReauthorizationRequired(error.setting) from error
         request.headers["Authorization"] = f"Bearer {token}"
         yield request
 
 
-def _browser_callback(params: dict[str, str]) -> tuple[str, dict[str, list[str]]]:
+def _browser_callback(path: Path) -> tuple[ChatGPTSignIn, dict[str, list[str]]]:
     callback = None
 
     class Callback(BaseHTTPRequestHandler):
@@ -201,8 +198,7 @@ def _browser_callback(params: dict[str, str]) -> tuple[str, dict[str, list[str]]
                 self.send_error(404)
                 return
             values = parse_qs(url.query, keep_blank_values=True)
-            states = values.get("state", [])
-            if len(states) != 1 or not secrets.compare_digest(states[0].encode(), params["state"].encode()):
+            if not sign_in.accepts(values.get("state", [])):
                 self.send_error(400)
                 return
             callback = values
@@ -214,16 +210,16 @@ def _browser_callback(params: dict[str, str]) -> tuple[str, dict[str, list[str]]
 
     with HTTPServer(("127.0.0.1", 0), Callback) as server:
         redirect = f"http://127.0.0.1:{server.server_port}{_CALLBACK}"
-        url = f"{_ISSUER}/api/accounts/authorize?{urlencode({**params, 'redirect_uri': redirect})}"
-        if not webbrowser.open(url):
+        sign_in = ChatGPTSignIn(path, redirect)
+        if not webbrowser.open(sign_in.authorization_url):
             raise LLMAuthenticationError("无法打开系统浏览器，请在本机终端重新运行授权命令。")
         server.timeout = 1
-        deadline = time.monotonic() + 300
+        deadline = time.monotonic() + CHATGPT_SIGN_IN_TIMEOUT
         while callback is None and time.monotonic() < deadline:
             server.handle_request()
     if callback is None:
         raise LLMAuthenticationError("等待 ChatGPT 授权超时，请重新运行授权命令。")
-    return redirect, callback
+    return sign_in, callback
 
 
 def _verified_subject(id_token: str, client_id: str, nonce: str) -> str:
@@ -240,60 +236,87 @@ def _verified_subject(id_token: str, client_id: str, nonce: str) -> str:
     return claims["sub"]
 
 
+class ChatGPTSignIn:
+    """A single authorization attempt, independent of how its callback arrives."""
+
+    def __init__(self, path: Path, redirect_uri: str):
+        self._path = path
+        self._redirect_uri = redirect_uri
+        self._state = secrets.token_urlsafe(32)
+        self._verifier = secrets.token_urlsafe(32)
+        self._nonce = secrets.token_urlsafe(32)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with FileLock(str(path) + ".lock", timeout=30):
+            try:
+                registration = _read_registration(path)
+            except MissingProviderSetting:
+                registration = _Registration(host_id=f"urn:uuid:{uuid4()}")
+                _save_registration(path, registration)
+        self._registration = registration
+
+    @property
+    def authorization_url(self) -> str:
+        previous = self._registration.account
+        params = {
+            "client_id": _REGISTRATION_CLIENT if previous is None else previous.client_id,
+            "ext_agent_host_id": self._registration.host_id,
+            "response_type": "code",
+            "redirect_uri": self._redirect_uri,
+            "scope": _SCOPES,
+            "resource": _RESOURCE,
+            "state": self._state,
+            "nonce": self._nonce,
+            "code_challenge": urlsafe_b64encode(sha256(self._verifier.encode()).digest()).decode().rstrip("="),
+            "code_challenge_method": "S256",
+        }
+        if previous is None:
+            params["agent_name_hint"] = "konden"
+        else:
+            params["id_token_hint"] = previous.id_token
+            if previous.grant is None:
+                params["prompt"] = "consent"
+        return f"{_ISSUER}/api/accounts/authorize?{urlencode(params)}"
+
+    def accepts(self, states: list[str]) -> bool:
+        return len(states) == 1 and secrets.compare_digest(states[0].encode(), self._state.encode())
+
+    def complete(self, callback: dict[str, list[str]]) -> None:
+        if not self.accepts(callback.get("state", [])):
+            raise LLMAuthenticationError("ChatGPT 回调与本次授权不匹配。")
+        if "error" in callback:
+            raise LLMAuthenticationError("ChatGPT 授权未完成。请确认同意使用订阅额度。")
+        previous = self._registration.account
+        codes = callback.get("code", [])
+        client_ids = callback.get("client_id", [] if previous is None else [previous.client_id])
+        if len(codes) != 1 or not codes[0] or len(client_ids) != 1 or client_ids[0] in {"", _REGISTRATION_CLIENT}:
+            raise LLMAuthenticationError("ChatGPT 授权回调缺少有效的授权码或客户端标识。")
+        client_id = client_ids[0]
+        if previous is not None and client_id != previous.client_id:
+            raise LLMAuthenticationError("ChatGPT 授权回调与当前账号注册不匹配。")
+        tokens = _token_request({
+            "grant_type": "authorization_code", "client_id": client_id, "code": codes[0],
+            "code_verifier": self._verifier, "redirect_uri": self._redirect_uri,
+        })
+        if tokens.id_token is None:
+            raise InvalidLLMResponse("invalid_oauth_response", "ChatGPT 授权响应缺少身份凭据。")
+        subject = _verified_subject(tokens.id_token, client_id, self._nonce)
+        if previous is not None and subject != previous.subject:
+            raise LLMAuthenticationError("ChatGPT 授权账号与此前使用的账号不同。")
+        scope = tokens.scope or ""
+        grant = _grant(tokens, scope) if _PLAN_SCOPES.issubset(scope.split()) else None
+        with FileLock(str(self._path) + ".lock", timeout=30):
+            current = _read_registration(self._path)
+            current_identity = None if current.account is None else current.account.id_token
+            previous_identity = None if previous is None else previous.id_token
+            if current.host_id != self._registration.host_id or current_identity != previous_identity:
+                raise LLMAuthenticationError("已有另一次 ChatGPT 登录完成，请重新授权。")
+            if grant is not None or current.account is None or current.account.grant is None:
+                current.account = _Account(client_id=client_id, subject=subject, id_token=tokens.id_token, grant=grant)
+                _save_registration(self._path, current)
+        if grant is None:
+            raise LLMAuthenticationError("当前账号尚未授权使用 ChatGPT 订阅额度，请重新授权并同意使用额度。")
+
+
 def sign_in_chatgpt(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    lock = FileLock(str(path) + ".lock", timeout=30)
-    with lock:
-        try:
-            registration = _read_registration(path)
-        except MissingProviderSetting:
-            registration = _Registration(host_id=f"urn:uuid:{uuid4()}")
-            _save_registration(path, registration)
-    previous = registration.account
-    verifier = secrets.token_urlsafe(32)
-    nonce = secrets.token_urlsafe(32)
-    params = {
-        "client_id": _REGISTRATION_CLIENT if previous is None else previous.client_id,
-        "ext_agent_host_id": registration.host_id,
-        "response_type": "code",
-        "scope": _SCOPES,
-        "resource": _RESOURCE,
-        "state": secrets.token_urlsafe(32),
-        "nonce": nonce,
-        "code_challenge": urlsafe_b64encode(sha256(verifier.encode()).digest()).decode().rstrip("="),
-        "code_challenge_method": "S256",
-    }
-    if previous is None:
-        params["agent_name_hint"] = "konden"
-    else:
-        params["id_token_hint"] = previous.id_token
-        if previous.grant is None:
-            params["prompt"] = "consent"
-    redirect, callback = _browser_callback(params)
-    if "error" in callback:
-        raise LLMAuthenticationError("ChatGPT 授权未完成。请确认同意使用订阅额度。")
-    codes = callback.get("code", [])
-    client_ids = callback.get("client_id", [] if previous is None else [previous.client_id])
-    if len(codes) != 1 or not codes[0] or len(client_ids) != 1 or client_ids[0] in {"", _REGISTRATION_CLIENT}:
-        raise LLMAuthenticationError("ChatGPT 授权回调缺少有效的授权码或客户端标识。")
-    client_id = client_ids[0]
-    if previous is not None and client_id != previous.client_id:
-        raise LLMAuthenticationError("ChatGPT 授权回调与当前账号注册不匹配。")
-    tokens = _token_request({"grant_type": "authorization_code", "client_id": client_id, "code": codes[0],
-                             "code_verifier": verifier, "redirect_uri": redirect})
-    if tokens.id_token is None:
-        raise InvalidLLMResponse("invalid_oauth_response", "ChatGPT 授权响应缺少身份凭据。")
-    subject = _verified_subject(tokens.id_token, client_id, nonce)
-    if previous is not None and subject != previous.subject:
-        raise LLMAuthenticationError("ChatGPT 授权账号与此前使用的账号不同。")
-    scope = tokens.scope or ""
-    grant = _grant(tokens, scope) if _PLAN_SCOPES.issubset(scope.split()) else None
-    with lock:
-        current = _read_registration(path)
-        current_id = None if current.account is None else current.account.client_id
-        if current.host_id != registration.host_id or current_id != (None if previous is None else previous.client_id):
-            raise LLMAuthenticationError("已有另一次 ChatGPT 登录完成，请重新运行授权命令。")
-        current.account = _Account(client_id=client_id, subject=subject, id_token=tokens.id_token, grant=grant)
-        _save_registration(path, current)
-    if grant is None:
-        raise LLMAuthenticationError(f"当前账号尚未授权使用 ChatGPT 订阅额度。请运行 {_LOGIN} 并同意授权。")
+    sign_in, callback = _browser_callback(path)
+    sign_in.complete(callback)

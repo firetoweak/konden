@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from thinllm.auth import ChatGPTAuth
 from thinllm.errors import (
+    ChatGPTReauthorizationRequired,
     InvalidLLMResponse,
     LLMAuthenticationError,
     LLMProviderError,
@@ -33,10 +34,11 @@ def _check_catalog_response(provider: str, response: httpx.Response) -> None:
     if status == 200:
         return
     if status == 401:
-        action = ("请运行 python -m thinllm auth chatgpt 重新授权。"
-                  if provider == _CHATGPT else
-                  f"请检查 connections.json 中的 {provider}.api_key，确认密钥正确且未失效后重新加载。")
-        raise LLMAuthenticationError(f"{provider} 模型目录认证未通过（HTTP 401）。{action}")
+        message = f"{provider} 模型目录认证未通过（HTTP 401）。"
+        if provider == _CHATGPT:
+            raise ChatGPTReauthorizationRequired(message + "请重新授权。")
+        raise LLMAuthenticationError(
+            message + f"请检查 connections.json 中的 {provider}.api_key，确认密钥正确且未失效后重新加载。")
     if status == 403:
         raise LLMAuthenticationError(
             f"{provider} 拒绝访问模型目录（HTTP 403）。请检查账号权限、服务地区限制或代理的访问策略。")

@@ -1,21 +1,24 @@
 import {
   ActionIcon, Alert, Badge, Button, Checkbox, Group,
-  Select, Skeleton, Stack, Tabs, Text, TextInput, Tooltip,
+  Skeleton, Stack, Tabs, Text, TextInput, Tooltip,
 } from "@mantine/core";
 import { IconCheck, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { PROVIDERS, providerName, type CatalogModel, type ModelSettingsApi, type Preferences } from "./modelUi";
+import { CHATGPT_PROVIDER, catalogFailure, providerName, type CatalogModel, type ModelSettingsApi, type Preferences } from "./modelUi";
 import { SelectedModelsPanel } from "./SelectedModelsPanel";
 import { SearchSettingsPanel } from "./SearchSettingsPanel";
 import type { SearchApi } from "./searchTypes";
 import { ImageSettingsPanel, type ImageApi } from "./ImageSettingsPanel";
+import { ProviderPicker } from "./ProviderPicker";
+import type { ChatGPTAuthorization } from "./useChatGPTAuthorization";
 
-export function ModelSettingsPanel({ active, connected, preferences, allModels, onSaved, api, searchApi, imageApi, connections }: {
+export function ModelSettingsPanel({ active, connected, preferences, allModels, onSaved, api, searchApi, imageApi, connections, chatGPT }: {
   active: boolean;
   connected: boolean;
   searchApi: SearchApi;
   imageApi: ImageApi;
   connections: {provider: string; configured: boolean}[];
+  chatGPT: ChatGPTAuthorization;
   preferences: Preferences;
   allModels: CatalogModel[];
   onSaved(value: Preferences): void;
@@ -32,10 +35,16 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [rejectedAuthorization, setRejectedAuthorization] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const baseline = useRef(preferences);
+  const authorization = chatGPT.completed ?? "";
+  const chatGPTConnected = connections.some((item) => item.provider === CHATGPT_PROVIDER && item.configured)
+    && rejectedAuthorization !== authorization;
+  const catalogBlocked = provider === CHATGPT_PROVIDER && !chatGPTConnected;
+  const catalogAuthorization = provider === CHATGPT_PROVIDER ? authorization : null;
   useEffect(() => {
     const previous = baseline.current;
     setDraft((current) => JSON.stringify(current) === JSON.stringify(previous) ? structuredClone(preferences) : current);
@@ -43,15 +52,24 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
   }, [preferences]);
   useEffect(() => {
     if (!active) return;
+    setError(null);
+    setCatalog([]);
+    if (catalogBlocked) {
+      setLoading(false);
+      return;
+    }
     let current = true;
-    setLoading(true); setError(null); setCatalog([]);
+    setLoading(true);
     api.loadModels(provider).then((models) => {
       if (current) { setCatalog(models); setKnown((previous) => mergeModels(previous, models)); }
     }, (cause: unknown) => {
-      if (current) setError(cause instanceof Error ? cause.message : String(cause));
+      if (!current) return;
+      const failure = catalogFailure(cause);
+      if (failure.code && catalogAuthorization !== null) setRejectedAuthorization(catalogAuthorization);
+      setError(failure.detail);
     }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [active, provider, refresh, api]);
+  }, [active, provider, refresh, api, catalogBlocked, catalogAuthorization]);
 
   const changed = JSON.stringify(draft) !== JSON.stringify(preferences);
   const hasInvalidThreshold = Object.values(draft.favorites).some((favorite) =>
@@ -61,7 +79,8 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
   const availableModels = mergeModels(allModels, known);
   const selectedModels = availableModels.filter((item) => draft.favorites[item.id]);
   const disabled = saving || !connected;
-  const selectedProviders = [...new Set(selectedModels.map((item) => item.provider))].sort().join(",");
+  const selectedProviders = [...new Set(selectedModels.map((item) => item.provider))]
+    .filter((item) => item !== CHATGPT_PROVIDER || chatGPTConnected).sort().join(",");
   useEffect(() => {
     if (!active || page !== "selected") return;
     let current = true; setSelectedError(null);
@@ -72,10 +91,14 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
     Promise.allSettled(requests).then((results) => {
       if (!current) return;
       const failures = results.filter((item) => item.status === "rejected");
-      if (failures.length) setSelectedError(failures.map((item) => String(item.reason)).join("；"));
+      if (failures.length) {
+        const reasons = failures.map((item) => catalogFailure(item.reason));
+        if (reasons.some((item) => item.code)) setRejectedAuthorization(authorization);
+        setSelectedError(reasons.map((item) => item.detail).join("；"));
+      }
     });
     return () => { current = false; };
-  }, [active, page, selectedProviders, api]);
+  }, [active, page, selectedProviders, api, authorization]);
 
   function toggle(item: CatalogModel, checked: boolean) {
     setSavedNotice(false);
@@ -110,19 +133,23 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
       <Tabs.Panel value="providers" className="model-settings-page">
         <div className="catalog-toolbar">
           <div className="catalog-filters">
-            <Select label="供应商" data={PROVIDERS.map((item) => ({ value: item.value, label: item.label + " · " + item.caption }))}
-              value={provider} allowDeselect={false} disabled={disabled}
-              onChange={(value) => { setProvider(value!); setQuery(""); }} />
-            <Button variant="default" leftSection={<IconRefresh size={15} />} loading={loading}
+            <ProviderPicker provider={provider} disabled={disabled} chatGPT={chatGPT} chatGPTConnected={chatGPTConnected}
+              onChange={(value) => { setProvider(value); setQuery(""); }} />
+            <Button variant="default" leftSection={<IconRefresh size={15} />} loading={loading} disabled={catalogBlocked}
               onClick={() => setRefresh((value) => value + 1)}>刷新目录</Button>
           </div>
-          <TextInput aria-label="搜索供应商模型" placeholder="搜索模型名称或 ID" value={query}
+          <TextInput aria-label="搜索供应商模型" placeholder="搜索模型名称或 ID" value={query} disabled={catalogBlocked}
             onChange={(event) => setQuery(event.currentTarget.value)} leftSection={<IconSearch size={16} />}
             rightSection={query ? <ActionIcon variant="subtle" color="gray" aria-label="清空模型搜索" onClick={() => setQuery("")}><IconX size={14} /></ActionIcon> : null} />
         </div>
         <div className="catalog-scroll" aria-label="供应商模型目录" aria-busy={loading}>
           <div className="catalog-column-head" aria-hidden="true"><span>使用</span><span>模型</span></div>
-          {loading ? <Stack gap={14} p="lg" aria-label="正在读取模型目录"><Skeleton height={48} /><Skeleton height={48} /><Skeleton height={48} /></Stack>
+          {catalogBlocked ? <div className="catalog-empty">
+            <Text size="sm" c="dimmed">{rejectedAuthorization === authorization
+              ? "ChatGPT 授权已失效，请在供应商下拉列表重新授权。"
+              : "在供应商下拉列表连接 ChatGPT 后，即可查看模型。"}</Text>
+          </div>
+            : loading ? <Stack gap={14} p="lg" aria-label="正在读取模型目录"><Skeleton height={48} /><Skeleton height={48} /><Skeleton height={48} /></Stack>
             : error ? <Alert color="red" title="模型目录读取失败" m="lg">
               <Text size="sm" style={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{error}</Text><Button size="xs" variant="subtle" color="red" mt="sm" onClick={() => setRefresh((value) => value + 1)}>重新加载</Button>
             </Alert>
