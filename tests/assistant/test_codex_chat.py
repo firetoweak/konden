@@ -16,6 +16,19 @@ THREAD_ID = str(UUID(IDENTITY))
 TEXT = "请继续刚才的讨论。"
 
 
+def test_chat_catalog_keeps_first_entry_for_each_native_identity():
+    first = {"id": THREAD_ID, "name": "同名会话", "cwd": "example"}
+    other = {**first, "id": str(UUID(int=2))}
+    duplicate = {**first, "id": IDENTITY, "cwd": "older"}
+    request = AsyncMock(return_value={"data": [first, other, duplicate]})
+    link = SimpleNamespace(require=AsyncMock(return_value=SimpleNamespace(request=request)))
+
+    assert asyncio.run(codex_chat.list_codex_chats(link, "")) == [
+        {"identity": IDENTITY, "name": "同名会话", "workspace": "example"},
+        {"identity": UUID(int=2).hex, "name": "同名会话", "workspace": "example"},
+    ]
+
+
 def test_direct_send_uses_native_user_input_and_returns_saved_history(tmp_path: Path):
     class Server:
         def __init__(self):

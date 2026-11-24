@@ -103,12 +103,14 @@ async def list_codex_chats(link, query):
     if query:
         params["searchTerm"] = query
     result = await server.request("thread/list", params)
-    chats = []
+    chats_by_identity = {}
     for item in result["data"]:
         thread = ThreadSummary.model_validate(item)
         identity = UUID(thread.id).hex
-        chats.append({"identity": identity, "name": thread.name or external_name(identity), "workspace": thread.cwd})
-    return chats
+        chats_by_identity.setdefault(identity, {
+            "identity": identity, "name": thread.name or external_name(identity), "workspace": thread.cwd,
+        })
+    return list(chats_by_identity.values())
 
 
 def _message(item):
