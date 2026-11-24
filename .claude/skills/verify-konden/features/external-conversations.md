@@ -9,7 +9,7 @@
 - `a2a-codex`：从普通 Bot 的对话直接委派给 Codex，分别要求开新会话和沿用已关联会话。首单被 Codex 接纳后，打开「外部会话」核对原生 ID 和 A2A 派单来源。交付卡上的「在 Desktop 打开」指向同一个 ID。确认接收对话中图片可放大、原件可下载，刷新仍可查看。再从已接入的 Desktop 聊天给 Konden Bot 派单，核对请求与回执都属于原会话，收到终态交付后才结束。
 - `local-codex`：从「外部会话 → 新建 Codex 会话」打开输入页。未发送时侧栏无新增，切走再返回仍能编辑草稿。发送首条消息，核对出现一条外部会话。在原会话内再发一轮核对上下文，在 Desktop 按会话名搜索并检查原文和回复。单独检查「在 Desktop 打开」的跳转。Desktop 占用该聊天时，Web 发送应有提示且保留草稿。Desktop 续聊后刷新 Web，核对 `GET /api/external-sessions/<identity>/codex/chat` 与页面一致，侧栏仍只有一条。
 - `register`：在 Desktop 建一条聊天，随后在 Konden「添加已有 Codex 会话」按原生名称选择，核对同一标题、正文和 Desktop 跳转。再在该 Desktop 聊天说「连上 Konden」，只出现一个条目。停止本次 Konden 专用的 App Server 后，确认侧栏显示断开并能点击重连，原会话保持同一个链接和历史。其他新聊天各自登记。原生改名后刷新列表和会话页，核对标题更新。长标题不撑开名册，悬停可查看全名。
-- `workspace-codex`：在「添加已有 Codex 会话」展开或收起一个工作区，搜索会话时只显示命中的分组。检查单独登记的 worktree 仍属它自己的工作区，归属不明确的会话出现在「其他会话」。点工作区旁的「＋」，检查新建页已带入工作区，单根目录自动选中，多根目录时用户先选择。切换到另一个工作区确认草稿独立。发送首条消息后，核对 `GET /api/codex/chats` 的归属以及会话页的工作目录和 Desktop 链接。
+- `workspace-codex`：在「添加已有 Codex 会话」展开或收起一个工作区，搜索会话时只显示命中的分组。检查单独登记的 worktree 仍属它自己的工作区，归属不明确的会话出现在「其他会话」。从「新建 Codex 会话」右上角的「工作目录」选择 Codex 工作区，检查空工作区也可选、未发送草稿可编辑、单根目录自动选中，多根目录时先选根目录。首条消息失败后切换工作区再返回，沿原会话重试。核对 `GET /api/codex/projects`、发送后 `GET /api/codex/chats` 的归属以及会话页的工作目录和 Desktop 链接。
 - `duplex`：外部用 `send_message` 向同事发送正文，Bot 用 `send_external_message` 按外部 identity 发言；可引用此前消息，也可独立继续话题。Bot 用 `list_external_sessions` 查询已登记对象。
 - `inbox`：`read_messages` 按外部会话和游标读取 Bot 与用户的三方共享发言，标明 Bot、来源、接收方和是否请求响应；有界等待、分页与重启后续读不改变消息归属。
 - `attachments`：三方输入框 `添加附件` 打开浏览器文件选择器，可多选，也支持拖入和粘贴；上传中或失败时不能发送，失败可重试或移除，附件可单独发送且文件名不参与点名。图片支持放大和 `下载原图`，普通文件以名称、大小和下载卡片呈现。Codex `send_message.files` 与 Bot `send_external_message.files` 接收各自工作目录内相对路径；目录外文件拒绝，发送重试复用原副本。MCP `read_attachment` 只接受当前聊天共享消息中出现的 message_id 与 attachment_id，图片返回 ImageContent，普通文件返回具名材料路径。

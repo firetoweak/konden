@@ -53,10 +53,7 @@ export function ExternalRoster({ query, onOpen, compact = false }: { query: stri
     </Tooltip>
   </>;
   return <section className="roster-section external-roster" aria-label="外部会话">
-    {adding ? <CodexCatalogModal onClose={() => setAdding(false)} onAdded={onAdded} onNew={(projectId) => {
-      setAdding(false);
-      onOpen(`/external/new?project=${encodeURIComponent(projectId)}`);
-    }} /> : null}
+    {adding ? <CodexCatalogModal onClose={() => setAdding(false)} onAdded={onAdded} /> : null}
     {removing === null ? null : <RemoveExternalSessionModal target={removing} onClose={() => setRemoving(null)} onRemoved={() => {
       if (identity === removing.identity) onOpen("/");
       setRemoving(null);

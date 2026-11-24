@@ -75,7 +75,6 @@ def test_chat_catalog_honors_registered_roots_and_groups_unique_worktrees(tmp_pa
         group["project"]["id"] if group["project"] is not None else None: [chat["name"] for chat in group["chats"]]
         for group in catalog["groups"]
     } == {
-        "main": [],
         "personal": ["独立登记", "原生归属优先"],
         "konden": ["相关 worktree"],
         None: ["共用仓库归属不明确"],

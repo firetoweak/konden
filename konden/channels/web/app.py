@@ -773,9 +773,9 @@ def create_web_app(
     async def list_local_codex(request: Request, query: str = ""):
         return await _channel(request).list_local_codex(query)
 
-    @app.get("/api/codex/projects/{project_id}")
-    async def local_codex_project(project_id: str, request: Request):
-        return await _channel(request).local_codex_project(project_id)
+    @app.get("/api/codex/projects")
+    async def list_local_codex_projects(request: Request):
+        return await _channel(request).list_local_codex_projects()
 
     @app.post("/api/codex/chats", status_code=201)
     async def prepare_local_codex(body: PrepareLocalCodexRequest, request: Request):

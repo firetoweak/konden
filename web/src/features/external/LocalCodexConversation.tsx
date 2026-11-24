@@ -1,12 +1,12 @@
-import { ActionIcon, Alert, Button, Group, Loader, ScrollArea, Select, Text, Textarea } from "@mantine/core";
-import { skipToken } from "@reduxjs/toolkit/query";
+import { ActionIcon, Alert, Button, Group, Loader, ScrollArea, Select, Stack, Text, Textarea } from "@mantine/core";
+import type { ComboboxData, ComboboxItem } from "@mantine/core";
 import { IconArrowUp, IconPlugConnected } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import type { ExternalSessionSummary } from "../../api/contracts";
+import type { ExternalSessionSummary, NativeCodexProject } from "../../api/contracts";
 import {
-  apiErrorDetail, kondenApi, useGetLocalCodexChatQuery, useGetNativeCodexProjectQuery, useGetWorkspacesQuery,
+  apiErrorDetail, kondenApi, useGetLocalCodexChatQuery, useGetNativeCodexProjectsQuery, useGetWorkspacesQuery,
   usePrepareLocalCodexMutation, useSendLocalCodexMutation, useStartLocalCodexMutation,
 } from "../../api/kondenApi";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -19,32 +19,52 @@ const NEW_DRAFT = "local-codex:new";
 const PENDING_THREAD = "konden.codexFirstMessage.thread";
 const speakers = { user: "你的消息", codex: "Codex 的回复", delegation: "Konden Bot 的派单" };
 
-export function NewLocalCodexConversation() {
-  const [params] = useSearchParams();
-  const projectId = params.get("project");
-  return <NewLocalCodexDraft key={projectId === null ? NEW_DRAFT : `project:${projectId}`} projectId={projectId} />;
+function draftKeys(projectId: string | null) {
+  const suffix = projectId === null ? "" : `:project:${projectId}`;
+  return { draftKey: NEW_DRAFT + suffix, pendingKey: PENDING_THREAD + suffix };
 }
 
-function NewLocalCodexDraft({ projectId }: { projectId: string | null }) {
+export function NewLocalCodexConversation() {
+  const [params, setParams] = useSearchParams();
+  const projectId = params.get("project");
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const projects = useGetNativeCodexProjectsQuery(undefined, { refetchOnMountOrArgChange: true });
+
+  function onDirectoryChange(nextProject: string | null, nextWorkspace: string | null) {
+    if (nextProject === null) setWorkspaceId(nextWorkspace);
+    if (nextProject === projectId) return;
+    const next = new URLSearchParams(params);
+    if (nextProject === null) next.delete("project");
+    else next.set("project", nextProject);
+    setParams(next, { replace: true });
+  }
+
+  return <NewLocalCodexDraft key={draftKeys(projectId).draftKey} projectId={projectId} workspaceId={workspaceId}
+    projectsQuery={projects} onDirectoryChange={onDirectoryChange} />;
+}
+
+function NewLocalCodexDraft({ projectId, workspaceId, projectsQuery, onDirectoryChange }: {
+  projectId: string | null; workspaceId: string | null;
+  projectsQuery: { currentData?: NativeCodexProject[] | null; isFetching: boolean; error?: unknown; refetch: () => unknown };
+  onDirectoryChange: (projectId: string | null, workspaceId: string | null) => void;
+}) {
   const navigate = useNavigate();
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
-  const suffix = projectId === null ? "" : `:project:${projectId}`;
-  const draftKey = NEW_DRAFT + suffix;
-  const pendingKey = PENDING_THREAD + suffix;
-  const { data: workspaces = [] } = useGetWorkspacesQuery(undefined, { skip: projectId !== null });
-  const { currentData: project, isFetching: readingProject, error: projectError, refetch: refetchProject } =
-    useGetNativeCodexProjectQuery(projectId ?? skipToken, { refetchOnMountOrArgChange: true });
+  const { draftKey, pendingKey } = draftKeys(projectId);
+  const { data: workspaces = [] } = useGetWorkspacesQuery();
+  const { currentData: projects, isFetching: readingProjects, error: projectError, refetch: refetchProjects } = projectsQuery;
+  const project = projects?.find((item) => item.id === projectId);
   const [prepare, { isLoading: preparing }] = usePrepareLocalCodexMutation({ fixedCacheKey: `${draftKey}:prepare` });
   const [start, { isLoading: starting }] = useStartLocalCodexMutation({ fixedCacheKey: `${draftKey}:start` });
   const [draft, setDraft] = useState(() => restoreComposerText(draftKey));
-  const [selection, setSelection] = useState<string | null>(null);
+  const [selectedRoot, setSelectedRoot] = useState<string | null>(null);
   const [pending, setPending] = useState(() => sessionStorage.getItem(pendingKey));
   const [failure, setFailure] = useState<string | null>(null);
   const roots = project?.roots.map((root) => root.path) ?? [];
-  const root = selection !== null && roots.includes(selection) ? selection : roots.length === 1 ? roots[0] : null;
+  const root = selectedRoot !== null && roots.includes(selectedRoot) ? selectedRoot : roots.length === 1 ? roots[0] : null;
   const target = projectId === null
-    ? { workspaceId: selection }
-    : root !== null && !projectError && !readingProject ? { project: { id: projectId, root } } : null;
+    ? { workspaceId }
+    : root !== null && !projectError && !readingProjects ? { project: { id: projectId, root } } : null;
   const sending = preparing || starting;
   const active = useRef(false);
   useEffect(() => {
@@ -52,6 +72,35 @@ function NewLocalCodexDraft({ projectId }: { projectId: string | null }) {
     return () => { active.current = false; };
   }, []);
   useEffect(() => { saveComposerText(draftKey, draft); }, [draftKey, draft]);
+
+  const continuing = projectId === null && pending !== null;
+  const directory = projectId !== null ? `codex:${projectId}` : workspaceId !== null && !continuing ? `konden:${workspaceId}` : "private";
+  const projectOptions: ComboboxItem[] = (projects ?? []).filter((item) => item.roots.length > 0)
+    .map((item) => ({ value: `codex:${item.id}`, label: item.name }));
+  if (projectId !== null && !projectOptions.some((item) => item.value === directory)) {
+    projectOptions.push({ value: directory, label: project?.name ?? "所选 Codex 工作区", disabled: true });
+  }
+  const directories: ComboboxData[number][] = [
+    { value: "private", label: continuing ? "原会话的工作目录" : "新的独立目录", disabled: continuing },
+  ];
+  if (projectOptions.length > 0) directories.push({ group: "Codex 工作区", items: projectOptions });
+  if (!continuing && workspaces.length > 0) {
+    directories.push({ group: "Konden 工作目录", items: workspaces.map((item) => ({ value: `konden:${item.workspace_id}`, label: item.task_root })) });
+  }
+
+  function chooseDirectory(value: string | null) {
+    if (value === null) return;
+    const nextProject = value.startsWith("codex:") ? value.slice("codex:".length) : null;
+    const nextWorkspace = value.startsWith("konden:") ? value.slice("konden:".length) : null;
+    if (nextProject !== projectId && pending === null && draft !== "") {
+      const next = draftKeys(nextProject);
+      if (sessionStorage.getItem(next.pendingKey) === null && restoreComposerText(next.draftKey) === "") {
+        saveComposerText(next.draftKey, draft);
+        saveComposerText(draftKey, "");
+      }
+    }
+    onDirectoryChange(nextProject, nextWorkspace);
+  }
 
   async function submit() {
     if (connectionId === null || sending || !draft.trim()) return;
@@ -80,30 +129,26 @@ function NewLocalCodexDraft({ projectId }: { projectId: string | null }) {
 
   return <div className="session-page external-session-page">
     <div className="session-main">
-      <header className="page-header session-header local-codex-header">
+      <header className="page-header session-header local-codex-header local-codex-draft-header">
         <Group gap={10} wrap="nowrap" className="session-header-identity">
           <span className="agent-avatar agent-avatar-small" aria-hidden="true"><IconPlugConnected size={18} /></span>
-          <div className="session-header-name">
-            <Text size="sm" fw={600}>新建 Codex 会话</Text>
-            {project ? <Text component="span" c="dimmed" fz={11} maw="100%" truncate title={project.name}>{project.name}</Text> : null}
-          </div>
+          <Text size="sm" fw={600}>新建 Codex 会话</Text>
         </Group>
-        {pending === null ? <Select aria-label="工作目录" size="xs" w={230} maw="48%"
-          data={projectId === null
-            ? [{ value: "private", label: "新的独立目录" }, ...workspaces.map((item) => ({ value: item.workspace_id, label: item.task_root }))]
-            : roots}
-          value={projectId === null ? selection ?? "private" : root}
-          placeholder={readingProject ? "正在读取工作目录…" : "选择工作目录"}
-          title={projectId === null ? undefined : root ?? undefined}
-          allowDeselect={false} disabled={sending || (projectId !== null && (readingProject || roots.length === 0))}
-          onChange={(value) => setSelection(projectId === null && value === "private" ? null : value)} /> : null}
+        <Stack gap={5} w={230} maw="48%">
+          <Select aria-label="工作目录" size="xs" data={directories} value={directory} allowDeselect={false}
+            title={pending === null ? root ?? undefined : undefined} disabled={sending} onChange={chooseDirectory}
+            rightSection={readingProjects ? <Loader size="xs" aria-label="正在读取 Codex 工作区" /> : undefined} />
+          {pending === null && roots.length > 1 ? <Select aria-label="工作区根目录" size="xs"
+            data={roots} value={root} placeholder="选择工作区根目录" title={root ?? undefined}
+            allowDeselect={false} disabled={sending || readingProjects} onChange={setSelectedRoot} /> : null}
+        </Stack>
       </header>
-      {pending === null && projectError ? <Alert color="orange" role="alert">
+      {projectError ? <Alert color="orange" role="alert">
         {typeof projectError === "string" ? projectError : "无法读取 Codex 工作区。"}
-        <Button size="compact-xs" variant="subtle" onClick={() => void refetchProject()}>重试</Button>
+        <Button size="compact-xs" variant="subtle" onClick={() => void refetchProjects()}>重试</Button>
       </Alert> : null}
-      {pending === null && project && roots.length === 0 && !projectError
-        ? <Alert color="orange" role="alert">请在 Codex 中为此工作区登记工作目录。</Alert> : null}
+      {pending === null && projectId !== null && roots.length === 0 && !readingProjects && !projectError
+        ? <Alert color="orange" role="alert">所选 Codex 工作区没有可用的根目录，请重新选择。</Alert> : null}
       <div className="group-chat-scroll">
         <div className="group-chat-empty"><Text fw={500} size="lg">给 Codex 发条消息</Text></div>
       </div>

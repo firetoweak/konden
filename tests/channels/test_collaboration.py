@@ -314,6 +314,8 @@ def test_prepare_codex_in_selected_project_requires_its_registered_directory(col
     project = {"id": "project-id", "name": "测试工作区", "roots": [{"path": str(first)}, {"path": str(second)}]}
 
     async def native(method, params):
+        if method == "project/list":
+            return {"data": [project], "nextCursor": None}
         if method == "project/read":
             if params["projectId"] != project["id"]:
                 raise CodexRequestError(method, {"code": -32602, "message": f"project not found: {params['projectId']}"})
@@ -328,7 +330,7 @@ def test_prepare_codex_in_selected_project_requires_its_registered_directory(col
     link.side_effect = None
     link.return_value = SimpleNamespace(request=request, reader=SimpleNamespace(done=lambda: False), writers=set())
     body = {"connection_id": c.human_connection, "project": {"id": project["id"], "root": str(second)}}
-    assert c.client.get(f"/api/codex/projects/{project['id']}").json() == project
+    assert c.client.get("/api/codex/projects").json() == [project]
     assert c.client.post("/api/codex/chats", json={**body, "workspace_id": "also-selected"}).status_code == 422
     for selection in ({"id": "deleted"}, {"id": project["id"]}, {"id": project["id"], "root": str(tmp_path)}):
         assert c.client.post("/api/codex/chats", json={**body, "project": selection}).status_code == 409
