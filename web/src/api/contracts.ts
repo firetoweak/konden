@@ -153,7 +153,20 @@ export const nativeCodexChatSchema = z.object({
   name: z.string().min(1),
   workspace: z.string().nullable(),
 }).strict();
-export type NativeCodexChat = z.infer<typeof nativeCodexChatSchema>;
+export const nativeCodexProjectSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  roots: z.array(z.object({ path: z.string().min(1) }).strict()),
+}).strict();
+export type NativeCodexProject = z.infer<typeof nativeCodexProjectSchema>;
+export const nativeCodexCatalogSchema = z.object({
+  projects_available: z.boolean(),
+  groups: z.array(z.object({
+    project: nativeCodexProjectSchema.nullable(),
+    chats: nativeCodexChatSchema.array(),
+  }).strict()),
+}).strict();
+export type NativeCodexCatalog = z.infer<typeof nativeCodexCatalogSchema>;
 export const attachmentRefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("image"), attachment_id: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     name: z.string().min(1), size: z.number().int().nonnegative(),

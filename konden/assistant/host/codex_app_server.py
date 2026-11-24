@@ -143,7 +143,10 @@ async def open_codex_app_server(executable):
                            max_size=16 * 1024 * 1024) as socket:
             server = CodexAppServer(socket)
             try:
-                await server.request("initialize", {"clientInfo": {"name": "konden", "version": "0.1.0"}})
+                await server.request("initialize", {
+                    "clientInfo": {"name": "konden", "version": "0.1.0"},
+                    "capabilities": {"experimentalApi": True},
+                })
                 await server.write({"method": "initialized", "params": {}})
                 yield server
             finally:

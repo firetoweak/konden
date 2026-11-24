@@ -43,6 +43,7 @@ from konden.assistant.host.codex_continuation import (
     CodexContinuations,
     continuation_status,
 )
+from konden.assistant.host.codex_projects import CodexProjectTarget, read_codex_project
 from konden.assistant.host.codex_titles import read_codex_threads, read_codex_titles
 from konden.assistant.host.external_attachments import (
     describe_attachments,
@@ -113,13 +114,15 @@ class ExternalMessages:
             self._changed.notify_all()
             await self.notify_changed()
 
-    async def prepare_local_codex(self, workspace_id: str | None):
-        if workspace_id is None:
+    async def prepare_local_codex(self, workspace_id: str | None, project: CodexProjectTarget | None):
+        if project is not None:
+            workspace = None
+        elif workspace_id is None:
             workspace = self.host.home.root / "codex_workspaces" / uuid4().hex
             workspace.mkdir(parents=True)
         else:
             workspace = self.host.workspaces.get(workspace_id).task_root
-        return {"identity": await prepare_codex_chat(self.codex_link, workspace)}
+        return {"identity": await prepare_codex_chat(self.codex_link, workspace, project=project)}
 
     async def start_local_codex(self, identity, text):
         if self.has_local_codex(identity):
@@ -144,6 +147,9 @@ class ExternalMessages:
 
     async def list_local_codex(self, query):
         return await list_codex_chats(self.codex_link, query)
+
+    async def local_codex_project(self, project_id):
+        return await read_codex_project(await self.codex_link.require(), project_id)
 
     async def delegate_a2a(self, connection, identity, work):
         from konden.assistant.host.a2a_to_bot import delegate_to_konden

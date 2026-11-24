@@ -47,6 +47,10 @@ from konden.assistant.host.codex_continuation import (
     CodexContinuationInvalid,
     CodexExecutable,
 )
+from konden.assistant.host.codex_projects import (
+    CodexProjectTarget,
+    CodexProjectUnavailable,
+)
 from konden.assistant.host.external_messages import (
     ExternalConnectionNotFound,
     ExternalMessageInvalid,
@@ -163,6 +167,13 @@ class ExternalMessageRequest(ConnectionRequest, PostExternal):
 
 class PrepareLocalCodexRequest(ConnectionRequest):
     workspace_id: str | None = Field(default=None, min_length=1)
+    project: CodexProjectTarget | None = None
+
+    @model_validator(mode="after")
+    def one_workspace(self):
+        if self.workspace_id is not None and self.project is not None:
+            raise ValueError("请选择一个工作区。")
+        return self
 
 
 class ImportLocalCodexRequest(ConnectionRequest):
@@ -762,9 +773,13 @@ def create_web_app(
     async def list_local_codex(request: Request, query: str = ""):
         return await _channel(request).list_local_codex(query)
 
+    @app.get("/api/codex/projects/{project_id}")
+    async def local_codex_project(project_id: str, request: Request):
+        return await _channel(request).local_codex_project(project_id)
+
     @app.post("/api/codex/chats", status_code=201)
     async def prepare_local_codex(body: PrepareLocalCodexRequest, request: Request):
-        return await _channel(request).prepare_local_codex(body.connection_id, body.workspace_id)
+        return await _channel(request).prepare_local_codex(body.connection_id, body.workspace_id, body.project)
 
     @app.post("/api/codex/chats/first-message")
     async def start_local_codex(body: FirstLocalCodexMessageRequest, request: Request):
@@ -788,6 +803,7 @@ def create_web_app(
 
     @app.exception_handler(CodexDisconnected)
     @app.exception_handler(CodexChatUnavailable)
+    @app.exception_handler(CodexProjectUnavailable)
     @app.exception_handler(CodexInstallUnavailable)
     async def codex_chat_unavailable(request, error):
         return JSONResponse(status_code=409, content={"detail": str(error)})

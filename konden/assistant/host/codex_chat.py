@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from uuid import UUID
@@ -9,6 +10,12 @@ from uuid import UUID
 from konden.assistant.a2a import A2A_CODEX_INPUT
 from konden.assistant.external_messages import external_name
 from konden.assistant.host.codex_app_server import CodexDisconnected, CodexRequestError
+from konden.assistant.host.codex_projects import (
+    CodexProjectTarget,
+    assign_chat_projects,
+    list_codex_projects,
+    read_codex_project,
+)
 from konden.assistant.host.codex_titles import ThreadSummary
 
 _GUI_PERMISSIONS = {"approvalPolicy": "never", "sandbox": "workspace-write"}
@@ -35,7 +42,8 @@ def _native_error(error, thread_id):
 
 
 @asynccontextmanager
-async def edit_codex_chat(server, *, identity: str | None = None, workspace: Path | None = None, instructions: str | None = None):
+async def edit_codex_chat(server, *, identity: str | None = None, workspace: Path | None = None,
+                          project_id: str | None = None, instructions: str | None = None):
     thread = None
     thread_id = str(UUID(identity)) if identity is not None else None
     if thread_id is not None:
@@ -46,6 +54,8 @@ async def edit_codex_chat(server, *, identity: str | None = None, workspace: Pat
         if thread_id is None:
             assert workspace is not None
             args = {"cwd": str(workspace), **_GUI_PERMISSIONS}
+            if project_id is not None:
+                args["projectId"] = project_id
             if instructions is not None:
                 args["developerInstructions"] = instructions
             thread = _thread(await server.request("thread/start", args))
@@ -74,9 +84,14 @@ async def edit_codex_chat(server, *, identity: str | None = None, workspace: Pat
                 server.writers.remove(thread_id)
 
 
-async def prepare_codex_chat(link, workspace: Path) -> str:
+async def prepare_codex_chat(link, workspace: Path | None, *, project: CodexProjectTarget | None = None) -> str:
     server = await link.require()
-    async with edit_codex_chat(server, workspace=workspace) as thread:
+    if project is not None:
+        native_project = await read_codex_project(server, project.id)
+        workspace = await asyncio.to_thread(native_project.working_directory, project.root)
+    async with edit_codex_chat(server, workspace=workspace, project_id=project.id if project else None) as thread:
+        if project is not None and thread.project_id != project.id:
+            raise ValueError("Codex replied with a different thread project")
         # The first send may have to resume this ID after a reconnect.
         await server.request("thread/inject_items", {"threadId": thread.id, "items": [{
             "type": "message", "role": "developer", "content": [{
@@ -103,14 +118,24 @@ async def list_codex_chats(link, query):
     if query:
         params["searchTerm"] = query
     result = await server.request("thread/list", params)
-    chats_by_identity = {}
+    threads = {}
     for item in result["data"]:
         thread = ThreadSummary.model_validate(item)
-        identity = UUID(thread.id).hex
-        chats_by_identity.setdefault(identity, {
+        threads.setdefault(UUID(thread.id).hex, thread)
+
+    projects = await list_codex_projects(server)
+    memberships = await asyncio.to_thread(assign_chat_projects, projects, threads) if projects and threads else {}
+    groups = {project.id: {"project": project.model_dump(), "chats": []} for project in projects or []}
+    other = {"project": None, "chats": []}
+    for identity, thread in threads.items():
+        group = groups.get(memberships.get(identity), other)
+        group["chats"].append({
             "identity": identity, "name": thread.name or external_name(identity), "workspace": thread.cwd,
         })
-    return list(chats_by_identity.values())
+    visible = [group for group in groups.values() if not query or group["chats"]]
+    if other["chats"]:
+        visible.append(other)
+    return {"groups": visible, "projects_available": projects is not None}
 
 
 def _message(item):

@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from konden.assistant.host.codex_app_server import (
     CodexDisconnected,
@@ -17,6 +17,7 @@ class ThreadSummary(BaseModel):
     id: str
     name: str | None = None
     cwd: str | None = None
+    project_id: str | None = Field(default=None, validation_alias="projectId")
 
 
 async def read_codex_threads(identities: list[str], *, server) -> dict[str, ThreadSummary]:

@@ -24,6 +24,7 @@ vi.mock("../src/api/kondenApi", async (importOriginal) => ({
   useSetSessionModelMutation: () => [query.modelSelect, { isLoading: false }],
   useGetExternalConversationQuery: () => ({ currentData: query.data }),
   useGetLocalCodexChatQuery: () => ({ data: query.nativeChat }),
+  useGetNativeCodexProjectQuery: () => ({}),
   useGetWorkspacesQuery: () => ({ data: [] }),
   usePrepareLocalCodexMutation: () => [query.prepare, { isLoading: false }],
   useStartLocalCodexMutation: () => [query.start, { isLoading: false }],
