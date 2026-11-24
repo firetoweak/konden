@@ -345,10 +345,11 @@ export const kondenApi = createApi({
       transformResponse: (value: unknown) => nativeCodexCatalogSchema.parse(value),
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
     }),
-    getNativeCodexProject: build.query<NativeCodexProject, string>({
-      query: (id) => `/codex/projects/${encodeURIComponent(id)}`,
-      transformResponse: (value: unknown) => nativeCodexProjectSchema.parse(value),
+    getNativeCodexProjects: build.query<NativeCodexProject[] | null, void>({
+      query: () => "/codex/projects",
+      transformResponse: (value: unknown) => nativeCodexProjectSchema.array().nullable().parse(value),
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+      providesTags: ["CodexConnection"],
     }),
     importLocalCodex: build.mutation<{ identity: string }, { connectionId: string; identity: string }>({
       query: ({ connectionId, identity }) => ({
@@ -836,7 +837,7 @@ export const {
   useGetCodexConnectionQuery,
   useReconnectCodexMutation,
   useGetNativeCodexChatsQuery,
-  useGetNativeCodexProjectQuery,
+  useGetNativeCodexProjectsQuery,
   useImportLocalCodexMutation,
   usePrepareLocalCodexMutation,
   useStartLocalCodexMutation,

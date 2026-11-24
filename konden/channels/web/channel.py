@@ -101,8 +101,8 @@ class WebChannel:
     async def list_local_codex(self, query):
         return await self._sessions.external_messages.list_local_codex(query)
 
-    async def local_codex_project(self, project_id):
-        return await self._sessions.external_messages.local_codex_project(project_id)
+    async def list_local_codex_projects(self):
+        return await self._sessions.external_messages.list_local_codex_projects()
 
     async def import_local_codex(self, connection_id, identity):
         self._require_connection(connection_id)

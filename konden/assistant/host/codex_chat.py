@@ -132,7 +132,7 @@ async def list_codex_chats(link, query):
         group["chats"].append({
             "identity": identity, "name": thread.name or external_name(identity), "workspace": thread.cwd,
         })
-    visible = [group for group in groups.values() if not query or group["chats"]]
+    visible = [group for group in groups.values() if group["chats"]]
     if other["chats"]:
         visible.append(other)
     return {"groups": visible, "projects_available": projects is not None}
