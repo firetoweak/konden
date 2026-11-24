@@ -182,7 +182,7 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
           onDefaultChange={(value) => { setDraft((previous) => ({ ...previous, defaultModel: value })); setSavedNotice(false); }}
           testModel={api.testModel} />
       </Tabs.Panel>
-      <Tabs.Panel value="search" className="model-settings-page"><SearchSettingsPanel models={availableModels} api={searchApi} connections={connections} connected={connected} loadModels={api.loadModels} /></Tabs.Panel>
+      <Tabs.Panel value="search" className="model-settings-page"><SearchSettingsPanel api={searchApi} connections={connections} connected={connected} loadModels={api.loadModels} /></Tabs.Panel>
       <Tabs.Panel value="images" className="model-settings-page"><ImageSettingsPanel active={active && page === "images"}
         api={imageApi} connected={connected} configured={connections.some((item) => item.provider === "openai" && item.configured)}/></Tabs.Panel>
     </Tabs>
