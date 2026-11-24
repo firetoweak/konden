@@ -1,14 +1,14 @@
-import { ActionIcon, Alert, Button, Collapse, Group, Modal, ScrollArea, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
+import { Alert, Button, Collapse, Group, Modal, ScrollArea, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
-import { IconChevronDown, IconChevronRight, IconFolder, IconPlus } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconFolder } from "@tabler/icons-react";
 import { useId, useState } from "react";
 
 import type { NativeCodexCatalog } from "../../api/contracts";
 import { useGetNativeCodexChatsQuery, useImportLocalCodexMutation } from "../../api/kondenApi";
 import { useAppSelector } from "../../app/hooks";
 
-export function CodexCatalogModal({ onClose, onAdded, onNew }: {
-  onClose: () => void; onAdded: (identity: string) => void; onNew: (projectId: string) => void;
+export function CodexCatalogModal({ onClose, onAdded }: {
+  onClose: () => void; onAdded: (identity: string) => void;
 }) {
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
   const [query, setQuery] = useState("");
@@ -45,7 +45,7 @@ export function CodexCatalogModal({ onClose, onAdded, onNew }: {
         <Stack gap={7}>
           {catalog?.groups.map((group) => <CatalogGroup key={group.project ? `project:${group.project.id}` : "other"}
             group={group} selected={selected} searching={search !== ""} disabled={isLoading || changingSearch || isFetching}
-            onSelect={(identity) => { setSelected(identity); reset(); }} onNew={onNew} />)}
+            onSelect={(identity) => { setSelected(identity); reset(); }} />)}
         </Stack>
       </ScrollArea.Autosize>
       <Group justify="flex-end">
@@ -57,29 +57,25 @@ export function CodexCatalogModal({ onClose, onAdded, onNew }: {
   </Modal>;
 }
 
-function CatalogGroup({ group, selected, searching, disabled, onSelect, onNew }: {
+function CatalogGroup({ group, selected, searching, disabled, onSelect }: {
   group: NativeCodexCatalog["groups"][number]; selected: string | null; searching: boolean; disabled: boolean;
-  onSelect: (identity: string) => void; onNew: (projectId: string) => void;
+  onSelect: (identity: string) => void;
 }) {
   const panelId = useId();
   const [collapsed, setCollapsed] = useState(false);
   const { project, chats } = group;
   const name = project?.name ?? "其他会话";
-  const expanded = chats.length > 0 && (searching || !collapsed);
+  const expanded = searching || !collapsed;
   const groupTitle = project?.roots.map((root) => root.path).join("\n") || name;
 
   return <section aria-label={name}>
     <Group className="roster-section-header" gap={2} wrap="nowrap">
       <UnstyledButton className="roster-section-toggle" aria-expanded={expanded} aria-controls={panelId}
-        disabled={chats.length === 0 || searching} title={groupTitle} onClick={() => setCollapsed((value) => !value)}>
+        disabled={searching} title={groupTitle} onClick={() => setCollapsed((value) => !value)}>
         {expanded ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
         <IconFolder size={15} />
         <Text size="sm" fw={500} truncate>{name}</Text>
       </UnstyledButton>
-      {project?.roots.length ? <ActionIcon variant="subtle" color="gray" size="sm" disabled={disabled}
-        aria-label={`在 ${name} 新建 Codex 会话`} title="新建 Codex 会话" onClick={() => onNew(project.id)}>
-        <IconPlus size={16} />
-      </ActionIcon> : null}
     </Group>
     <Collapse id={panelId} expanded={expanded}>
       <Stack gap={2} ps={17}>

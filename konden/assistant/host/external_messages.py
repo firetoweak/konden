@@ -43,7 +43,7 @@ from konden.assistant.host.codex_continuation import (
     CodexContinuations,
     continuation_status,
 )
-from konden.assistant.host.codex_projects import CodexProjectTarget, read_codex_project
+from konden.assistant.host.codex_projects import CodexProjectTarget, list_codex_projects
 from konden.assistant.host.codex_titles import read_codex_threads, read_codex_titles
 from konden.assistant.host.external_attachments import (
     describe_attachments,
@@ -148,8 +148,8 @@ class ExternalMessages:
     async def list_local_codex(self, query):
         return await list_codex_chats(self.codex_link, query)
 
-    async def local_codex_project(self, project_id):
-        return await read_codex_project(await self.codex_link.require(), project_id)
+    async def list_local_codex_projects(self):
+        return await list_codex_projects(await self.codex_link.require())
 
     async def delegate_a2a(self, connection, identity, work):
         from konden.assistant.host.a2a_to_bot import delegate_to_konden
