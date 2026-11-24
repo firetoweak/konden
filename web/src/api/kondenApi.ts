@@ -2,6 +2,7 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 import { z } from "zod";
 import { capabilityEnabledSchema, capabilityInventorySchema, mcpCheckSchema, type CapabilityInventory, type McpCheck } from "./capabilities";
+import { traceDetailSchema, traceIndexSchema, traceParams, type TraceDetail, type TraceIndex, type TraceScope } from "./traceContracts";
 
 import {
   bindOwner,
@@ -650,6 +651,21 @@ export const kondenApi = createApi({
         { type: "Conversation", id: sessionId },
       ],
     }),
+    getExecutionTrace: build.query<TraceIndex, TraceScope>({
+      query: ({ sessionId, branch }) => ({ url: `/sessions/${encodeURIComponent(sessionId)}/trace`, params: traceParams(branch) }),
+      transformResponse: (value: unknown) => traceIndexSchema.parse(value),
+      providesTags: (result, _error, { sessionId }) => [
+        { type: "Conversation", id: sessionId },
+        ...(result === undefined || result.session_id === sessionId ? [] : [{ type: "Conversation" as const, id: result.session_id }]),
+      ],
+    }),
+    getExecutionTraceDetail: build.query<TraceDetail, TraceScope & { entry: string; observedSession: string }>({
+      query: ({ sessionId, branch, entry }) => ({ url: `/sessions/${encodeURIComponent(sessionId)}/trace/detail`, params: traceParams(branch, entry) }),
+      transformResponse: (value: unknown) => traceDetailSchema.parse(value),
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { observedSession, entry }) =>
+        entry.startsWith("tool:") ? [{ type: "Conversation", id: observedSession }] : [],
+    }),
     getSubagents: build.query<SubagentSummary[], string>({
       query: (sessionId) => `/sessions/${encodeURIComponent(sessionId)}/subagents`,
       transformResponse: (value: unknown) => subagentSummarySchema.array().parse(value),
@@ -862,6 +878,8 @@ export const {
   usePostGroupMessageMutation,
   useGetWorkspacesQuery,
   useGetConversationQuery,
+  useGetExecutionTraceQuery,
+  useGetExecutionTraceDetailQuery,
   useGetSubagentsQuery,
   useObserveSubagentQuery,
   useSelectSessionMutation,

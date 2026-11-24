@@ -268,6 +268,12 @@ class WebChannel:
     async def observe_subagent(self, parent_session_id: str, command_id: str):
         return await self._queries.observe_subagent(parent_session_id, command_id)
 
+    async def execution_trace(self, session_id: str, branch: list[str]):
+        return await self._queries.trace.index(session_id, branch)
+
+    async def execution_trace_detail(self, session_id: str, branch: list[str], entry: str):
+        return await self._queries.trace.detail(session_id, branch, entry)
+
     async def select(self, connection_id: str, session_id: str):
         connection = self._require_connection(connection_id)
         view = await self._sessions.select(connection.owner, session_id)
@@ -317,12 +323,15 @@ class WebChannel:
             self._store().for_session(session_id).save_file_path, source,
         )
 
-    async def attachment_file(self, session_id: str, attachment_id: str):
+    async def attachment_file(self, session_id: str, attachment_id: str, branch: tuple[str, ...] = ()):
         if type(session_id) is not str or not session_id:
             raise ValueError("session_id must be a non-empty str")
         if not is_valid_attachment_id(attachment_id):
             raise AttachmentRejected("attachment id 格式无效")
-        await self.conversation(session_id)
+        if branch:
+            session_id = await self._queries.trace.session(session_id, branch)
+        else:
+            await self.conversation(session_id)
         if not await self._store().available_in_session(session_id, attachment_id):
             raise AttachmentNotInSession("附件不属于当前会话。")
         store = self._store().for_session(session_id)

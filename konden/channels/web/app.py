@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from ipaddress import ip_address
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from anyio import CancelScope
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.staticfiles import StaticFiles
@@ -946,6 +946,16 @@ def create_web_app(
     async def observe_subagent(session_id: str, command_id: str, request: Request):
         return await _channel(request).observe_subagent(session_id, command_id)
 
+    @app.get("/api/sessions/{session_id}/trace")
+    async def execution_trace(session_id: str, request: Request, branch: Annotated[list[str] | None, Query()] = None):
+        return await _channel(request).execution_trace(session_id, branch or [])
+
+    @app.get("/api/sessions/{session_id}/trace/detail")
+    async def execution_trace_detail(
+        session_id: str, entry: str, request: Request, branch: Annotated[list[str] | None, Query()] = None,
+    ):
+        return await _channel(request).execution_trace_detail(session_id, branch or [], entry)
+
     @app.get("/api/workspaces")
     async def list_workspaces(request: Request):
         registry = request.app.state.workspaces
@@ -1026,11 +1036,13 @@ def create_web_app(
         session_id: str,
         attachment_id: str,
         request: Request,
+        branch: Annotated[list[str] | None, Query()] = None,
     ):
         try:
             path, mime = await _channel(request).attachment_file(
                 session_id,
                 attachment_id,
+                tuple(branch or ()),
             )
         except AttachmentNotInSession as error:
             return JSONResponse(status_code=404, content={"detail": str(error)})

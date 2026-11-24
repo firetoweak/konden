@@ -76,8 +76,10 @@ class ArtifactGateway(Protocol):
 
 
 class FileArtifactStore:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, create: bool = True) -> None:
         self._root = root.resolve()
+        if not create:
+            return
         self._root.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self._root / "contents.sqlite")) as db, db:
             db.executescript("""
@@ -108,7 +110,7 @@ class FileArtifactStore:
         if offset > total:
             raise ArtifactOffsetOutOfRangeError(f"offset={offset}, total_chars={total}")
         end = min(offset + limit, total)
-        with closing(sqlite3.connect(path)) as db:
+        with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as db:
             rows = db.execute(
                 "SELECT content FROM blocks WHERE artifact_id=? AND block_index>=? "
                 "AND block_index<=? ORDER BY block_index",
@@ -131,7 +133,7 @@ class FileArtifactStore:
         if not is_valid_artifact_id(artifact_id):
             raise ValueError("artifact_id 格式无效")
         path = self._root / "contents.sqlite"
-        with closing(sqlite3.connect(path)) as db:
+        with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as db:
             row = db.execute("SELECT size_chars FROM artifacts WHERE id=?", (artifact_id,)).fetchone()
         if row is None:
             raise ArtifactNotFoundError(artifact_id)
@@ -143,7 +145,7 @@ class FileArtifactStore:
         carry = ""
         position = offset
         expected_index = offset // ARTIFACT_BLOCK_CHARS
-        with closing(sqlite3.connect(path)) as db:
+        with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as db:
             rows = db.execute(
                 "SELECT block_index, content FROM blocks WHERE artifact_id=? AND block_index>=? ORDER BY block_index",
                 (artifact_id, offset // ARTIFACT_BLOCK_CHARS),
@@ -171,5 +173,11 @@ class FileArtifactGateway:
         self._root.mkdir(parents=True, exist_ok=True)
 
     def for_session(self, session_id: str) -> FileArtifactStore:
+        return FileArtifactStore(self._session_root(session_id))
+
+    def existing_session(self, session_id: str) -> FileArtifactStore:
+        return FileArtifactStore(self._session_root(session_id), create=False)
+
+    def _session_root(self, session_id: str) -> Path:
         drawer = sha256(session_id.encode("utf-8")).hexdigest()
-        return FileArtifactStore(self._root / drawer / "artifacts")
+        return self._root / drawer / "artifacts"
