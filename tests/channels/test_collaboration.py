@@ -23,7 +23,11 @@ from konden.assistant.external_messages import (
     SendToExternal,
     parse_external,
 )
-from konden.assistant.host.codex_app_server import CodexDisconnected, CodexLink
+from konden.assistant.host.codex_app_server import (
+    CodexDisconnected,
+    CodexLink,
+    CodexRequestError,
+)
 from konden.assistant.host.codex_chat import CodexChatUnavailable
 from konden.assistant.host.codex_continuation import QueueAttempt
 from konden.assistant.host.codex_titles import ThreadSummary
@@ -301,22 +305,62 @@ def test_first_human_message_establishes_the_same_native_chat_before_reply(colla
     assert next(item for item in rows if item["identity"] == identity)["local_codex"] is True
 
 
+def test_prepare_codex_in_selected_project_requires_its_registered_directory(collaboration, tmp_path):
+    c = collaboration
+    identity = "2" * 32
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    project = {"id": "project-id", "name": "测试工作区", "roots": [{"path": str(first)}, {"path": str(second)}]}
+
+    async def native(method, params):
+        if method == "project/read":
+            if params["projectId"] != project["id"]:
+                raise CodexRequestError(method, {"code": -32602, "message": f"project not found: {params['projectId']}"})
+            return {"project": project}
+        if method == "thread/start":
+            return {"thread": {"id": str(UUID(identity)), "cwd": params["cwd"], "projectId": params["projectId"]}}
+        assert method in {"thread/inject_items", "thread/unsubscribe"}
+        return {}
+
+    request = AsyncMock(side_effect=native)
+    link = c.service.codex_link.require
+    link.side_effect = None
+    link.return_value = SimpleNamespace(request=request, reader=SimpleNamespace(done=lambda: False), writers=set())
+    body = {"connection_id": c.human_connection, "project": {"id": project["id"], "root": str(second)}}
+    assert c.client.get(f"/api/codex/projects/{project['id']}").json() == project
+    assert c.client.post("/api/codex/chats", json={**body, "workspace_id": "also-selected"}).status_code == 422
+    for selection in ({"id": "deleted"}, {"id": project["id"]}, {"id": project["id"], "root": str(tmp_path)}):
+        assert c.client.post("/api/codex/chats", json={**body, "project": selection}).status_code == 409
+    assert not any(call.args[0] == "thread/start" for call in request.await_args_list)
+
+    prepared = c.client.post("/api/codex/chats", json=body)
+    assert prepared.status_code == 201 and prepared.json() == {"identity": identity}
+    [started] = [call.args[1] for call in request.await_args_list if call.args[0] == "thread/start"]
+    assert started["cwd"] == str(second) and started["projectId"] == project["id"]
+    assert all(row["identity"] != identity for row in c.client.get("/api/external-sessions").json())
+
+
 def test_import_and_desktop_registration_share_one_native_identity(collaboration):
     c = collaboration
     link = c.service.codex_link
     native = ThreadSummary(id=str(UUID(c.identity)), name="Codex 原生标题", cwd="example")
     server = SimpleNamespace(request=AsyncMock())
-    server.request.side_effect = lambda method, _params: (
-        {"data": [native.model_dump()]} if method == "thread/list" else {"thread": native.model_dump()}
-    )
+    replies = {
+        "thread/list": {"data": [native.model_dump()]},
+        "project/list": {"data": [], "nextCursor": None},
+        "thread/read": {"thread": native.model_dump()},
+    }
+    server.request.side_effect = lambda method, _params: replies[method]
     path = "/api/external-sessions/codex/import"
     body = {"connection_id": c.human_connection, "identity": c.identity}
     link.require.side_effect = None
     link.require.return_value = server
     c.titles.return_value = {c.identity: native.name}
-    assert c.client.get("/api/codex/chats", params={"query": "原生标题"}).json() == [{
+    catalog = c.client.get("/api/codex/chats", params={"query": "原生标题"}).json()
+    assert catalog["groups"] == [{"project": None, "chats": [{
         "identity": c.identity, "name": native.name, "workspace": "example",
-    }]
+    }]}]
     sent = c.send()["message_id"]
     assert c.client.post(path, json={**body, "connection_id": "inactive"}).status_code == 409
     for _ in range(2):

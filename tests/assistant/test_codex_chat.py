@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID
@@ -14,6 +15,71 @@ from konden.assistant.host.codex_app_server import CodexRequestError
 IDENTITY = "1" * 32
 THREAD_ID = str(UUID(IDENTITY))
 TEXT = "请继续刚才的讨论。"
+
+
+def test_chat_catalog_keeps_first_entry_for_each_native_identity():
+    first = {"id": THREAD_ID, "name": "同名会话", "cwd": "example"}
+    other = {**first, "id": str(UUID(int=2))}
+    duplicate = {**first, "id": IDENTITY, "cwd": "older"}
+    request = AsyncMock(side_effect=[
+        {"data": [first, other, duplicate]},
+        CodexRequestError("project/list", {"code": -32601, "message": "Method not found"}),
+    ])
+    link = SimpleNamespace(require=AsyncMock(return_value=SimpleNamespace(request=request)))
+
+    catalog = asyncio.run(codex_chat.list_codex_chats(link, ""))
+    assert catalog["projects_available"] is False
+    assert catalog["groups"] == [{"project": None, "chats": [
+        {"identity": IDENTITY, "name": "同名会话", "workspace": "example"},
+        {"identity": UUID(int=2).hex, "name": "同名会话", "workspace": "example"},
+    ]}]
+
+
+def test_chat_catalog_honors_registered_roots_and_groups_unique_worktrees(tmp_path):
+    def repository(name, *worktrees):
+        directory = tmp_path / name
+        directory.mkdir()
+        subprocess.run(["git", "init", "-q", str(directory)], check=True)
+        subprocess.run([
+            "git", "-C", str(directory), "-c", "user.name=verification", "-c", "user.email=test@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "initial",
+        ], check=True)
+        for worktree in worktrees:
+            subprocess.run(["git", "-C", str(directory), "worktree", "add", "-q", "--detach", str(worktree)], check=True)
+        return directory
+
+    personal = tmp_path / "personal"
+    shared = tmp_path / "shared"
+    main = repository("main", personal, shared)
+    linked = tmp_path / "konden-worktree"
+    konden = repository("konden", linked)
+    projects = [
+        {"id": "main", "name": "主项目", "roots": [{"path": str(main)}]},
+        {"id": "personal", "name": "个人工作区", "roots": [{"path": str(personal)}]},
+        {"id": "konden", "name": "konden", "roots": [{"path": str(konden)}]},
+    ]
+    threads = [
+        {"id": str(UUID(int=number)), "name": title, "cwd": str(directory), **assignment}
+        for number, (title, directory, assignment) in enumerate([
+            ("独立登记", personal, {}),
+            ("原生归属优先", main, {"projectId": "personal"}),
+            ("相关 worktree", linked / "docs", {}),
+            ("共用仓库归属不明确", shared, {}),
+        ], 1)
+    ]
+    request = AsyncMock(side_effect=[{"data": threads}, {"data": projects, "nextCursor": None}])
+    link = SimpleNamespace(require=AsyncMock(return_value=SimpleNamespace(request=request)))
+
+    catalog = asyncio.run(codex_chat.list_codex_chats(link, ""))
+    assert {
+        group["project"]["id"] if group["project"] is not None else None: [chat["name"] for chat in group["chats"]]
+        for group in catalog["groups"]
+    } == {
+        "main": [],
+        "personal": ["独立登记", "原生归属优先"],
+        "konden": ["相关 worktree"],
+        None: ["共用仓库归属不明确"],
+    }
 
 
 def test_direct_send_uses_native_user_input_and_returns_saved_history(tmp_path: Path):

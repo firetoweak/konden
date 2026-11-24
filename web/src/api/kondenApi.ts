@@ -21,7 +21,8 @@ import {
   localCodexChatSchema,
   type LocalCodexChat,
   codexConnectionSchema, type CodexConnection,
-  nativeCodexChatSchema, type NativeCodexChat,
+  nativeCodexCatalogSchema, type NativeCodexCatalog,
+  nativeCodexChatSchema, nativeCodexProjectSchema, type NativeCodexProject,
   avatarSelectionSchema,
   avatarsSchema,
   type AvatarSelection,
@@ -339,9 +340,14 @@ export const kondenApi = createApi({
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
       invalidatesTags: ["CodexConnection"],
     }),
-    getNativeCodexChats: build.query<NativeCodexChat[], string>({
+    getNativeCodexChats: build.query<NativeCodexCatalog, string>({
       query: (query) => ({ url: "/codex/chats", params: { query } }),
-      transformResponse: (value: unknown) => nativeCodexChatSchema.array().parse(value),
+      transformResponse: (value: unknown) => nativeCodexCatalogSchema.parse(value),
+      transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
+    }),
+    getNativeCodexProject: build.query<NativeCodexProject, string>({
+      query: (id) => `/codex/projects/${encodeURIComponent(id)}`,
+      transformResponse: (value: unknown) => nativeCodexProjectSchema.parse(value),
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
     }),
     importLocalCodex: build.mutation<{ identity: string }, { connectionId: string; identity: string }>({
@@ -352,10 +358,12 @@ export const kondenApi = createApi({
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
       invalidatesTags: (_result, error) => error === undefined ? ["ExternalSessions"] : [],
     }),
-    prepareLocalCodex: build.mutation<{ identity: string }, { connectionId: string; workspaceId: string | null }>({
-      query: ({ connectionId, workspaceId }) => ({
+    prepareLocalCodex: build.mutation<{ identity: string }, { connectionId: string } & (
+      { workspaceId: string | null; project?: never } | { project: { id: string; root: string }; workspaceId?: never }
+    )>({
+      query: ({ connectionId, workspaceId, project }) => ({
         url: "/codex/chats", method: "POST",
-        body: { connection_id: connectionId, workspace_id: workspaceId },
+        body: { connection_id: connectionId, workspace_id: workspaceId, project },
       }),
       transformResponse: (value: unknown) => nativeCodexChatSchema.pick({ identity: true }).parse(value),
       transformErrorResponse: (response) => apiErrorDetail(response.data) ?? response,
@@ -828,6 +836,7 @@ export const {
   useGetCodexConnectionQuery,
   useReconnectCodexMutation,
   useGetNativeCodexChatsQuery,
+  useGetNativeCodexProjectQuery,
   useImportLocalCodexMutation,
   usePrepareLocalCodexMutation,
   useStartLocalCodexMutation,
