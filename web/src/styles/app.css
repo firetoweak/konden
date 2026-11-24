@@ -201,6 +201,13 @@ body {
 .session-project-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-project-link:hover { color: var(--mantine-color-text); }
 .session-page-body { flex: 1; min-height: 0; }
+.session-header-trace { justify-content: flex-start; border-bottom: 1px solid var(--konden-border); }
+.session-header-trace .session-header-identity { flex: 0 1 auto; }
+.session-view-nav { display: flex; align-items: stretch; flex-shrink: 0; align-self: stretch; gap: 12px; }
+.session-view-nav button { border: 0; border-bottom: 2px solid transparent; padding: 0; background: transparent;
+  color: var(--mantine-color-dimmed); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.session-view-nav button:is(:hover, [aria-pressed=true]) { color: var(--mantine-color-text); }
+.session-view-nav button[aria-pressed=true] { border-bottom-color: var(--konden-accent-text); font-weight: 650; }
 .composer-send { flex-shrink: 0; width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: var(--konden-button); color: var(--konden-button-text); }
 .composer-send:disabled { background: var(--konden-button); color: var(--konden-button-text); opacity: .4; }
 .composer-send:hover:not(:disabled) { background: var(--konden-button); opacity: .88; }

@@ -1,8 +1,8 @@
 import { ActionIcon, Alert, Button, Drawer, Group, Tabs, Text } from "@mantine/core";
 import { useDidUpdate, useMediaQuery } from "@mantine/hooks";
 import { IconArrowLeft, IconFolder, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconUsersGroup } from "@tabler/icons-react";
-import { useRef, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { lazy, Suspense, useRef, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useGetAgentsQuery, useGetConversationQuery, useGetGroupsQuery, useGetWorkspacesQuery, useUnlinkProjectMutation } from "../../api/kondenApi";
 import { useAppSelector } from "../../app/hooks";
 import { AgentStatus } from "../sessions/AgentStatus";
@@ -18,9 +18,13 @@ import { BotDetailsPanel } from "./BotDetailsPanel";
 import { SubagentList } from "./SubagentList";
 import { PersonalMemoryPanel } from "./PersonalMemoryPanel";
 
+const ExecutionTrace = lazy(async () => ({ default: (await import("../trace/ExecutionTrace")).ExecutionTrace }));
+
 export function SessionConversation() {
   const { sessionId } = useParams();
-  const fromGroup = (useLocation().state as { fromGroup?: { id: string; name: string } } | null)?.fromGroup;
+  const location = useLocation();
+  const fromGroup = (location.state as { fromGroup?: { id: string; name: string } } | null)?.fromGroup;
+  const [search, setSearch] = useSearchParams();
   const { data: agents = [] } = useGetAgentsQuery();
   const { currentData: history } = useGetConversationQuery(sessionId ?? "", { skip: sessionId === undefined });
   const { data: workspaces = [] } = useGetWorkspacesQuery();
@@ -32,6 +36,14 @@ export function SessionConversation() {
   useDidUpdate(() => setDetailsOpened(!narrow), [narrow]);
   useDidUpdate(() => setDetailsTab("details"), [sessionId]);
   const agent = agents.find((item) => item.session_id === sessionId);
+  const traceOpen = agent !== undefined && search.get("view") === "trace";
+  const selectView = (showTrace: boolean) => {
+    if (traceOpen === showTrace) return;
+    const next = new URLSearchParams(search);
+    if (showTrace) next.set("view", "trace");
+    else next.delete("view");
+    setSearch(next, { state: location.state });
+  };
   const name = agent?.name ?? history?.agent_name ?? "Agent";
   const [linking, setLinking] = useState(false);
   const [unlinkProject, unlinking] = useUnlinkProjectMutation();
@@ -102,7 +114,7 @@ export function SessionConversation() {
   return (
     <div className="session-page">
       <div className="session-main">
-      <header className="page-header session-header session-header-overlay">
+      <header className={`page-header session-header ${traceOpen ? "session-header-trace" : "session-header-overlay"}`}>
         {fromGroup === undefined ? null : <ActionIcon component={Link} to={`/groups/${encodeURIComponent(fromGroup.id)}`} aria-label={`返回 ${fromGroup.name}`} title={`返回 ${fromGroup.name}`} variant="subtle" color="gray"><IconArrowLeft size={18} /></ActionIcon>}
         <Group gap={10} wrap="nowrap" className="session-header-identity">
           <BotAvatar name={name} sessionId={sessionId} />
@@ -110,13 +122,20 @@ export function SessionConversation() {
             : <EditableAgentName key={agent.session_id} agent={agent} connectionId={connectionId} size="sm" />}
             <div className="session-header-subtitle">{agent === undefined ? null : <AgentStatus agent={agent} />}</div></div>
         </Group>
-        {agent === undefined || agent.projects.length === 0 ? null : <span className="session-project-link">
+        {agent === undefined ? null : <nav className="session-view-nav" aria-label="Bot 会话视图">
+          <button type="button" aria-pressed={!traceOpen} onClick={() => selectView(false)}>对话</button>
+          <button type="button" aria-pressed={traceOpen} onClick={() => selectView(true)}>执行轨迹</button>
+        </nav>}
+        {traceOpen || agent === undefined || agent.projects.length === 0 ? null : <span className="session-project-link">
           <IconFolder size={15} /><span>{agent.projects.map((project) => project.name).join("、")}</span></span>}
-        <ActionIcon className="agent-details-toggle" aria-label={detailsOpened ? "收起 Bot 资料" : "显示 Bot 资料"} aria-expanded={detailsOpened} variant="subtle" color="gray" onClick={() => setDetailsOpened((opened) => !opened)}>{detailsOpened ? <IconLayoutSidebarRightCollapse size={18} /> : <IconLayoutSidebarRightExpand size={18} />}</ActionIcon>
+        {traceOpen ? null : <ActionIcon className="agent-details-toggle" aria-label={detailsOpened ? "收起 Bot 资料" : "显示 Bot 资料"} aria-expanded={detailsOpened} variant="subtle" color="gray" onClick={() => setDetailsOpened((opened) => !opened)}>{detailsOpened ? <IconLayoutSidebarRightCollapse size={18} /> : <IconLayoutSidebarRightExpand size={18} />}</ActionIcon>}
       </header>
-      <div className="session-page-body"><Conversation ref={conversationRef} key={sessionId} agentName={agent?.name ?? history?.agent_name ?? undefined} agentNames={agents.map((item) => item.name)} /></div>
+      <div className="session-page-body" hidden={traceOpen}><Conversation ref={conversationRef} key={sessionId} agentName={agent?.name ?? history?.agent_name ?? undefined} agentNames={agents.map((item) => item.name)} /></div>
+      {traceOpen && <Suspense fallback={<Text role="status" p="md" size="sm">读取执行轨迹…</Text>}>
+        <ExecutionTrace key={agent.session_id} sessionId={agent.session_id} />
+      </Suspense>}
       </div>
-      {agent === undefined ? null : narrow ? (
+      {agent === undefined || traceOpen ? null : narrow ? (
         <Drawer opened={detailsOpened} onClose={() => setDetailsOpened(false)}
           title="Agent 资料" position="right" size="min(292px, 85vw)"
           classNames={{ header: "details-heading", body: "details-body" }}

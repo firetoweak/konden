@@ -23,6 +23,7 @@ from konden.assistant.clarification import (
 from konden.assistant.compact.core import latest_input_tokens
 from konden.assistant.control import pending_approval_view, project_control_message
 from konden.assistant.delivery import DELIVER_TOOL_NAME, USER_MESSAGE_SENT
+from konden.assistant.execution_trace import ExecutionTraceQueries
 from konden.assistant.external_messages import (
     EXTERNAL_MESSAGE,
     USER_SOURCE,
@@ -237,6 +238,7 @@ class AssistantQueries:
     def __init__(self, store: SessionStore, sessions) -> None:
         self._store = store
         self._sessions = sessions
+        self.trace = ExecutionTraceQueries(store)
 
     async def observe_subagent(self, parent_session_id: str, command_id: str) -> SubagentObservation:
         events = await self._store.journal(parent_session_id).snapshot(parent_session_id)

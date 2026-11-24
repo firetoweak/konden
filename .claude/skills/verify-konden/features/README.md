@@ -99,6 +99,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | inbox | [inbox.md](./inbox.md) | Bot 旁提示 → 对应对话处理授权、控制、交流超限与无人查看询问 | 写文件的待授权事项出现在所属 Bot 的对话及 `GET /api/inbox`。交流超限与长时间无人查看未重验。 |
 | group-chat | [group-chat.md](./group-chat.md) | 首页 `新建群聊`、群资料、常用切换、人发言与点名 | 首页创建临时组，设为常用后刷新保留，再改回临时。Bot 自行建组、七天淡出和群内回应未重验。 |
 | tool-coding-round | [tool-coding-round.md](./tool-coding-round.md) | 文件工具、前台/后台命令与退出结果 | Web 触发 `execute_command` 运行 `git --version`，计划回合也实际写入并读回样本。命令环境隔离、后台组合与非零退出未重验。 |
+| execution-trace | [execution-trace.md](./execution-trace.md) | Bot 执行轨迹、模型输入、工具结果和子轨迹 | 从 Bot 对话进入，用隔离实例回看已提交的长会话。 |
 | run-control | [run-control.md](./run-control.md) | 运行中继续发送、停止、失败再试与后台命令停止 | 父页面「停止」后两子均结束，停止按钮消失，已写入的文件保留。前台命令中断与后台组合未重验。 |
 | subagents | [subagents.md](./subagents.md) | 委派、追加指令、查看过程、共享文件、授权与回收 | 从父会话打开真实子过程，两位子写入共享目录后仍等待。追加指令、子授权与附件隔离未重验。 |
 | work-plan | [work-plan.md](./work-plan.md) | 计划创建、状态标记、回收与完成归档 | 实际更新两步计划并展开已完成计划，样本写入与读回一致。变更目标、清除、压缩及子计划未重验。 |
