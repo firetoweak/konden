@@ -5,7 +5,9 @@ import MantineAIMarkdown from "@ai-markdown/react-mantine";
 import { providerName, type CatalogModel } from "./modelUi";
 import type { SearchApi, SearchProvider, SearchSettings, SearchTestResult } from "./searchTypes";
 
-export function SearchSettingsPanel({ models, api, loadModels, connections, connected }: { models: CatalogModel[]; api: SearchApi; loadModels(provider: string): Promise<CatalogModel[]>; connections: {provider:string;configured:boolean}[]; connected:boolean }) {
+const SEARCH_PROVIDERS: SearchProvider[] = ["deepseek", "openai", "openai-chatgpt"];
+
+export function SearchSettingsPanel({ api, loadModels, connections, connected }: { api: SearchApi; loadModels(provider: string): Promise<CatalogModel[]>; connections: {provider:string;configured:boolean}[]; connected:boolean }) {
   const [catalog, setCatalog] = useState<CatalogModel[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -21,6 +23,9 @@ export function SearchSettingsPanel({ models, api, loadModels, connections, conn
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
   const [result, setResult] = useState<SearchTestResult | null>(null);
+  const searchProvider = draft?.provider;
+  const needsModel = searchProvider !== undefined && searchProvider !== "deepseek";
+  const configured = connections.some((item) => item.provider === searchProvider && item.configured);
 
   useEffect(() => {
     let current = true;
@@ -32,13 +37,17 @@ export function SearchSettingsPanel({ models, api, loadModels, connections, conn
   }, [api, reload]);
 
   useEffect(() => {
-    if (draft?.provider !== "openai") return;
-    let current = true; setCatalogLoading(true); setCatalogError(null);
-    loadModels("openai").then((value) => { if (current) setCatalog(value); },
+    setCatalog([]);
+    setCatalogError(null);
+    const shouldLoad = searchProvider !== undefined && needsModel && configured;
+    setCatalogLoading(shouldLoad);
+    if (!shouldLoad) return;
+    let current = true;
+    loadModels(searchProvider).then((value) => { if (current) setCatalog(value); },
       (cause: unknown) => { if (current) setCatalogError(cause instanceof Error ? cause.message : String(cause)); })
       .finally(() => { if (current) setCatalogLoading(false); });
     return () => { current = false; };
-  }, [draft?.provider, loadModels, catalogReload]);
+  }, [searchProvider, needsModel, configured, loadModels, catalogReload]);
 
   function change(values: Partial<SearchSettings>) {
     setDraft((value) => ({ ...value!, ...values }));
@@ -62,8 +71,7 @@ export function SearchSettingsPanel({ models, api, loadModels, connections, conn
   if (!draft || !saved) return <Stack p="lg"><Skeleton height={40} /><Skeleton height={80} /></Stack>;
   const changed = JSON.stringify(draft) !== JSON.stringify(saved);
   const disabled = !draft.enabled || saving || testing || !connected;
-  const configured = connections.find((item) => item.provider === draft.provider)?.configured === true;
-  const available = [...new Map([...models, ...catalog].map((item) => [item.id,item])).values()];
+  const available = catalog.filter((model) => model.provider === draft.provider && model.webSearch);
 
   return <>
     <div className="search-settings-scroll">
@@ -73,18 +81,27 @@ export function SearchSettingsPanel({ models, api, loadModels, connections, conn
       </div>
       <div className="search-service-fields">
         <Select label="搜索服务" value={draft.provider} allowDeselect={false} disabled={disabled}
-          data={[{ value: "deepseek", label: "DeepSeek" }, { value: "openai", label: "OpenAI" }]}
-          onChange={(value) => change({ provider: value as SearchProvider })} />
+          data={SEARCH_PROVIDERS.map((value) => ({ value, label: providerName(value) }))}
+          onChange={(value) => {
+            if (value === null) return;
+            const provider = value as SearchProvider;
+            const model = draft.openaiModel;
+            const openaiModel = provider === "deepseek" || model?.startsWith(`${provider}/`) ? model : null;
+            change({ provider, openaiModel });
+          }} />
         <div className="search-connection"><Text size="xs" c="dimmed">供应商连接</Text>
           <div><IconLink size={15} /><Text size="sm">{providerName(draft.provider)}</Text><Badge size="xs" variant="light" color={configured ? "teal" : "gray"}>{configured ? "已配置" : "未配置"}</Badge></div>
         </div>
-        {draft.provider === "openai" ? <Select className="search-model-field" label="搜索模型" description="由此模型自动决定是否联网搜索，聊天模型保持独立。"
-          searchable allowDeselect={false} value={draft.openaiModel} disabled={disabled || catalogLoading || catalogError !== null}
-          data={available.filter((model) => model.provider === "openai" && model.webSearch).map((model) => ({ value: model.id, label: model.name }))}
+        {needsModel ? <Select className="search-model-field" label="搜索模型" description="由此模型自动决定是否联网搜索。"
+          searchable allowDeselect={false} value={draft.openaiModel} disabled={disabled || !configured || catalogLoading || catalogError !== null}
+          nothingFoundMessage="没有可用的搜索模型"
+          data={available.map((model) => ({ value: model.id, label: model.name }))}
           onChange={(value) => change({ openaiModel: value! })} /> : null}
       </div>
-      {catalogError && draft.provider === "openai" ? <Alert color="red" title="搜索模型目录读取失败" mt="md"><Text size="sm" style={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{catalogError}</Text><Button size="xs" variant="subtle" onClick={() => setCatalogReload((value) => value + 1)}>重新加载模型</Button></Alert> : null}
-      {!configured ? <Text size="xs" c="dimmed" mt="md">请先在供应商连接文件中配置 {providerName(draft.provider)}。</Text> : null}
+      {catalogError && needsModel ? <Alert color="red" title="搜索模型目录读取失败" mt="md"><Text size="sm" style={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{catalogError}</Text><Button size="xs" variant="subtle" onClick={() => setCatalogReload((value) => value + 1)}>重新加载模型</Button></Alert> : null}
+      {!configured ? <Text size="xs" c="dimmed" mt="md">{draft.provider === "openai-chatgpt"
+        ? "请先在「供应商与模型」完成 ChatGPT 订阅授权。"
+        : `请先在供应商连接文件中配置 ${providerName(draft.provider)}。`}</Text> : null}
       {!draft.enabled ? <Text size="xs" c="dimmed" mt="md">网络搜索已停用，服务与模型选择会保留。</Text> : null}
       <section className="search-test-section" aria-label="搜索测试">
         <div className="search-test-heading"><Text fw={550} size="sm">测试搜索</Text></div>
@@ -92,7 +109,7 @@ export function SearchSettingsPanel({ models, api, loadModels, connections, conn
           <TextInput label="测试问题" placeholder="输入想搜索的问题" maxLength={128} value={query} disabled={disabled}
             onChange={(event) => { setQuery(event.currentTarget.value); setResult(null); setTestError(null); }} />
           <Button variant="default" type="submit" leftSection={<IconSearch size={15} />} loading={testing}
-            disabled={!draft.enabled || saving || !query.trim() || !configured || !connected || (draft.provider === "openai" && draft.openaiModel === null)}>{testError ? "重试搜索" : "测试搜索"}</Button>
+            disabled={!draft.enabled || saving || !query.trim() || !configured || !connected || (needsModel && draft.openaiModel === null)}>{testError ? "重试搜索" : "测试搜索"}</Button>
         </form>
         {testing ? <div className="search-result-loading" role="status"><Text size="sm" c="dimmed">正在请求搜索服务…</Text><Skeleton height={12} /><Skeleton height={12} w="75%" /></div>
           : testError ? <Alert color="red" title="搜索未完成" mt="lg">{testError}</Alert>

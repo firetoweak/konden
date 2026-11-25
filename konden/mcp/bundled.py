@@ -14,6 +14,7 @@ from konden.mcp.models import McpServerRecord, StdioTransportConfig, TransportKi
 from konden.media.images import image_config_path, load_image_config
 from konden.paths import KondenHome
 from konden.search import load_search_config, search_path
+from thinllm import MissingProviderSetting, resolve_endpoint
 
 BROWSER_SERVER_IDS = frozenset({"builtin-chrome-devtools", "builtin-playwright"})
 DEEPSEEK_SERVER_ID = "builtin-deepseek"
@@ -120,7 +121,7 @@ def create_bundled_servers(home: KondenHome, task_root: Path | None = None) -> C
         revision=revision,
     )
     openai = replace(deepseek, id=OPENAI_SERVER_ID, display_name="OpenAI Web Search",
-        description="内置 OpenAI 搜索模型：自动决定是否联网，返回回答、是否检索与来源。复用 OpenAI API 连接。检索前加载 web-research Skill。",
+        description="内置 OpenAI 搜索模型：自动决定是否联网，返回回答、是否检索与来源。使用已配置的 OpenAI API 或 ChatGPT 订阅连接。检索前加载 web-research Skill。",
         transport_config=StdioTransportConfig(command=sys.executable,
             args=("-m", "konden.mcp.openai_web", "--connections", str(home.connections_path)), cwd=str(ROOT)))
     content = b"".join((ROOT / path).read_bytes() for path in (
@@ -140,15 +141,21 @@ def create_bundled_servers(home: KondenHome, task_root: Path | None = None) -> C
     def read() -> tuple[McpServerRecord, ...]:
         config = load_search_config(search_path(home.connections_path))
         connections = load_connections(home.connections_path) if home.connections_path.exists() else None
-        enabled = (config.enabled and connections is not None
-                   and bool(connections[config.provider]["api_key"].strip()))
+        enabled = False
+        if config.enabled and connections is not None:
+            try:
+                resolve_endpoint(f"{config.provider}/search", connections[config.provider])
+            except MissingProviderSetting:
+                pass
+            else:
+                enabled = True
         signature = hashlib.sha256(content + repr(config.model_dump()).encode()).digest()
         current_revision = int.from_bytes(signature[:6]) + revision
         image_config = load_image_config(image_config_path(home.connections_path))
         image_enabled = image_config.enabled and connections is not None and bool(connections["openai"]["api_key"].strip())
         image_revision = int.from_bytes(hashlib.sha256(image_content + repr(image_config.model_dump()).encode()).digest()[:6]) + 1
         return (*fixed, replace(deepseek, enabled=enabled and config.provider == "deepseek", revision=current_revision),
-                replace(openai, enabled=enabled and config.provider == "openai", revision=current_revision),
+                replace(openai, enabled=enabled and config.provider != "deepseek", revision=current_revision),
                 replace(images, enabled=image_enabled, revision=image_revision))
 
     return read

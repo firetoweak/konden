@@ -1,4 +1,6 @@
-export type SearchProvider = "deepseek" | "openai";
+import type { SearchConfig } from "../../api/contracts";
+
+export type SearchProvider = SearchConfig["provider"];
 export type SearchSettings = {enabled: boolean; provider: SearchProvider; openaiModel: string | null};
 export type SearchTestResult = {query:string; provider:SearchProvider; model:string|null; latencyMs:number;
   searched:boolean; summary:string|null; sources:{title:string;url:string;snippet:string}[]};

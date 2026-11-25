@@ -41,7 +41,8 @@ def sse(*events):
 
 
 @pytest.mark.parametrize("searched", [False, True])
-def test_openai_search_keeps_auto_choice_and_distinguishes_direct_answers(searched):
+def test_openai_search_keeps_auto_choice_and_distinguishes_direct_answers(searched, responses_connection):
+    endpoint, model, header = responses_connection
     output = [{"type": "message", "content": [{"type": "output_text", "text": "answer",
               "annotations": [{"type": "url_citation", "url": "https://example.com/", "title": "Source"}] if searched else []}]}]
     if searched:
@@ -51,16 +52,24 @@ def test_openai_search_keeps_auto_choice_and_distinguishes_direct_answers(search
     def handle(request):
         payload = json.loads(request.content)
         assert request.url == "https://api.openai.com/v1/responses"
+        assert request.headers["Authorization"] == header
+        assert payload["input"] == [{"role": "user", "content": "question"}]
+        assert payload["store"] is False and payload["stream"] is True
         assert payload["tools"] == [{"type": "web_search"}]
         assert payload["tool_choice"] == "auto"
         assert payload["model"] == "gpt-6.1-terra"
         assert payload["include"] == ["web_search_call.action.sources"]
-        return httpx.Response(200, content=sse(completed(output)))
+        # The subscription endpoint can omit output from response.completed even after delivering items.
+        done_items = [
+            {"type": "response.output_item.done", "output_index": index, "item": item}
+            for index, item in enumerate(output)
+        ]
+        terminal = completed([] if endpoint.provider == "openai-chatgpt" else output)
+        return httpx.Response(200, content=sse(*done_items, terminal))
 
     async def run():
-        endpoint = resolve_endpoint("openai/gpt-6.1-terra", {"api_key": "existing-key"})
-        async with ResponsesClient(endpoint, transport=httpx.MockTransport(handle)) as client:
-            result = await client.web_search("question", "openai/gpt-6.1-terra")
+        async with create_client(endpoint, transport=httpx.MockTransport(handle)) as client:
+            result = await client.web_search("question", model)
         assert result == {"summary": "answer", "searched": searched,
                           "sources": [{"url": "https://example.com/", "title": "Source", "snippet": ""}] if searched else []}
     asyncio.run(run())
