@@ -15,6 +15,26 @@ export type LiveTool = {
 
 export type ToolProgressStatus = "running" | "settled";
 
+export type OutgoingUserMessage = {
+  deliveryId: string;
+  text: string;
+  artifactRefs: string[];
+  images: string[];
+  files: { attachment_id: string; name: string; size: number }[];
+  createdAt: string;
+  status: "sending" | "failed";
+  error: string | null;
+};
+
+export type OutgoingGroupMessage = {
+  deliveryId: string;
+  text: string;
+  mention: string[];
+  createdAt: string;
+  status: "sending" | "failed";
+  error: string | null;
+};
+
 export type SessionRuntime = {
   activity: SessionActivity | null;
   lastError: string | null;
@@ -29,6 +49,7 @@ export type SessionRuntime = {
     compactCount: number;
     compactPhase: "running" | "ready" | "failed" | null;
   } | null;
+  outgoing: OutgoingUserMessage[];
 };
 
 export type RuntimeState = {
@@ -36,6 +57,7 @@ export type RuntimeState = {
   viewingSessionId: string | null;
   ownerSessionId: string | null;
   sessions: Record<string, SessionRuntime>;
+  groupOutgoing: Record<string, OutgoingGroupMessage[]>;
 };
 
 const initialState: RuntimeState = {
@@ -43,6 +65,7 @@ const initialState: RuntimeState = {
   viewingSessionId: null,
   ownerSessionId: null,
   sessions: {},
+  groupOutgoing: {},
 };
 
 function runtimeOf(state: RuntimeState, sessionId: string): SessionRuntime {
@@ -61,6 +84,7 @@ function runtimeOf(state: RuntimeState, sessionId: string): SessionRuntime {
     tools: {},
     controlNotice: null,
     conversationStatus: null,
+    outgoing: [],
   };
   state.sessions[sessionId] = created;
   return created;
@@ -248,6 +272,108 @@ const runtimeSlice = createSlice({
         compactPhase: action.payload.compactPhase,
       };
     },
+    outgoingQueued(
+      state,
+      action: PayloadAction<{ sessionId: string; message: OutgoingUserMessage }>,
+    ) {
+      const outgoing = runtimeOf(state, action.payload.sessionId).outgoing;
+      const existing = outgoing.findIndex((item) => item.deliveryId === action.payload.message.deliveryId);
+      if (existing >= 0) {
+        outgoing[existing] = action.payload.message;
+      } else {
+        outgoing.push(action.payload.message);
+      }
+    },
+    outgoingConfirmed(
+      state,
+      action: PayloadAction<{ sessionId: string; deliveryId: string }>,
+    ) {
+      const session = runtimeOf(state, action.payload.sessionId);
+      session.outgoing = session.outgoing.filter((item) => item.deliveryId !== action.payload.deliveryId);
+    },
+    outgoingFailed(
+      state,
+      action: PayloadAction<{ sessionId: string; deliveryId: string; error: string }>,
+    ) {
+      const item = runtimeOf(state, action.payload.sessionId).outgoing.find(
+        (entry) => entry.deliveryId === action.payload.deliveryId,
+      );
+      if (item !== undefined) {
+        item.status = "failed";
+        item.error = action.payload.error;
+      }
+    },
+    outgoingRemoved(
+      state,
+      action: PayloadAction<{ sessionId: string; deliveryId: string }>,
+    ) {
+      const session = runtimeOf(state, action.payload.sessionId);
+      session.outgoing = session.outgoing.filter((item) => item.deliveryId !== action.payload.deliveryId);
+    },
+    outgoingHydrated(
+      state,
+      action: PayloadAction<{ sessionId: string; messages: OutgoingUserMessage[] }>,
+    ) {
+      const outgoing = runtimeOf(state, action.payload.sessionId).outgoing;
+      const present = new Set(outgoing.map((item) => item.deliveryId));
+      for (const message of action.payload.messages) {
+        if (!present.has(message.deliveryId)) {
+          outgoing.push(message);
+        }
+      }
+    },
+    groupOutgoingQueued(
+      state,
+      action: PayloadAction<{ groupId: string; message: OutgoingGroupMessage }>,
+    ) {
+      const list = (state.groupOutgoing[action.payload.groupId] ??= []);
+      const existing = list.findIndex((item) => item.deliveryId === action.payload.message.deliveryId);
+      if (existing >= 0) {
+        list[existing] = action.payload.message;
+      } else {
+        list.push(action.payload.message);
+      }
+    },
+    groupOutgoingConfirmed(
+      state,
+      action: PayloadAction<{ groupId: string; deliveryId: string }>,
+    ) {
+      const list = state.groupOutgoing[action.payload.groupId];
+      if (list === undefined) return;
+      state.groupOutgoing[action.payload.groupId] = list.filter((item) => item.deliveryId !== action.payload.deliveryId);
+    },
+    groupOutgoingFailed(
+      state,
+      action: PayloadAction<{ groupId: string; deliveryId: string; error: string }>,
+    ) {
+      const item = state.groupOutgoing[action.payload.groupId]?.find(
+        (entry) => entry.deliveryId === action.payload.deliveryId,
+      );
+      if (item !== undefined) {
+        item.status = "failed";
+        item.error = action.payload.error;
+      }
+    },
+    groupOutgoingRemoved(
+      state,
+      action: PayloadAction<{ groupId: string; deliveryId: string }>,
+    ) {
+      const list = state.groupOutgoing[action.payload.groupId];
+      if (list === undefined) return;
+      state.groupOutgoing[action.payload.groupId] = list.filter((item) => item.deliveryId !== action.payload.deliveryId);
+    },
+    groupOutgoingHydrated(
+      state,
+      action: PayloadAction<{ groupId: string; messages: OutgoingGroupMessage[] }>,
+    ) {
+      const list = (state.groupOutgoing[action.payload.groupId] ??= []);
+      const present = new Set(list.map((item) => item.deliveryId));
+      for (const message of action.payload.messages) {
+        if (!present.has(message.deliveryId)) {
+          list.push(message);
+        }
+      }
+    },
   },
 });
 
@@ -270,5 +396,15 @@ export const {
   toolProgress,
   authorizationRequired,
   conversationStatus,
+  outgoingQueued,
+  outgoingConfirmed,
+  outgoingFailed,
+  outgoingRemoved,
+  outgoingHydrated,
+  groupOutgoingQueued,
+  groupOutgoingConfirmed,
+  groupOutgoingFailed,
+  groupOutgoingRemoved,
+  groupOutgoingHydrated,
 } = runtimeSlice.actions;
 export default runtimeSlice.reducer;

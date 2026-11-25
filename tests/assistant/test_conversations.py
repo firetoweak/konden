@@ -79,6 +79,31 @@ def canonical_step_event(events, event_id, content, commands, metadata=None):
 
 
 class ConversationProjectionTest(unittest.TestCase):
+    def test_user_item_exposes_delivery_id_when_present(self):
+        from konden.runtime import DeliveryIdentity
+
+        events = (
+            Event(
+                event_id="user-1",
+                session_id="session-1",
+                sequence=1,
+                payload=UserMessageReceived("第一条"),
+                occurred_at=datetime(2026, 9, 15, 1, tzinfo=UTC),
+                causation_id=None,
+                correlation_id=None,
+                schema_version=6,
+                artifact_refs=(),
+                delivery=DeliveryIdentity("web:conn-1", "web-delivery-1"),
+            ),
+            event(2, "user-2", UserMessageReceived("无投递身份")),
+        )
+        view = SessionView("waiting", ("external_fact",), (), False)
+        conversation = project_conversation("session-1", events, timeline(events), session=view)
+        self.assertEqual(
+            [(item.message_id, item.delivery_id) for item in conversation.items if item.kind == "user"],
+            [("user-1", "web-delivery-1"), ("user-2", None)],
+        )
+
     def test_private_message_notices_follow_received_facts_and_delivered_outcomes(self):
         from konden.assistant.agents import PRIVATE_MESSAGE
 

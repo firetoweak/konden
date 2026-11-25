@@ -35,11 +35,23 @@ import { ConversationWelcome } from "../../app/ConversationWelcome";
 import { CodexDesktopLink } from "../external/CodexDesktopLink";
 import {
   controlNotice,
+  outgoingConfirmed,
+  outgoingFailed,
+  outgoingHydrated,
+  outgoingQueued,
+  outgoingRemoved,
   viewing,
+  type OutgoingUserMessage,
 } from "../../realtime/runtimeSlice";
-import { Composer } from "./Composer";
+import { Composer, type RestoredComposerDraft, type SentAttachmentMeta } from "./Composer";
 import { ClarificationCard } from "./ClarificationCard";
 import { createClientId } from "./clientId";
+import {
+  loadFailedUserMessages,
+  removeFailedUserMessage,
+  saveFailedUserMessages,
+  upsertFailedUserMessage,
+} from "./outgoingStorage";
 import { attachmentUrl } from "./AttachmentTile";
 import { FileAttachmentTile } from "./FileAttachmentTile";
 import { UserMessage } from "./UserMessage";
@@ -71,6 +83,17 @@ import { SubagentPanel } from "./SubagentPanel";
 import { BotAvatar, ChatPresentation, MessageMenu, type MessageReference } from "./ChatPresentation";
 
 const privateReading = new Map<string, { following: boolean; count: number }>();
+const sendChains = new Map<string, Promise<void>>();
+
+function enqueueSend(key: string, task: () => Promise<void>): Promise<void> {
+  const previous = sendChains.get(key) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(task);
+  const tracked = next.finally(() => {
+    if (sendChains.get(key) === tracked) sendChains.delete(key);
+  });
+  sendChains.set(key, tracked);
+  return next;
+}
 
 type OpenPage = { kind: "subagent"; commandId: string }
   | { kind: "error"; title: string; message: string };
@@ -128,12 +151,15 @@ export function Conversation({ agentName, agentNames = [], ref }: {
   }, [count, following, selected.currentData, sessionId]);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [quotedMessage, setQuotedMessage] = useState<string | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState<RestoredComposerDraft | null>(null);
   const [selectSession] = useSelectSessionMutation();
-  const [sendInput, sending] = useSendInputMutation();
+  const [sendInput] = useSendInputMutation();
   const [authorizeCommand, authorizing] = useAuthorizeCommandMutation();
   const [resolveControl, resolvingControl] = useResolveControlMutation();
   const [cancelTurn, stopping] = useCancelTurnMutation();
   const [retryTurn, retrying] = useRetryTurnMutation();
+  const hydratedSessionRef = useRef<string | null>(null);
+  const outgoing = runtime?.outgoing ?? [];
 
   useEffect(() => {
     dispatch(viewing(sessionId === "" ? null : sessionId));
@@ -141,6 +167,32 @@ export function Conversation({ agentName, agentNames = [], ref }: {
       dispatch(viewing(null));
     };
   }, [dispatch, sessionId]);
+
+  useEffect(() => {
+    if (sessionId === "" || selected.currentData === undefined) return;
+    const committedIds = new Set(
+      selected.currentData.items.flatMap((item) =>
+        item.kind === "user" && item.delivery_id != null ? [item.delivery_id] : [],
+      ),
+    );
+    if (hydratedSessionRef.current !== sessionId) {
+      hydratedSessionRef.current = sessionId;
+      const stored = loadFailedUserMessages(sessionId);
+      const remaining = stored.filter((item) => !committedIds.has(item.deliveryId));
+      if (remaining.length > 0) {
+        dispatch(outgoingHydrated({ sessionId, messages: remaining }));
+      }
+      if (remaining.length !== stored.length) {
+        saveFailedUserMessages(sessionId, remaining);
+      }
+    }
+    for (const item of outgoing) {
+      if (committedIds.has(item.deliveryId)) {
+        dispatch(outgoingConfirmed({ sessionId, deliveryId: item.deliveryId }));
+        removeFailedUserMessage(sessionId, item.deliveryId);
+      }
+    }
+  }, [dispatch, outgoing, selected.currentData, sessionId]);
 
   useEffect(() => registerTimelineFocus((outputId) => focusRef.current(outputId)), []);
 
@@ -202,11 +254,12 @@ export function Conversation({ agentName, agentNames = [], ref }: {
     runtime?.committedThinking ?? {},
     runtime?.activeThinking ?? null,
     runtime?.activity ?? null,
+    outgoing,
   );
   const turns = timelineTurns(items);
   const firstUnread = newCount === 0 ? undefined : messageKeys.at(-newCount);
   jumpRef.current = (id) => {
-    const index = turns.findIndex((turn) => turn.user?.key === id || turnReplies(turn, true).some((reply) => reply.key === id));
+    const index = turns.findIndex((turn) => (turn.user?.messageId ?? turn.user?.key) === id || turnReplies(turn, true).some((reply) => reply.key === id));
     if (index < 0) return;
     if (quoteReturn === null) timelineRef.current?.getState((state) => setQuoteReturn(state.scrollTop));
     setFollowing(false);
@@ -239,19 +292,77 @@ export function Conversation({ agentName, agentNames = [], ref }: {
   const activePlan = conversation.work_plan !== null && !isPlanCompleted(conversation.work_plan)
     ? conversation.work_plan : null;
 
-  async function send(text: string, artifactRefs: string[]) {
+  function submitOutgoing(message: OutgoingUserMessage, activeConnectionId: string) {
+    const targetSessionId = sessionId;
+    dispatch(outgoingQueued({ sessionId: targetSessionId, message: { ...message, status: "sending", error: null } }));
+    setFollowing(true);
+    requestAnimationFrame(() => timelineRef.current?.scrollToIndex({ index: "LAST", align: "end" }));
+    return enqueueSend(`session:${targetSessionId}`, async () => {
+      try {
+        await sendInput({
+          connectionId: activeConnectionId,
+          sessionId: targetSessionId,
+          deliveryId: message.deliveryId,
+          text: message.text,
+          artifactRefs: message.artifactRefs,
+          interrupt: false,
+        }).unwrap();
+        removeFailedUserMessage(targetSessionId, message.deliveryId);
+        dispatch(controlNotice({ sessionId: targetSessionId, message: null }));
+      } catch (cause) {
+        const error = requestErrorMessage(cause, "消息发送失败，请确认后端连接后重试。");
+        dispatch(outgoingFailed({
+          sessionId: targetSessionId,
+          deliveryId: message.deliveryId,
+          error,
+        }));
+        upsertFailedUserMessage(targetSessionId, { ...message, status: "failed", error });
+      }
+    });
+  }
+
+  function send(text: string, artifactRefs: string[], meta?: SentAttachmentMeta) {
     if (connectionId === null) {
-      throw new Error("Web connection is not active");
+      return;
     }
-    await sendInput({
-      connectionId,
-      sessionId,
+    const images = meta?.images ?? artifactRefs.filter((ref) => ref.startsWith("sha256:"));
+    const files = meta?.files ?? [];
+    const message: OutgoingUserMessage = {
       deliveryId: `web-${createClientId()}`,
       text,
       artifactRefs,
-      interrupt: false,
-    }).unwrap();
-    dispatch(controlNotice({ sessionId, message: null }));
+      images,
+      files,
+      createdAt: new Date().toISOString(),
+      status: "sending",
+      error: null,
+    };
+    void submitOutgoing(message, connectionId);
+  }
+
+  function retryOutgoing(deliveryId: string) {
+    if (connectionId === null) return;
+    const message = outgoing.find((item) => item.deliveryId === deliveryId);
+    if (message === undefined) return;
+    void submitOutgoing(message, connectionId);
+  }
+
+  function restoreOutgoing(deliveryId: string) {
+    const message = outgoing.find((item) => item.deliveryId === deliveryId);
+    if (message === undefined) return;
+    setRestoredDraft({
+      id: createClientId(),
+      text: message.text,
+      images: message.images,
+      files: message.files,
+    });
+    dispatch(outgoingRemoved({ sessionId, deliveryId }));
+    removeFailedUserMessage(sessionId, deliveryId);
+  }
+
+  function discardOutgoing(deliveryId: string) {
+    dispatch(outgoingRemoved({ sessionId, deliveryId }));
+    removeFailedUserMessage(sessionId, deliveryId);
   }
 
   async function authorize(commandId: string, approved: boolean, targetSessionId = sessionId) {
@@ -370,19 +481,27 @@ export function Conversation({ agentName, agentNames = [], ref }: {
                   </div>}
                 </div>
               );
+              const userMessageId = turn.user === null ? undefined : (turn.user.messageId ?? turn.user.key);
+              const userDeliveryId = turn.user?.deliveryId ?? null;
               return (
               <Stack className={turn.key === highlightedKey ? "conversation-turn is-focused" : "conversation-turn"} gap={24} key={turn.key}>
-                {firstUnread !== undefined && turn.user?.key === firstUnread ? <div className="unread-divider" role="separator">以下是未读消息</div> : null}
+                {firstUnread !== undefined && userMessageId === firstUnread ? <div className="unread-divider" role="separator">以下是未读消息</div> : null}
                 {turn.user === null ? null : (
-                  <Box component="article" className={`message message-user${quotedMessage === turn.user.key ? " is-quote-target" : ""}`} data-message-id={turn.user.key}>
+                  <Box component="article" className={`message message-user${quotedMessage === userMessageId ? " is-quote-target" : ""}`} data-message-id={userMessageId}>
                     <span className="agent-avatar human-avatar" aria-hidden="true">你</span>
                     <UserMessage
-                      messageId={turn.user.key}
+                      messageId={userMessageId}
                       images={turn.user.images}
                       files={turn.user.files}
                       sessionId={sessionId}
                       text={turn.user.text}
                       occurredAt={turn.user.occurredAt}
+                      deliveryState={turn.user.deliveryState}
+                      deliveryError={turn.user.deliveryError}
+                      retryDisabled={connectionId === null}
+                      onRetry={userDeliveryId === null ? undefined : () => retryOutgoing(userDeliveryId)}
+                      onRestore={userDeliveryId === null ? undefined : () => restoreOutgoing(userDeliveryId)}
+                      onDiscard={userDeliveryId === null ? undefined : () => discardOutgoing(userDeliveryId)}
                     />
                   </Box>
                 )}
@@ -495,23 +614,22 @@ export function Conversation({ agentName, agentNames = [], ref }: {
             </Button>
           </ErrorNotice>
         )}
-        {sending.isError || retrying.isError || stopping.isError ? (
+        {retrying.isError || stopping.isError ? (
           <ErrorNotice title="操作失败" onOpen={(message) => setOpenPage({ kind: "error", title: "操作失败", message })} message={stopping.isError
               ? requestErrorMessage(stopping.error, "停止失败，请确认后端连接后重试。")
-              : retrying.isError
-                ? requestErrorMessage(retrying.error, "再试失败，请确认后端连接后重试。")
-                : requestErrorMessage(sending.error, "消息发送失败，请确认后端连接后重试。")} />
+              : requestErrorMessage(retrying.error, "再试失败，请确认后端连接后重试。")} />
         ) : null}
         {conversation.deleted ? <Text size="sm" c="dimmed" ta="center" py="md">Bot 已删除，此处仅保留聊天记录。</Text> : <Composer
           sessionId={sessionId}
           workspaceId={conversation.workspace_id}
           connectionId={connectionId}
           disabled={connectionId === null}
-          sending={sending.isLoading}
           running={running}
           canStop={running || subagentsOpen}
           stopBusy={stopping.isLoading}
           inputTokens={conversation.context_input_tokens}
+          restoredDraft={restoredDraft}
+          onRestoredDraftConsumed={() => setRestoredDraft(null)}
           onSend={send}
           onStop={() => {
             if (connectionId === null) {

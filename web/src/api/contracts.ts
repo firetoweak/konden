@@ -365,6 +365,7 @@ export const conversationViewSchema = z
           .object({
             kind: z.literal("user"),
             message_id: z.string().min(1),
+            delivery_id: z.string().min(1).nullish(),
             text: z.string().min(1),
             occurred_at: z.string().datetime({ offset: true }),
             images: z.array(z.string().regex(/^sha256:[0-9a-f]{64}$/)),

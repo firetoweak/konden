@@ -1,4 +1,5 @@
-import { Group, Stack, Text } from "@mantine/core";
+import { Button, Group, Stack, Text } from "@mantine/core";
+import { IconAlertCircle, IconRefresh } from "@tabler/icons-react";
 
 import { AttachmentTile, attachmentUrl } from "./AttachmentTile";
 import { FileAttachmentTile } from "./FileAttachmentTile";
@@ -15,6 +16,12 @@ type UserMessageProps = {
   occurredAt: string;
   images: string[];
   files: { attachment_id: string; name: string; size: number }[];
+  deliveryState?: "sending" | "failed";
+  deliveryError?: string | null;
+  retryDisabled?: boolean;
+  onRetry?: () => void;
+  onRestore?: () => void;
+  onDiscard?: () => void;
 };
 
 export function UserMessage({
@@ -24,6 +31,12 @@ export function UserMessage({
   occurredAt,
   images,
   files,
+  deliveryState,
+  deliveryError,
+  retryDisabled = false,
+  onRetry,
+  onRestore,
+  onDiscard,
 }: UserMessageProps) {
   const displayText = text.replace(ATTACHMENT_TOKEN, "").trim();
   const time = formatMessageTime(occurredAt);
@@ -40,10 +53,16 @@ export function UserMessage({
     </Group>
   );
 
+  const rowClass = deliveryState === "sending"
+    ? "user-message-row user-bubble is-sending"
+    : deliveryState === "failed"
+      ? "user-message-row user-bubble is-failed"
+      : "user-message-row user-bubble";
+
   return (
     <div className="user-message-content">
-    <MessageMenu id={messageId} author="你" text={text}>
-    <Stack className="user-message-row user-bubble" gap={6} tabIndex={0}>
+    <MessageMenu id={deliveryState === undefined ? messageId : undefined} author="你" text={text}>
+    <Stack className={rowClass} gap={6} tabIndex={0}>
       {fileCards}
       {images.length === 0 ? null : (
         <Group className="user-attachments" gap={8} justify="flex-end">
@@ -62,7 +81,30 @@ export function UserMessage({
       )}
     </Stack>
     </MessageMenu>
-    <Text className="message-time" component="time" dateTime={occurredAt} c="dimmed" fz={11} title={`发送于 ${time.full}`}>{time.short}</Text>
+    {deliveryState === "sending" ? (
+      <Text className="message-time message-delivery-status" c="dimmed" fz={11} role="status">发送中…</Text>
+    ) : deliveryState === "failed" ? (
+      <div className="message-delivery-failed" role="alert">
+        <Group gap={4} wrap="nowrap" className="message-delivery-error">
+          <IconAlertCircle size={13} aria-hidden="true" />
+          <Text c="red" fz={12}>{deliveryError ?? "消息发送失败，请重试。"}</Text>
+        </Group>
+        <Group gap={4} wrap="nowrap">
+          {onRetry === undefined ? null : (
+            <Button size="compact-xs" variant="subtle" color="red" leftSection={<IconRefresh size={12} />}
+              disabled={retryDisabled} onClick={onRetry}>重试</Button>
+          )}
+          {onRestore === undefined ? null : (
+            <Button size="compact-xs" variant="subtle" color="gray" onClick={onRestore}>放回输入框</Button>
+          )}
+          {onDiscard === undefined ? null : (
+            <Button size="compact-xs" variant="subtle" color="gray" onClick={onDiscard}>删除</Button>
+          )}
+        </Group>
+      </div>
+    ) : (
+      <Text className="message-time" component="time" dateTime={occurredAt} c="dimmed" fz={11} title={`发送于 ${time.full}`}>{time.short}</Text>
+    )}
     </div>
   );
 }
