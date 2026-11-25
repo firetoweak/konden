@@ -50,6 +50,7 @@ konden 通过长期 Bot 团队提供通用能力与持续协作。产品范围�
 
 | 改动 | 必须运行 |
 |---|---|
+| 文档 | `python scripts/ci.py docs` |
 | Python | `python scripts/ci.py python` |
 | 启动、进程或执行边界 | 再运行 `python scripts/ci.py smoke` 及相关进程用例 |
 | 前端 | `python scripts/ci.py web` |

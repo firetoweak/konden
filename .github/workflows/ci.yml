@@ -19,14 +19,56 @@ env:
   PYTHONIOENCODING: utf-8
 
 jobs:
+  scope:
+    name: Scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.classify.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - id: classify
+        name: Classify changed scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: python scripts/ci_scope.py classify
+
+  docs:
+    name: Docs
+    needs: scope
+    if: needs.scope.outputs.mode == 'docs'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Run documentation verification
+        run: python scripts/ci.py docs
+
   python:
     name: Python (${{ matrix.os }})
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
+        os: [ubuntu-latest, windows-latest, macos-15]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -46,6 +88,8 @@ jobs:
 
   web:
     name: Web
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -63,6 +107,8 @@ jobs:
 
   formal:
     name: Formal (TLC)
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -83,12 +129,14 @@ jobs:
 
   process:
     name: Process (${{ matrix.os }}, ${{ matrix.group }})
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
+        os: [ubuntu-latest, windows-latest, macos-15]
         group: [compact, supervisor, execution, integration]
     steps:
       - uses: actions/checkout@v7
@@ -141,18 +189,21 @@ jobs:
 
   ci:
     name: CI
-    needs: [python, web, process, formal]
+    needs: [scope, docs, python, web, formal, process]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
       - name: Require successful merge checks
         env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          SCOPE_MODE: ${{ needs.scope.outputs.mode }}
+          DOCS_RESULT: ${{ needs.docs.result }}
           PYTHON_RESULT: ${{ needs.python.result }}
           WEB_RESULT: ${{ needs.web.result }}
-          PROCESS_RESULT: ${{ needs.process.result }}
           FORMAL_RESULT: ${{ needs.formal.result }}
-        run: |
-          test "$PYTHON_RESULT" = success
-          test "$WEB_RESULT" = success
-          test "$PROCESS_RESULT" = success
-          test "$FORMAL_RESULT" = success
+          PROCESS_RESULT: ${{ needs.process.result }}
+        run: python scripts/ci_scope.py verify

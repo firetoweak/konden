@@ -19,7 +19,7 @@ konden 提供一支有名字、能互相交流的长期 Bot 团队。你可以�
 
 ## 快速开始
 
-支持 **Windows x64**、**Linux x64（glibc 2.35+）** 与 **macOS 15+（Apple Silicon / Intel）（注意，本项目并未在MAC系统上实机使用过！！！）**。
+支持 **Windows x64**、**Linux x64（glibc 2.35+）** 与 **macOS 15+（Apple Silicon）（注意，本项目并未在MAC系统上实机使用过！！！）**。
 
 macOS 需要可用的 Git；若系统尚未准备命令行工具，先运行 `xcode-select --install` 并完成系统安装。
 

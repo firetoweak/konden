@@ -20,8 +20,8 @@ def host_platform() -> str:
     machine = platform.machine().lower()
     architecture = "x86_64" if machine in {"amd64", "x86_64"} else machine
     name = f"{platform.system().lower()}-{architecture}"
-    if name not in {"windows-x86_64", "linux-x86_64", "darwin-arm64", "darwin-x86_64"}:
-        raise ValueError("应用工具支持 Windows x64、Linux x64、macOS Apple Silicon 和 Intel。")
+    if name not in {"windows-x86_64", "linux-x86_64", "darwin-arm64"}:
+        raise ValueError("应用工具支持 Windows x64、Linux x64 和 macOS Apple Silicon。")
     return name
 
 
