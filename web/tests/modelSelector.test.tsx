@@ -50,7 +50,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it("模型设置折叠为单个入口，经模型子菜单切换仍提交完整模型标识", async () => {
   render(<MantineProvider env="test"><ModelSelector sessionId="session" connectionId="connection" /></MantineProvider>);
   const button = screen.getByRole("button", { name: "模型设置：DeepSeek pro，推理强度：低" });
-  expect(button).toHaveTextContent("pro");
+  expect(button).toHaveTextContent("pro（DeepSeek）");
   expect(button).not.toHaveTextContent("deepseek/");
   expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   fireEvent.mouseEnter(button);
@@ -72,4 +72,36 @@ it("会话强度菜单使用供应商自己的档位并随选择提交", async (
   expect(screen.queryByRole("menuitem",{name:"中",exact:true})).not.toBeInTheDocument();
   fireEvent.click(await screen.findByRole("menuitem",{name:"最高",exact:true}));
   await waitFor(() => expect(select).toHaveBeenCalledWith({sessionId:"session",connectionId:"connection",model:"deepseek/pro",reasoningEffort:"max"}));
+});
+
+// 防止不同供应商提供同名模型时列表无法区分、选中后无法核对或切换错供应商连接。
+it("不同供应商的同名模型分别标注配置供应商，可独立区分并切换", async () => {
+  sessionModel.mockReturnValue({ data: { selected: { model: "vllm/qwen3" }, pending: false } });
+  modelSettings.mockReturnValue({ data: {
+    config: { model: { candidates: [{ model: "vllm/qwen3" }, { model: "ollama/qwen3" }] } },
+    providers: [
+      { provider: "vllm", configured: true },
+      { provider: "ollama", configured: true },
+    ],
+  } });
+  const view = render(<MantineProvider env="test"><ModelSelector sessionId="session" connectionId="connection" /></MantineProvider>);
+  const trigger = screen.getByRole("button", { name: "模型设置：vLLM qwen3" });
+  expect(trigger).toHaveTextContent("qwen3（vLLM）");
+  fireEvent.click(trigger);
+  const switchItem = await screen.findByRole("menuitem", { name: "切换模型：vLLM qwen3" });
+  expect(switchItem).toHaveTextContent("qwen3（vLLM）");
+  fireEvent.click(switchItem);
+  const vllmItem = await screen.findByRole("menuitem", { name: "vLLM qwen3" });
+  const ollamaItem = await screen.findByRole("menuitem", { name: "Ollama qwen3" });
+  expect(vllmItem).toHaveTextContent("qwen3（vLLM）");
+  expect(vllmItem).toHaveAttribute("aria-current", "true");
+  expect(ollamaItem).toHaveTextContent("qwen3（Ollama）");
+  expect(ollamaItem).not.toHaveAttribute("aria-current");
+  fireEvent.click(ollamaItem);
+  await waitFor(() => expect(select).toHaveBeenCalledWith({
+    sessionId: "session", connectionId: "connection", model: "ollama/qwen3", reasoningEffort: null,
+  }));
+  sessionModel.mockReturnValue({ data: { selected: { model: "ollama/qwen3" }, pending: false } });
+  view.rerender(<MantineProvider env="test"><ModelSelector sessionId="session" connectionId="connection" /></MantineProvider>);
+  expect(screen.getByRole("button", { name: "模型设置：Ollama qwen3" })).toHaveTextContent("qwen3（Ollama）");
 });
