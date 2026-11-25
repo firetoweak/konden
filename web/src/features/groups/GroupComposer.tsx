@@ -5,19 +5,26 @@ import { ChatPresentation, MessageQuote, splitMessageQuote, withMessageQuote } f
 import { clearSentComposerText, restoreComposerText, saveComposerText } from "../conversation/composerDraft";
 import { useMentionCompletion } from "../conversation/MentionCompletion";
 
-export function GroupComposer({ groupId, groupName, members, connected, posting, onSend }: {
+export type RestoredGroupDraft = {
+  id: string;
+  text: string;
+};
+
+export function GroupComposer({ groupId, groupName, members, connected, restoredDraft = null, onRestoredDraftConsumed, onSend }: {
   groupId?: string;
   groupName: string;
   members: string[];
   connected: boolean;
-  posting: boolean;
-  onSend: (text: string, mention: string[]) => Promise<boolean>;
+  restoredDraft?: RestoredGroupDraft | null;
+  onRestoredDraftConsumed?: () => void;
+  onSend: (text: string, mention: string[]) => void;
 }) {
   const draftKey = `group:${groupId ?? groupName}`;
   const [draft, setDraft] = useState(() => restoreComposerText(draftKey));
   const { quote: requestedQuote, onQuote } = useContext(ChatPresentation);
   const { body: text, quote } = splitMessageQuote(draft);
   const setText = (body: string) => setDraft(withMessageQuote(body, quote));
+  const consumedRestoreIdRef = useRef<string | null>(null);
   useEffect(() => { saveComposerText(draftKey, draft); }, [draftKey, draft]);
   useEffect(() => {
     if (requestedQuote === null) return;
@@ -25,6 +32,17 @@ export function GroupComposer({ groupId, groupName, members, connected, posting,
     onQuote(null);
     textarea.current?.focus();
   }, [requestedQuote, onQuote]);
+  useEffect(() => {
+    if (restoredDraft === null || consumedRestoreIdRef.current === restoredDraft.id) return;
+    consumedRestoreIdRef.current = restoredDraft.id;
+    setDraft((current) => {
+      if (current.trim() === "") return restoredDraft.text;
+      if (restoredDraft.text.trim() === "") return current;
+      return `${current}\n${restoredDraft.text}`;
+    });
+    onRestoredDraftConsumed?.();
+    textarea.current?.focus();
+  }, [onRestoredDraftConsumed, restoredDraft]);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const mentions = useMentionCompletion({ text, onChange: setText, names: members, textarea, includeAll: true });
   const names = [...members].sort((a, b) => b.length - a.length).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
@@ -32,14 +50,15 @@ export function GroupComposer({ groupId, groupName, members, connected, posting,
     .map((item) => members.find((name) => name === item[2]) ?? members.find((name) => name.toLocaleLowerCase() === item[2].toLocaleLowerCase()));
   const mentionAll = /(^|[^A-Za-z0-9._%+-])@all(?=$|[\s，。！？、,:;!?）)])/iu.test(text);
   const mention = mentionAll ? [] : members.filter((name) => addressed.includes(name));
-  const canSend = connected && !posting && text.trim() !== "";
+  const canSend = connected && text.trim() !== "";
 
-  async function send() {
+  function send() {
     if (!canSend) return;
-    if (await onSend(draft, mention)) {
-      clearSentComposerText(draftKey, draft);
-      setDraft("");
-    }
+    const sentDraft = draft;
+    const sentMention = mention;
+    clearSentComposerText(draftKey, sentDraft);
+    setDraft("");
+    onSend(sentDraft, sentMention);
   }
 
   return <div className={`composer group-composer${quote !== null || text.length > 90 || text.includes("\n") ? " is-expanded" : ""}`}>
@@ -63,8 +82,8 @@ export function GroupComposer({ groupId, groupName, members, connected, posting,
         </Text>
       </Group>
       <Tooltip label="发送到群">
-        <ActionIcon className="composer-send" aria-label="发送到群" disabled={!canSend} loading={posting}
-          loaderProps={{ color: "var(--konden-button-text)" }} radius="xl" size={32} onClick={() => void send()}>
+        <ActionIcon className="composer-send" aria-label="发送到群" disabled={!canSend}
+          radius="xl" size={32} onClick={send}>
           <IconArrowUp aria-hidden="true" size={18} stroke={2} />
         </ActionIcon>
       </Tooltip>
