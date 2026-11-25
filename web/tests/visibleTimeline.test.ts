@@ -243,6 +243,87 @@ describe("visibleTimeline", () => {
       thinkingPending: true,
     });
   });
+
+  it("appends local outgoing messages after active preview and deduplicates by delivery_id with stable key", () => {
+    const sending = [{
+      deliveryId: "web-1",
+      text: "第二条消息",
+      artifactRefs: [],
+      images: [],
+      files: [],
+      createdAt: "2026-09-15T08:00:05+00:00",
+      status: "sending" as const,
+      error: null,
+    }];
+    const whileStreaming = visibleTimeline(
+      { ...conversation, revision: 1, items: [conversation.items[0]] },
+      {},
+      { outputId: "user-1", text: "正在回答上一条" },
+      {},
+      {},
+      null,
+      "running",
+      sending,
+    );
+    expect(whileStreaming.map((item) => item.kind)).toEqual(["user", "step", "user"]);
+    expect(whileStreaming[2]).toMatchObject({
+      key: "web-1",
+      deliveryId: "web-1",
+      deliveryState: "sending",
+      text: "第二条消息",
+    });
+
+    const confirmed = visibleTimeline(
+      {
+        ...conversation,
+        revision: 2,
+        items: [
+          conversation.items[0],
+          {
+            kind: "user",
+            message_id: "event-2",
+            delivery_id: "web-1",
+            text: "第二条消息",
+            occurred_at: "2026-09-15T08:00:06+00:00",
+            images: [],
+            files: [],
+          },
+        ],
+      },
+      {},
+      null,
+      {},
+      {},
+      null,
+      "running",
+      [
+        ...sending,
+        {
+          deliveryId: "web-2",
+          text: "第二条消息",
+          artifactRefs: [],
+          images: [],
+          files: [],
+          createdAt: "2026-09-15T08:00:07+00:00",
+          status: "sending" as const,
+          error: null,
+        },
+      ],
+    );
+    expect(confirmed).toHaveLength(3);
+    expect(confirmed[1]).toMatchObject({
+      key: "web-1",
+      messageId: "event-2",
+      text: "第二条消息",
+    });
+    expect(confirmed[1]).not.toHaveProperty("deliveryState");
+    expect(confirmed[2]).toMatchObject({
+      key: "web-2",
+      deliveryId: "web-2",
+      deliveryState: "sending",
+      text: "第二条消息",
+    });
+  });
 });
 
 describe("timelineTurns", () => {
@@ -497,6 +578,28 @@ describe("turnNeedsThinkingHint", () => {
         { running: false, latest: true, settled: true },
       ),
     ).toBe(false);
+  });
+
+  it("shows thinking for a sending message before backend starts and hides it on failure", () => {
+    const sendingTurn: TimelineTurn = {
+      key: "web-1",
+      user: { ...user, key: "web-1", deliveryState: "sending", deliveryId: "web-1" },
+      communications: [],
+      process: [],
+      active: null,
+      final: null,
+    };
+    expect(turnIsSettled(sendingTurn, { latest: true, running: false, awaitingControl: false })).toBe(false);
+    expect(turnNeedsThinkingHint(sendingTurn, { running: false, latest: true })).toBe(true);
+    expect(turnNeedsThinkingHint(sendingTurn, { running: true, latest: true })).toBe(true);
+    expect(turnNeedsThinkingHint(sendingTurn, { running: false, latest: false })).toBe(false);
+
+    const failedTurn: TimelineTurn = {
+      ...sendingTurn,
+      user: { ...user, key: "web-1", deliveryState: "failed", deliveryError: "网络错误", deliveryId: "web-1" },
+    };
+    expect(turnNeedsThinkingHint(failedTurn, { running: true, latest: true })).toBe(false);
+    expect(turnNeedsThinkingHint(failedTurn, { running: false, latest: true })).toBe(false);
   });
 });
 

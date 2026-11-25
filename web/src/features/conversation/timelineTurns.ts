@@ -121,6 +121,9 @@ export function turnIsSettled(
     awaitingControl: boolean;
   },
 ): boolean {
+  if (turn.user?.deliveryState === "sending") {
+    return false;
+  }
   if (processHasLiveWork(turn)) {
     return false;
   }
@@ -165,6 +168,12 @@ export function turnNeedsThinkingHint(
   turn: TimelineTurn,
   options: { running: boolean; latest: boolean; settled?: boolean },
 ): boolean {
+  if (turn.user?.deliveryState === "failed") {
+    return false;
+  }
+  if (turn.user?.deliveryState === "sending") {
+    return options.latest;
+  }
   if (options.settled === true) {
     return false;
   }

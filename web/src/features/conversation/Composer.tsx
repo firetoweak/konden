@@ -32,7 +32,7 @@ import {
 } from "../../api/kondenApi";
 import { ModelSelector } from "../models/ModelSelector";
 import { ContextUsage } from "./ContextUsage";
-import { AttachmentTile } from "./AttachmentTile";
+import { AttachmentTile, attachmentUrl } from "./AttachmentTile";
 import { FileAttachmentTile } from "./FileAttachmentTile";
 import { createClientId } from "./clientId";
 import { clearSentComposerText, restoreComposerText, saveComposerText } from "./composerDraft";
@@ -40,9 +40,10 @@ import { ChatPresentation, MessageQuote, splitMessageQuote, withMessageQuote } f
 import { useMentionCompletion } from "./MentionCompletion";
 import {
   composeSendContent,
-  type ComposerDraft,
   type ComposerAttachment,
 } from "./composerContent";
+
+const ATTACHMENT_TOKEN = /\[(?:Image|File) #\d+\]/g;
 
 const ACCEPTED_IMAGE_TYPES = new Set([
   "image/png",
@@ -51,18 +52,32 @@ const ACCEPTED_IMAGE_TYPES = new Set([
   "image/gif",
 ]);
 
+export type RestoredComposerDraft = {
+  id: string;
+  text: string;
+  images: string[];
+  files: { attachment_id: string; name: string; size: number }[];
+};
+
+export type SentAttachmentMeta = {
+  images: string[];
+  files: { attachment_id: string; name: string; size: number }[];
+};
+
 type ComposerProps = {
   sessionId: string;
   workspaceId: string | null;
   connectionId: string | null;
   disabled: boolean;
-  sending: boolean;
+  sending?: boolean;
   running: boolean;
   canStop?: boolean;
   stopBusy: boolean;
-  onSend: (text: string, artifactRefs: string[]) => Promise<void>;
+  onSend: (text: string, artifactRefs: string[], meta?: SentAttachmentMeta) => Promise<void> | void;
   onStop: () => void;
   inputTokens: number | null;
+  restoredDraft?: RestoredComposerDraft | null;
+  onRestoredDraftConsumed?: () => void;
 };
 
 export function Composer({
@@ -70,13 +85,14 @@ export function Composer({
   workspaceId,
   connectionId,
   disabled,
-  sending,
   running,
   canStop = running,
   stopBusy,
   onSend,
   onStop,
   inputTokens,
+  restoredDraft = null,
+  onRestoredDraftConsumed,
 }: ComposerProps) {
   const [text, setText] = useState(() => restoreComposerText(sessionId));
   const { names, quote: requestedQuote, onQuote } = useContext(ChatPresentation);
@@ -95,6 +111,46 @@ export function Composer({
     onChange: (body) => setText(withMessageQuote(body, composed.quote)) });
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
+  const onRestoredRef = useRef(onRestoredDraftConsumed);
+  onRestoredRef.current = onRestoredDraftConsumed;
+  const consumedRestoreIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (restoredDraft === null || consumedRestoreIdRef.current === restoredDraft.id) return;
+    consumedRestoreIdRef.current = restoredDraft.id;
+    const restoredText = restoredDraft.text.replace(ATTACHMENT_TOKEN, "").trim();
+    if (restoredText !== "") {
+      setText((current) => current.trim() === "" ? restoredText : `${current}\n${restoredText}`);
+    }
+    const restoredAttachments: ComposerAttachment[] = [
+      ...restoredDraft.images.map((attachmentId) => ({
+        localId: createClientId(),
+        name: "图片",
+        kind: "image" as const,
+        file: null,
+        size: 0,
+        error: null,
+        previewUrl: attachmentUrl(sessionId, attachmentId),
+        attachmentId,
+        state: "done" as const,
+      })),
+      ...restoredDraft.files.map((file) => ({
+        localId: createClientId(),
+        name: file.name,
+        kind: "file" as const,
+        file: null,
+        size: file.size,
+        error: null,
+        previewUrl: null,
+        attachmentId: file.attachment_id,
+        state: "done" as const,
+      })),
+    ];
+    if (restoredAttachments.length > 0) {
+      setPending((current) => [...current, ...restoredAttachments]);
+    }
+    onRestoredRef.current?.();
+    textareaRef.current?.focus();
+  }, [restoredDraft, sessionId]);
   const { data: selection, error: selectionError } = useGetSessionModelQuery(sessionId, { pollingInterval: 2000 });
   const { data: settings, error: settingsError } = useGetModelSettingsQuery(undefined, { pollingInterval: 5000 });
   const { data: workspaces = [] } = useGetWorkspacesQuery();
@@ -113,7 +169,7 @@ export function Composer({
   const ready = pending.filter(
     (item) => item.state === "done" && item.attachmentId !== null,
   );
-  const busy = disabled || sending || uploading || stopBusy || changingModelFor === sessionId;
+  const busy = disabled || uploading || stopBusy || changingModelFor === sessionId;
   const canSend =
     !busy &&
     !selectionError && !settingsError &&
@@ -133,31 +189,32 @@ export function Composer({
     };
   }, []);
 
-  async function sendDraft(draft: ComposerDraft) {
-    const done = draft.pending.filter(
-      (item) => item.state === "done" && item.attachmentId !== null,
-    );
-    const content = composeSendContent(draft.text, done);
-    const artifactRefs = done.map((item) => item.attachmentId as string);
-    await onSendRef.current(content, artifactRefs);
-    clearSentComposerText(sessionId, draft.text);
-    for (const item of draft.pending) {
-      releasePreview(item);
-    }
-  }
-
-  async function submit(event?: FormEvent) {
+  function submit(event?: FormEvent) {
     event?.preventDefault();
     if (!canSend) {
       return;
     }
-    const draft: ComposerDraft = { text, pending };
+    const draftText = text;
+    const draftPending = pending;
+    const done = draftPending.filter(
+      (item) => item.state === "done" && item.attachmentId !== null,
+    );
+    const content = composeSendContent(draftText, done);
+    const artifactRefs = done.map((item) => item.attachmentId as string);
+    const images = done.filter((item) => item.kind === "image").map((item) => item.attachmentId as string);
+    const files = done
+      .filter((item) => item.kind === "file")
+      .map((item) => ({ attachment_id: item.attachmentId as string, name: item.name, size: item.size }));
+    setText("");
     setPending([]);
-    try {
-      await sendDraft(draft);
-      setText((current) => current === draft.text ? "" : current);
-    } catch {
-      setPending(draft.pending);
+    clearSentComposerText(sessionId, draftText);
+    for (const item of draftPending) {
+      releasePreview(item);
+    }
+    if (images.length > 0 || files.length > 0) {
+      void onSendRef.current(content, artifactRefs, { images, files });
+    } else {
+      void onSendRef.current(content, artifactRefs);
     }
   }
 
@@ -256,7 +313,7 @@ export function Composer({
                 ...item,
                 attachmentId: uploaded.attachment_id,
                 kind: uploaded.kind,
-                size: uploaded.size,
+                size: uploaded.size ?? item.size,
                 state: "done",
               }
             : item,
@@ -429,8 +486,6 @@ export function Composer({
                 className="composer-send"
                 aria-label="发送"
                 disabled={!canSend}
-                loading={sending}
-                loaderProps={{ color: "var(--konden-button-text)" }}
                 radius="xl"
                 size={32}
                 type="submit"
@@ -452,7 +507,7 @@ function normalizeMime(type: string) {
 }
 
 function releasePreview(item: ComposerAttachment) {
-  if (item.previewUrl !== null) URL.revokeObjectURL(item.previewUrl);
+  if (item.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(item.previewUrl);
 }
 
 function uploadError(error: unknown): string {

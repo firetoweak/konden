@@ -19,8 +19,19 @@ vi.mock("../src/features/conversation/MarkdownMessage", () => ({
   MarkdownMessage: ({ content }: { content: string }) => <span>{content}</span>,
 }));
 vi.mock("../src/features/conversation/Composer", () => ({
-  Composer: ({ onSend }: { onSend: (text: string, refs: string[]) => Promise<void> }) => (
-    <button onClick={() => { void onSend("继续旧任务，先回答新问题", []); }}>发送测试消息</button>
+  Composer: ({
+    onSend,
+    restoredDraft,
+    onRestoredDraftConsumed,
+  }: {
+    onSend: (text: string, refs: string[]) => void;
+    restoredDraft?: { id: string; text: string } | null;
+    onRestoredDraftConsumed?: () => void;
+  }) => (
+    <div>
+      {restoredDraft ? <div data-testid="restored-draft">{restoredDraft.text}</div> : null}
+      <button onClick={() => { onRestoredDraftConsumed?.(); onSend("继续旧任务，先回答新问题", []); }}>发送测试消息</button>
+    </div>
   ),
 }));
 vi.mock("../src/features/conversation/ConversationTimeline", () => ({
@@ -389,4 +400,125 @@ it("父 Bot 展示子命令授权，批准绑定具体子调用并保留父对�
     body: { connection_id: "connection", approved: true, command_session_id: child } }]));
   await waitFor(() => expect(screen.queryByRole("button", { name: "允许 execute_command" })).not.toBeInTheDocument());
   expect(screen.getByText("来自 Ada 的消息")).toBeInTheDocument();
+});
+
+it("慢请求下立即显示发送中与思考中，确认后更新为同一条消息不重复", async () => {
+  const store = createStore();
+  stores.push(store);
+  store.dispatch(connected({ connection_id: "connection" }));
+  const before = snapshot("Ada");
+  const pendingInput = deferred();
+  let sentDeliveryId = "";
+  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+    const path = new URL(request.url).pathname;
+    if (path.endsWith("/inputs")) {
+      const body = await request.json() as { delivery_id: string };
+      sentDeliveryId = body.delivery_id;
+      return pendingInput.promise;
+    }
+    return Response.json(path.endsWith("/agents") || path.endsWith("/workspaces") ? [] : before);
+  }));
+  render(<Provider store={store}><MantineProvider env="test"><MemoryRouter initialEntries={["/sessions/Ada"]}>
+    <Routes><Route path="/sessions/:sessionId" element={<Conversation />} /></Routes>
+  </MemoryRouter></MantineProvider></Provider>);
+  await screen.findByText("来自 Ada 的消息");
+  fireEvent.click(screen.getByRole("button", { name: "发送测试消息" }));
+  expect(screen.getByText("继续旧任务，先回答新问题")).toBeVisible();
+  expect(screen.getByText("发送中…")).toBeVisible();
+  expect(screen.getByText("思考中")).toBeVisible();
+  await waitFor(() => expect(sentDeliveryId).not.toBe(""));
+  const after: ConversationView = {
+    ...before,
+    revision: 2,
+    items: [
+      ...before.items,
+      {
+        kind: "user",
+        message_id: "server-user-2",
+        delivery_id: sentDeliveryId,
+        text: "继续旧任务，先回答新问题",
+        occurred_at: "2026-10-26T00:00:00Z",
+        images: [],
+        files: [],
+      },
+    ],
+  };
+  await act(async () => {
+    pendingInput.resolve(Response.json(after));
+  });
+  await waitFor(() => expect(screen.queryByText("发送中…")).not.toBeInTheDocument());
+  expect(screen.getAllByText("继续旧任务，先回答新问题")).toHaveLength(1);
+});
+
+it("发送失败停止思考中并保留原文，支持沿用原身份重试与放回输入框", async () => {
+  const store = createStore();
+  stores.push(store);
+  store.dispatch(connected({ connection_id: "connection" }));
+  const before = snapshot("Ada");
+  const deliveryIds: string[] = [];
+  let failNext = true;
+  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+    const path = new URL(request.url).pathname;
+    if (path.endsWith("/inputs")) {
+      const body = await request.json() as { delivery_id: string };
+      deliveryIds.push(body.delivery_id);
+      if (failNext) {
+        return Response.json({ detail: "后端暂时不可用" }, { status: 503 });
+      }
+      return Response.json({
+        ...before,
+        revision: 2,
+        items: [
+          ...before.items,
+          {
+            kind: "user",
+            message_id: "server-user-2",
+            delivery_id: body.delivery_id,
+            text: "继续旧任务，先回答新问题",
+            occurred_at: "2026-10-26T00:00:00Z",
+            images: [],
+            files: [],
+          },
+        ],
+      });
+    }
+    return Response.json(path.endsWith("/agents") || path.endsWith("/workspaces") ? [] : before);
+  }));
+  const firstView = render(<Provider store={store}><MantineProvider env="test"><MemoryRouter initialEntries={["/sessions/Ada"]}>
+    <Routes><Route path="/sessions/:sessionId" element={<Conversation />} /></Routes>
+  </MemoryRouter></MantineProvider></Provider>);
+  await screen.findByText("来自 Ada 的消息");
+  fireEvent.click(screen.getByRole("button", { name: "发送测试消息" }));
+  await screen.findByText("后端暂时不可用");
+  expect(screen.getByText("继续旧任务，先回答新问题")).toBeVisible();
+  expect(screen.queryByText("思考中")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "重试" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "放回输入框" })).toBeVisible();
+
+  // 重新挂载后从 localStorage 恢复失败消息，且不自动重发
+  firstView.unmount();
+  const secondStore = createStore();
+  stores.push(secondStore);
+  secondStore.dispatch(connected({ connection_id: "connection" }));
+  render(<Provider store={secondStore}><MantineProvider env="test"><MemoryRouter initialEntries={["/sessions/Ada"]}>
+    <Routes><Route path="/sessions/:sessionId" element={<Conversation />} /></Routes>
+  </MemoryRouter></MantineProvider></Provider>);
+  await screen.findByText("后端暂时不可用");
+  expect(deliveryIds).toHaveLength(1);
+
+  // 点击重试沿用同一个 delivery_id 幂等发送
+  failNext = false;
+  fireEvent.click(screen.getByRole("button", { name: "重试" }));
+  await waitFor(() => expect(screen.queryByText("后端暂时不可用")).not.toBeInTheDocument());
+  expect(deliveryIds).toHaveLength(2);
+  expect(deliveryIds[1]).toBe(deliveryIds[0]);
+  expect(screen.getAllByText("继续旧任务，先回答新问题")).toHaveLength(1);
+
+  // 再次触发失败并点击「放回输入框」
+  failNext = true;
+  fireEvent.click(screen.getByRole("button", { name: "发送测试消息" }));
+  await screen.findByText("后端暂时不可用");
+  fireEvent.click(screen.getByRole("button", { name: "放回输入框" }));
+  expect(screen.getByTestId("restored-draft")).toHaveTextContent("继续旧任务，先回答新问题");
+  expect(screen.queryByText("后端暂时不可用")).not.toBeInTheDocument();
 });

@@ -2,16 +2,21 @@ import type { ConversationItem, ConversationView, ToolStatus } from "../../api/c
 import type {
   ActivePreview,
   LiveTool,
+  OutgoingUserMessage,
   SessionActivity,
 } from "../../realtime/runtimeSlice";
 
 export type VisibleUser = {
   key: string;
+  messageId?: string;
   kind: "user";
   occurredAt: string;
   text: string;
   images: string[];
   files: { attachment_id: string; name: string; size: number }[];
+  deliveryState?: "sending" | "failed";
+  deliveryError?: string | null;
+  deliveryId?: string | null;
 };
 
 export type VisibleTool = {
@@ -63,11 +68,17 @@ export function visibleTimeline(
   committedThinking: Record<string, string> = {},
   liveThinking: ActivePreview | null = null,
   activity: SessionActivity | null = null,
+  outgoing: OutgoingUserMessage[] = [],
 ): VisibleItem[] {
   const journalOutputIds = new Set(
     conversation.items
       .filter((item) => item.kind === "step")
       .map((item) => item.output_id),
+  );
+  const committedDeliveryIds = new Set(
+    conversation.items.flatMap((item) =>
+      item.kind === "user" && item.delivery_id != null ? [item.delivery_id] : [],
+    ),
   );
   const items: VisibleItem[] = conversation.items.map((item) => {
     if (item.kind === "external_message") {
@@ -100,12 +111,14 @@ export function visibleTimeline(
     }
     if (item.kind === "user") {
       return {
-        key: item.message_id,
+        key: item.delivery_id ?? item.message_id,
+        messageId: item.message_id,
         kind: "user",
         occurredAt: item.occurred_at,
         text: item.text,
         images: item.images,
         files: item.files,
+        deliveryId: item.delivery_id ?? null,
       };
     }
     return {
@@ -193,6 +206,22 @@ export function visibleTimeline(
       tools: [],
       files: [],
       ...resolveThinking(outputId, null, committedThinking, liveThinking),
+    });
+  }
+  for (const pending of outgoing) {
+    if (committedDeliveryIds.has(pending.deliveryId)) {
+      continue;
+    }
+    items.push({
+      key: pending.deliveryId,
+      kind: "user",
+      occurredAt: pending.createdAt,
+      text: pending.text,
+      images: pending.images,
+      files: pending.files,
+      deliveryState: pending.status,
+      deliveryError: pending.error,
+      deliveryId: pending.deliveryId,
     });
   }
   return items;

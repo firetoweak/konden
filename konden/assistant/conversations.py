@@ -146,6 +146,7 @@ class UserItem:
     occurred_at: datetime
     images: tuple[str, ...] = ()
     files: tuple[FileAttachment, ...] = ()
+    delivery_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -644,6 +645,7 @@ def project_conversation(
                     event.occurred_at,
                     tuple(ref for ref in event.artifact_refs if not is_file_attachment_id(ref)),
                     tuple(attachments.files.describe(ref) for ref in file_ids),
+                    delivery_id=None if event.delivery is None else event.delivery.delivery_id,
                 )
             )
             continue
