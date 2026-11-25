@@ -49,7 +49,7 @@ def clean_checkout(targets: list[str]) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("targets", nargs="*", choices=("python", "web", "smoke", "process", "formal"))
+    parser.add_argument("targets", nargs="*", choices=("python", "web", "smoke", "process", "formal", "docs"))
     parser.add_argument("--model", help="只验证指定的 formal 模型，可用编号或名称")
     parser.add_argument("--clean", action="store_true",
                         help="在独立虚拟环境与干净 HEAD 中验证；不携带本机产物")
@@ -81,8 +81,9 @@ def main(argv: list[str] | None = None) -> None:
     os.environ.clear()
     os.environ.update(environment)
     needs_web = "web" in targets
+    needs_docs = "docs" in targets
     needs_browser = "process" in targets and args.process_group in (None, "integration")
-    needs_node = needs_web or needs_browser or ("process" in targets and args.process_group == "execution")
+    needs_node = needs_web or needs_docs or needs_browser or ("process" in targets and args.process_group == "execution")
     if needs_node:
         node_version = subprocess.check_output(["node", "--version"], text=True).strip()
         if node_version.split(".")[0] != "v24":
@@ -93,9 +94,9 @@ def main(argv: list[str] | None = None) -> None:
         from scripts import runtime_tools
         # rg / fd / Node for this process and the tests it starts; not the user's PATH.
         runtime_tools.prepare(ROOT, include_browser=needs_browser)
-    if needs_web or needs_browser:
+    if needs_web or needs_docs or needs_browser:
         npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
-    if needs_web:
+    if needs_web or needs_docs:
         run([npm, "ci"], cwd=ROOT / "web")
     if needs_browser:
         run([npm, "ci"], cwd=ROOT / "scripts/browser")
@@ -123,6 +124,9 @@ def main(argv: list[str] | None = None) -> None:
         elif target == "formal":
             from scripts.formal import check
             check(args.model)
+        elif target == "docs":
+            run([sys.executable, "-m", "unittest", "tests/architecture/test_reference_consistency.py"])
+            run([npm, "test", "--", "tests/markdownLinks.test.ts"], cwd=ROOT / "web")
         else:
             run([sys.executable, "tests/architecture/web_routes.py"])
             run([npm, "test"], cwd=ROOT / "web")

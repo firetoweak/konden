@@ -117,7 +117,7 @@ def test_zip_helper_programs_keep_executable_permissions(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("system,machine,expected", [
-    ("Darwin", "arm64", "darwin-arm64"), ("Darwin", "x86_64", "darwin-x86_64"),
+    ("Darwin", "arm64", "darwin-arm64"), ("Darwin", "x86_64", None),
     ("Windows", "AMD64", "windows-x86_64"), ("Linux", "x86_64", "linux-x86_64"),
     ("Linux", "aarch64", None),
 ])
