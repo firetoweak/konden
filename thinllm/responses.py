@@ -18,7 +18,8 @@ class ResponsesClient(ChatCompletionsClient):
     async def web_search(self, query: str, model: str) -> dict:
         """One Responses turn with optional hosted search, preserving citations."""
         result = await self._request({
-            "model": model.partition("/")[2], "input": query, "store": False, "stream": True,
+            "model": model.partition("/")[2], "input": [{"role": "user", "content": query}],
+            "store": False, "stream": True,
             "tools": [{"type": "web_search"}], "tool_choice": "auto",
             "include": ["web_search_call.action.sources"],
         }, model, None, None)
@@ -115,6 +116,8 @@ class ResponsesClient(ChatCompletionsClient):
             elif kind == "response.reasoning_summary_text.delta":
                 reasoning_delta = self._text(event["delta"])
                 stream.extensions["reasoning_content"] = stream.extensions.get("reasoning_content", "") + reasoning_delta
+            elif kind == "response.output_item.done":
+                stream.extensions.setdefault("completed_output_items", {})[event["output_index"]] = event["item"]
             elif kind == "response.completed":
                 response = event["response"]
                 if response["status"] != "completed":
@@ -141,14 +144,19 @@ class ResponsesClient(ChatCompletionsClient):
         return value
 
     def _complete(self, response, stream):
-        for index, item in enumerate(response["output"]):
+        completed_items = stream.extensions.pop("completed_output_items", {})
+        # Streamed subscription responses can deliver all items before an empty terminal output.
+        output = response["output"]
+        if output == []:
+            output = [completed_items[index] for index in sorted(completed_items)]
+        for index, item in enumerate(output):
             kind = item["type"]
             if kind == "message":
                 stream.content_parts.extend(self._text(part["text"]) for part in item["content"]
                                             if part["type"] == "output_text")
             elif kind == "function_call":
                 stream.tool_calls[index] = _ToolCallParts(item["call_id"], item["name"], item["arguments"])
-        stream.extensions["responses_output"] = response["output"]
+        stream.extensions["responses_output"] = output
         usage = response["usage"]
         details = usage.get("input_tokens_details")
         if details is None:

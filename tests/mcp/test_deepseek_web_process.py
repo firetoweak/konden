@@ -13,16 +13,21 @@ from konden.search import SearchConfig, SearchSettings
 pytestmark = pytest.mark.process
 
 
-@pytest.mark.parametrize("provider_name", ["deepseek", "openai"])
-def test_configured_search_is_available_without_registration_or_a_second_secret_copy(tmp_path, provider_name):
+@pytest.mark.parametrize("provider_name", ["deepseek", "openai", "openai-chatgpt"])
+def test_configured_search_is_available_without_registration_or_a_second_secret_copy(tmp_path, provider_name, chatgpt_login):
     home = KondenHome(tmp_path / "home")
     home.initialize()
     connections = initial_connections()
-    connections[provider_name]["api_key"] = "test-provider-secret"
+    if provider_name == "openai-chatgpt":
+        connections[provider_name]["auth_file"] = str(chatgpt_login())
+    else:
+        connections[provider_name]["api_key"] = "test-provider-secret"
     original = json.dumps(connections)
     home.connections_path.write_text(original, encoding="utf-8")
-    if provider_name == "openai":
-        SearchSettings(home.connections_path).save(SearchConfig(provider="openai", openai_model="openai/gpt-6.1-terra"))
+    if provider_name != "deepseek":
+        SearchSettings(home.connections_path).save(SearchConfig(
+            provider=provider_name, openai_model=f"{provider_name}/gpt-6.1-terra",
+        ))
     server_id = DEEPSEEK_SERVER_ID if provider_name == "deepseek" else OPENAI_SERVER_ID
 
     async def scenario():
