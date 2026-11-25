@@ -28,15 +28,56 @@ def test_search_preferences_are_separate_from_models_and_credentials(tmp_path):
     assert "private-key" not in settings.path.read_text(encoding="utf-8")
 
 
-def test_missing_connection_cannot_replace_saved_search_preferences(tmp_path):
+@pytest.mark.parametrize(("provider", "message"), [
+    ("openai", r"openai\.api_key"), ("openai-chatgpt", "ChatGPT 订阅授权"),
+])
+def test_missing_connection_cannot_replace_saved_search_preferences(tmp_path, provider, message):
     path = tmp_path / "connections.json"
-    write_json(path, initial_connections())
+    connections = initial_connections()
+    connections["openai-chatgpt"]["auth_file"] = str(tmp_path / "missing.json")
+    write_json(path, connections)
     settings = SearchSettings(path)
-    with pytest.raises(ModelConfigurationError, match=r"openai\.api_key"):
-        settings.save(SearchConfig(provider="openai", openai_model="openai/gpt-6.1-terra"))
+    with pytest.raises(ModelConfigurationError, match=message):
+        settings.save(SearchConfig(provider=provider, openai_model=f"{provider}/gpt-6.1-terra"))
     assert not settings.path.exists()
     with pytest.raises(ValidationError, match="搜索模型"):
-        SearchConfig(provider="openai")
+        SearchConfig(provider=provider)
+
+
+def test_subscription_search_uses_the_configured_grant_without_an_api_key(tmp_path, chatgpt_login):
+    connections = initial_connections()
+    auth_file = chatgpt_login()
+    connections["openai-chatgpt"]["auth_file"] = str(auth_file)
+    path = tmp_path / "connections.json"
+    write_json(path, connections)
+    settings = SearchSettings(path)
+    model = "openai-chatgpt/gpt-6.2-sol"
+    with pytest.raises(ValidationError, match="所选搜索服务"):
+        SearchConfig(provider="openai", openai_model=model)
+    selected = SearchConfig(provider="openai-chatgpt", openai_model=model)
+    before = path.read_bytes(), auth_file.read_bytes()
+    settings.save(selected)
+
+    def handle(request):
+        assert request.url == "https://api.openai.com/v1/responses"
+        assert request.headers["Authorization"] == "Bearer private-access"
+        assert json.loads(request.content)["model"] == "gpt-6.2-sol"
+        event = {"type": "response.completed", "response": {
+            "status": "completed",
+            "output": [
+                {"type": "web_search_call", "action": {"sources": [{"type": "url", "url": "https://example.com/"}]}},
+                {"type": "message", "content": [{"type": "output_text", "text": "answer"}]},
+            ],
+            "usage": {"input_tokens": 15, "output_tokens": 5},
+        }}
+        return httpx.Response(200, text=f"data: {json.dumps(event)}\n\n")
+
+    result = asyncio.run(settings.search("question", settings.config(), transport=httpx.MockTransport(handle)))
+    assert result["provider"] == "openai-chatgpt" and result["model"] == model
+    assert result["searched"] and result["summary"] == "answer"
+    assert [item["url"] for item in result["sources"]] == ["https://example.com/"]
+    assert "private-access" not in settings.path.read_text(encoding="utf-8")
+    assert (path.read_bytes(), auth_file.read_bytes()) == before
 
 
 def test_deepseek_test_returns_real_sources_without_inventing_an_answer(tmp_path):

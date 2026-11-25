@@ -970,7 +970,7 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
   justify-content: flex-end;
 }
 
-.composer-model { min-width: 0; max-width: 240px; }
+.composer-model { min-width: 0; max-width: 340px; }
 .composer-model .mantine-Button-root { width: 100%; }
 
 .composer-workspace {
@@ -1011,7 +1011,7 @@ a.group-member:focus-visible { outline: 2px solid var(--konden-accent-ring); }
   .agent-card-action { display: none; }
   .private-composer .composer-meta { gap: 6px; padding-inline: 8px; }
   .private-composer .composer-input textarea { font-size: 16px; }
-  .private-composer .composer-model { max-width: 180px; }
+  .private-composer .composer-model { max-width: 220px; }
   .private-composer .composer-trailing { gap: 4px; }
   .private-composer .composer-workspace { display: none; }
 }

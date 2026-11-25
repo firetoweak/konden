@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from konden.config import write_json
 from konden.llm.config import load_connections
@@ -18,26 +18,29 @@ from konden.search.deepseek import (
     SearchInput,
     request_web,
 )
-from thinllm import MissingProviderSetting, ResponsesClient, resolve_endpoint
+from thinllm import MissingProviderSetting, create_client, resolve_endpoint
+
+SearchProvider = Literal["deepseek", "openai", "openai-chatgpt"]
 
 
 class SearchConfig(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     enabled: bool = True
-    provider: Literal["deepseek", "openai"] = "deepseek"
+    provider: SearchProvider = "deepseek"
     openai_model: str | None = None
-
-    @field_validator("openai_model")
-    @classmethod
-    def openai_name(cls, value):
-        if value is not None and (not value.startswith("openai/") or not value[7:].strip() or value != value.strip()):
-            raise ValueError("搜索模型必须是 openai/<model>")
-        return value
 
     @model_validator(mode="after")
     def selected_search_model(self):
-        if self.enabled and self.provider == "openai" and self.openai_model is None:
-            raise ValueError("请选择 OpenAI 搜索模型")
+        model = self.openai_model
+        if model is None:
+            if self.enabled and self.provider != "deepseek":
+                raise ValueError("请选择搜索模型")
+            return self
+        provider, _, name = model.partition("/")
+        if provider not in ("openai", "openai-chatgpt") or not name.strip() or model != model.strip():
+            raise ValueError("请选择有效的搜索模型")
+        if self.provider != "deepseek" and provider != self.provider:
+            raise ValueError("搜索模型必须属于所选搜索服务")
         return self
 
 
@@ -51,7 +54,7 @@ class SearchSource(BaseModel):
 class SearchResult(BaseModel):
     model_config = ConfigDict(strict=True)
     query: str
-    provider: Literal["deepseek", "openai"]
+    provider: SearchProvider
     model: str | None
     elapsed_ms: int
     searched: bool
@@ -77,10 +80,11 @@ class SearchSettings:
 
     def require_connection(self, config: SearchConfig):
         connections = load_connections(self.connections_path)
-        model = config.openai_model if config.provider == "openai" else "deepseek/search"
         try:
-            return resolve_endpoint(model, connections[config.provider])
+            return resolve_endpoint(f"{config.provider}/search", connections[config.provider])
         except MissingProviderSetting as error:
+            if config.provider == "openai-chatgpt":
+                raise ModelConfigurationError("请先在「供应商与模型」完成 ChatGPT 订阅授权。") from error
             raise ModelConfigurationError(f"请配置 {config.provider}.{error.setting}") from error
 
     def save(self, config: SearchConfig) -> dict:
@@ -94,8 +98,8 @@ class SearchSettings:
             raise ModelConfigurationError("请先启用网络搜索")
         endpoint = self.require_connection(config)
         started = perf_counter()
-        if config.provider == "openai":
-            async with ResponsesClient(endpoint, transport=transport) as client:
+        if config.provider != "deepseek":
+            async with create_client(endpoint, transport=transport) as client:
                 result = await client.web_search(query, config.openai_model)
         else:
             arguments = SearchInput(query=query)
@@ -109,5 +113,5 @@ class SearchSettings:
                       "sources": [{"title": item["title"], "url": item["url"],
                                    "snippet": item["snippet"] or item["summary"]} for item in response["results"]]}
         return {"query": query, "provider": config.provider,
-                "model": config.openai_model if config.provider == "openai" else None,
+                "model": config.openai_model if config.provider != "deepseek" else None,
                 "elapsed_ms": round((perf_counter() - started) * 1000), **result}

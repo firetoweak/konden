@@ -67,6 +67,7 @@ class _ChatGPTModel(BaseModel):
     default_reasoning_level: str | None = None
     supported_reasoning_levels: list[_ReasoningLevel] = Field(default_factory=list)
     visibility: str = Field(min_length=1)
+    supports_search_tool: bool = False
 
 
 class _ChatGPTCatalog(BaseModel):
@@ -90,7 +91,7 @@ async def _chatgpt_models(endpoint, transport: httpx.AsyncBaseTransport | None) 
     return [
         {"model": endpoint.provider + "/" + item.slug, "name": item.display_name,
          "context_window": item.context_window, "reasoning_levels": [level.effort for level in item.supported_reasoning_levels],
-         "default_reasoning_effort": item.default_reasoning_level, "web_search": False}
+         "default_reasoning_effort": item.default_reasoning_level, "web_search": item.supports_search_tool}
         for item in catalog.models if item.visibility == "list"
     ]
 

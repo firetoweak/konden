@@ -6,6 +6,18 @@ import { effortName, providerName, type CatalogModel, type Preferences } from ".
 
 export type Selection = { model: string; effort: string | null };
 
+function ModelLabel({ model, nameClass, providerClass, labelClass }: {
+  model: CatalogModel;
+  nameClass: string;
+  providerClass: string;
+  labelClass: string;
+}) {
+  return <span className={labelClass}>
+    <span className={nameClass}>{model.name}</span>
+    <span className={providerClass}>（{providerName(model.provider)}）</span>
+  </span>;
+}
+
 export function ModelPicker({ models, preferences, selection, onSelect, pending, disabled = false, disabledProviders = [] }: {
   models: CatalogModel[];
   preferences: Preferences;
@@ -23,12 +35,13 @@ export function ModelPicker({ models, preferences, selection, onSelect, pending,
   const effort = selected && selection ? effortName(selected, selection.effort) : null;
 
   return <div className="composer-model-controls">
-    <Menu position="top-end" width={240} withinPortal shadow="md" onClose={() => { setModelOpened(false); setEffortOpened(false); }}>
+    <Menu position="top-end" width={280} withinPortal shadow="md" onClose={() => { setModelOpened(false); setEffortOpened(false); }}>
       <Menu.Target><Button variant="subtle" color="gray" size="compact-sm" radius="sm"
         disabled={disabled}
         className="model-picker-trigger" aria-label={selected ? `模型设置：${providerName(selected.provider)} ${selected.name}${selected.efforts.length ? `，推理强度：${effort}` : ""}` : "选择模型"}
         rightSection={<IconChevronDown size={13} />}>
-        <span className="current-model-name">{selected?.name ?? "选择模型"}</span>
+        {selected ? <ModelLabel model={selected} labelClass="current-model-label" nameClass="current-model-name" providerClass="current-model-provider" />
+          : <span className="current-model-name">选择模型</span>}
         {selected?.efforts.length ? <span className="current-model-effort">· {effort}</span> : null}
       </Button></Menu.Target>
       <Menu.Dropdown className="model-picker-dropdown" p={6}>
@@ -46,10 +59,12 @@ export function ModelPicker({ models, preferences, selection, onSelect, pending,
               onClick={() => onSelect({ ...selection, effort: choice.value })}>{choice.label}</Menu.Item>)}
           </Menu.Sub.Dropdown>
         </Menu.Sub> : null}
-        <Menu.Sub width={240} position={submenuPosition} opened={modelOpened} onChange={setModelOpened}>
+        <Menu.Sub width={280} position={submenuPosition} opened={modelOpened} onChange={setModelOpened}>
           <Menu.Sub.Target><Menu.Sub.Item className="model-picker-option" aria-label={selected ? `切换模型：${providerName(selected.provider)} ${selected.name}` : "切换模型"}
             onClick={() => setModelOpened(true)}>
-            <span className="model-setting-row"><span>模型</span><span className="model-setting-value">{selected?.name ?? "请选择"}</span></span>
+            <span className="model-setting-row"><span>模型</span><span className="model-setting-value">
+              {selected ? <ModelLabel model={selected} labelClass="model-option-label" nameClass="model-option-name" providerClass="model-option-provider" /> : "请选择"}
+            </span></span>
           </Menu.Sub.Item></Menu.Sub.Target>
           <Menu.Sub.Dropdown className="model-picker-dropdown model-picker-options" p={6}>
             {visible.length === 0 ? <Menu.Item disabled>暂无已选模型</Menu.Item> : null}
@@ -58,7 +73,7 @@ export function ModelPicker({ models, preferences, selection, onSelect, pending,
               aria-label={`${providerName(item.provider)} ${item.name}`} className="model-picker-option"
               rightSection={item.id === selected?.id ? <IconCheck size={15} /> : null}
               onClick={() => onSelect({ model: item.id, effort: preferences.favorites[item.id].effort })}>
-              {item.name}
+              <ModelLabel model={item} labelClass="model-option-label" nameClass="model-option-name" providerClass="model-option-provider" />
             </Menu.Item>)}
           </Menu.Sub.Dropdown>
         </Menu.Sub>

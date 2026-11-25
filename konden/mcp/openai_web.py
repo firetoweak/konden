@@ -59,7 +59,7 @@ async def call_tool(settings: SearchSettings, context, params):
         explanation = "；".join(item["msg"] for item in error.errors(include_url=False))
         return tool_result({"error": explanation, "hint": "修改问题后重试。"}, error=True)
     config = settings.config()
-    if not config.enabled or config.provider != "openai":
+    if not config.enabled or config.provider == "deepseek":
         return tool_result({"error": "OpenAI 搜索已停用，请重新查看可选工具。"}, error=True)
     try:
         return tool_result(await settings.search(arguments.query, config))

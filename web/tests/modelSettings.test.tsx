@@ -120,7 +120,9 @@ it("折叠菜单按需展示生效提示与勾选模型，推理子菜单保留�
     selection={{ model: "deepseek/beta", effort: null }} onSelect={select} pending /></MantineProvider>);
   expect(screen.getAllByRole("button")).toHaveLength(1);
   expect(screen.queryByText("下次回复生效")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "模型设置：DeepSeek Beta，推理强度：高" }));
+  const trigger = screen.getByRole("button", { name: "模型设置：DeepSeek Beta，推理强度：高" });
+  expect(trigger).toHaveTextContent("Beta（DeepSeek）");
+  fireEvent.click(trigger);
   expect(await screen.findByText("下次回复生效")).toBeVisible();
   expect(screen.queryByText(/Context|Fast|上下文/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("menuitem", { name: "推理强度：高" }));
@@ -129,10 +131,12 @@ it("折叠菜单按需展示生效提示与勾选模型，推理子菜单保留�
   fireEvent.click(screen.getByRole("menuitem", { name: "最高", exact: true }));
   expect(select).toHaveBeenCalledWith({ model: "deepseek/beta", effort: "max" });
   fireEvent.click(screen.getByRole("button", { name: "模型设置：DeepSeek Beta，推理强度：高" }));
-  fireEvent.click(await screen.findByRole("menuitem", { name: "切换模型：DeepSeek Beta" }));
+  const switchModel = await screen.findByRole("menuitem", { name: "切换模型：DeepSeek Beta" });
+  expect(switchModel).toHaveTextContent("Beta（DeepSeek）");
+  fireEvent.click(switchModel);
   const menu = (await screen.findByRole("menuitem", { name: "OpenAI Alpha" })).closest('[role="menu"]') as HTMLElement;
-  expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Alpha", "Beta"]);
-  expect(menu.textContent).toBe("AlphaBeta");
+  expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Alpha（OpenAI）", "Beta（DeepSeek）"]);
+  expect(menu.textContent).toBe("Alpha（OpenAI）Beta（DeepSeek）");
   expect(within(menu).queryByRole("menuitem", { name: "OpenAI Plain" })).not.toBeInTheDocument();
   expect(within(menu).getByRole("menuitem", { name: "DeepSeek Beta" })).toHaveAttribute("aria-current", "true");
   fireEvent.click(within(menu).getByRole("menuitem", { name: "OpenAI Alpha" }));

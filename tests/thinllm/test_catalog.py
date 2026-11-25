@@ -36,13 +36,13 @@ def test_lists_account_models_without_hidden_entries_or_prompt_metadata(auth_fil
         requests.append(request)
         assert str(request.url) == "https://api.openai.com/v1/models"
         assert request.headers["Authorization"] == "Bearer private-access"
-        return httpx.Response(200, json={"models": [model(), model("hidden", visibility="hide"),
+        return httpx.Response(200, json={"models": [model(supports_search_tool=True), model("hidden", visibility="hide"),
                                                    {"slug": "another-model", "display_name": "Another", "visibility": "list"}]})
 
     result = asyncio.run(list_models("openai-chatgpt", {"auth_file": str(auth_file)}, transport=httpx.MockTransport(handle)))
     assert len(requests) == 1
     assert result == [{"model": "openai-chatgpt/MixedCase-ID", "name": "Display name", "context_window": 500000,
-                       "default_reasoning_effort": "low", "reasoning_levels": ["low", "high"], "web_search": False},
+                       "default_reasoning_effort": "low", "reasoning_levels": ["low", "high"], "web_search": True},
                       {"model": "openai-chatgpt/another-model", "name": "Another", "context_window": None,
                        "default_reasoning_effort": None, "reasoning_levels": [], "web_search": False}]
     assert auth_file.read_bytes() == before
