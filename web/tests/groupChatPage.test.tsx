@@ -39,15 +39,18 @@ function renderPage(groupId = "group-1") {
   Object.defineProperty(document, "fonts", { configurable: true, value: { addEventListener() {}, removeEventListener() {} } });
   const store = configureStore({ reducer: { runtime: runtimeReducer } });
   store.dispatch(connected("connection"));
-  return render(
-    <Provider store={store}>
-      <MantineProvider env="test">
-        <MemoryRouter initialEntries={[`/groups/${groupId}`]}>
-          <Routes><Route path="/groups/:groupId" element={<GroupChatPage />} /></Routes>
-        </MemoryRouter>
-      </MantineProvider>
-    </Provider>,
-  );
+  return {
+    store,
+    ...render(
+      <Provider store={store}>
+        <MantineProvider env="test">
+          <MemoryRouter initialEntries={[`/groups/${groupId}`]}>
+            <Routes><Route path="/groups/:groupId" element={<GroupChatPage />} /></Routes>
+          </MemoryRouter>
+        </MantineProvider>
+      </Provider>,
+    ),
+  };
 }
 
 afterEach(() => {
@@ -220,7 +223,7 @@ it("正文点名高亮，代码和邮箱保持原文", () => {
   expect(container.querySelector("code")).toHaveTextContent("@Ada");
 });
 
-it("发送请求未结束时离开群聊，成功后不恢复已发送草稿", async () => {
+it("发送请求未结束时立即清空输入框并显示发送中，离开后成功也不恢复已发送草稿", async () => {
   let complete!: () => void;
   const sent = new Promise<void>((resolve) => { complete = resolve; });
   api.post.mockReturnValueOnce({ unwrap: () => sent });
@@ -228,29 +231,72 @@ it("发送请求未结束时离开群聊，成功后不恢复已发送草稿", a
   const page = renderPage();
   fireEvent.change(screen.getByLabelText("群消息"), { target: { value: "发送后马上去私聊" } });
   fireEvent.click(screen.getByRole("button", { name: "发送到群" }));
+  expect(screen.getByLabelText("群消息")).toHaveValue("");
+  expect(screen.getByText("发送后马上去私聊")).toBeVisible();
+  expect(screen.getByText("发送中…")).toBeVisible();
+  expect(localStorage.getItem("konden.composerDraft.group:group-1")).toBeNull();
   page.unmount();
   complete();
-  await waitFor(() => expect(localStorage.getItem("konden.composerDraft.group:group-1")).toBeNull());
+  await Promise.resolve();
   renderPage();
   expect(screen.getByLabelText("群消息")).toHaveValue("");
 });
 
-it("发送确认丢失后重新打开群页，重试沿用原消息身份", async () => {
+it("发送确认丢失后原位保留失败消息，重新打开群页重试沿用原消息身份", async () => {
   api.group = group({});
   api.post.mockImplementationOnce(() => ({ unwrap: () => Promise.reject("连接中断") }));
   const page = renderPage();
   fireEvent.change(screen.getByLabelText("群消息"), { target: { value: "同一条消息" } });
   fireEvent.click(screen.getByRole("button", { name: "发送到群" }));
+  expect(screen.getByLabelText("群消息")).toHaveValue("");
   await screen.findByText("连接中断");
+  expect(screen.getByText("同一条消息")).toBeVisible();
   const original = api.post.mock.calls[0][0].deliveryId;
   page.unmount();
-  renderPage();
-  expect(screen.getByLabelText("群消息")).toHaveValue("同一条消息");
-  fireEvent.click(screen.getByRole("button", { name: "发送到群" }));
-  await waitFor(() => expect(screen.getByLabelText("群消息")).toHaveValue(""));
+  const page2 = renderPage();
+  await screen.findByText("连接中断");
+  expect(screen.getByText("同一条消息")).toBeVisible();
+  expect(screen.getByLabelText("群消息")).toHaveValue("");
+  fireEvent.click(screen.getByRole("button", { name: "重试" }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
   expect(api.post.mock.calls[1][0].deliveryId).toBe(original);
+  await waitFor(() => expect(screen.queryByText("连接中断")).not.toBeInTheDocument());
+  api.group = group({
+    messages: [{
+      message_id: `group-message-${original}`,
+      sender: null,
+      sender_session_id: null,
+      text: "同一条消息",
+      mentioned_agents: [],
+      reply_to: null,
+      occurred_at: "2026-10-18T10:01:00Z",
+    }],
+  });
+  page2.rerender(
+    <Provider store={page2.store}>
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/groups/group-1"]}>
+          <Routes><Route path="/groups/:groupId" element={<GroupChatPage />} /></Routes>
+        </MemoryRouter>
+      </MantineProvider>
+    </Provider>,
+  );
+  await waitFor(() => expect(screen.queryByText("发送中…")).not.toBeInTheDocument());
+  expect(screen.getAllByText("同一条消息")).toHaveLength(1);
   fireEvent.change(screen.getByLabelText("群消息"), { target: { value: "同一条消息" } });
   fireEvent.click(screen.getByRole("button", { name: "发送到群" }));
   await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
   expect(api.post.mock.calls[2][0].deliveryId).not.toBe(original);
+});
+
+it("群消息失败后支持放回输入框并清除失败气泡", async () => {
+  api.group = group({});
+  api.post.mockImplementationOnce(() => ({ unwrap: () => Promise.reject("群服务繁忙") }));
+  renderPage();
+  fireEvent.change(screen.getByLabelText("群消息"), { target: { value: "@Ada 再发一次" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送到群" }));
+  await screen.findByText("群服务繁忙");
+  fireEvent.click(screen.getByRole("button", { name: "放回输入框" }));
+  expect(screen.getByLabelText("群消息")).toHaveValue("@Ada 再发一次");
+  expect(screen.queryByText("群服务繁忙")).not.toBeInTheDocument();
 });

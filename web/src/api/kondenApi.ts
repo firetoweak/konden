@@ -7,6 +7,8 @@ import { traceDetailSchema, traceIndexSchema, traceParams, type TraceDetail, typ
 import {
   bindOwner,
   controlNotice,
+  groupOutgoingConfirmed,
+  outgoingConfirmed,
   type RuntimeState,
 } from "../realtime/runtimeSlice";
 import {
@@ -121,12 +123,12 @@ export function apiErrorDetail(data: unknown): string | undefined {
   return detail.map((item) => item.msg.replace(/^Value error,\s*/, "")).join("\n");
 }
 
-function putConversation(
-  dispatch: (action: unknown) => void,
+async function putConversation(
+  dispatch: (action: unknown) => unknown,
   sessionId: string,
   data: ConversationView,
-) {
-  dispatch(
+): Promise<void> {
+  await dispatch(
     kondenApi.util.upsertQueryData("getConversation", sessionId, data),
   );
 }
@@ -519,6 +521,15 @@ export const kondenApi = createApi({
       transformErrorResponse: (response) => response.status === 422 || response.status === 404
         ? apiErrorDetail(response.data) ?? response : response,
       invalidatesTags: ["Groups"],
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          await dispatch(kondenApi.util.upsertQueryData("getGroup", arg.groupId, data));
+          dispatch(groupOutgoingConfirmed({ groupId: arg.groupId, deliveryId: arg.deliveryId }));
+        } catch {
+          // 发送失败由群聊界面转为本地失败消息处理
+        }
+      },
     }),
     getBackgroundCommands: build.query<BackgroundCommand[], string>({
       query: (sessionId) => `/sessions/${encodeURIComponent(sessionId)}/commands`,
@@ -722,8 +733,13 @@ export const kondenApi = createApi({
       }),
       transformResponse: (value: unknown) => conversationViewSchema.parse(value),
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled;
-        putConversation(dispatch, arg.sessionId, data);
+        try {
+          const { data } = await queryFulfilled;
+          await putConversation(dispatch, arg.sessionId, data);
+          dispatch(outgoingConfirmed({ sessionId: arg.sessionId, deliveryId: arg.deliveryId }));
+        } catch {
+          // 发送失败由对话界面转为本地失败消息处理
+        }
       },
     }),
     answerClarification: build.mutation<ConversationView, SelectSession & { questionId: string; text: string }>({

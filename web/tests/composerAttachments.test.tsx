@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { Provider } from "react-redux";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { Composer } from "../src/features/conversation/Composer";
+import { Composer, type RestoredComposerDraft } from "../src/features/conversation/Composer";
 import { ChatPresentation } from "../src/features/conversation/ChatPresentation";
 import runtimeReducer from "../src/realtime/runtimeSlice";
 
@@ -41,21 +41,28 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function showComposer(running = false, inputTokens: number | null = null, sessionId = "session") {
   const store = configureStore({ reducer: { runtime: runtimeReducer } });
-  const onSend = vi.fn(async () => {});
+  const onSend = vi.fn();
   const props = {
     sessionId, workspaceId: "workspace-test", connectionId: "connection",
-    disabled: false, sending: false, running,
+    disabled: false, running,
     stopBusy: false,
     inputTokens,
     onSend, onStop: vi.fn(),
   };
-  const ui = (active: boolean) => <Provider store={store}><MantineProvider env="test">
-    <ChatPresentation value={{ names: ["Ada", "Ada QA", "李雷", "C++"], quote: null, onQuote: () => {}, onJump: () => {} }}>
-      <Composer {...props} running={active} />
-    </ChatPresentation>
-  </MantineProvider></Provider>;
+  const ui = (active: boolean, restoredDraft: RestoredComposerDraft | null = null, onRestoredDraftConsumed?: () => void) => (
+    <Provider store={store}><MantineProvider env="test">
+      <ChatPresentation value={{ names: ["Ada", "Ada QA", "李雷", "C++"], quote: null, onQuote: () => {}, onJump: () => {} }}>
+        <Composer {...props} running={active} restoredDraft={restoredDraft} onRestoredDraftConsumed={onRestoredDraftConsumed} />
+      </ChatPresentation>
+    </MantineProvider></Provider>
+  );
   const view = render(ui(running));
-  return { ...view, onSend, stop: () => view.rerender(ui(false)) };
+  return {
+    ...view,
+    onSend,
+    stop: () => view.rerender(ui(false)),
+    restore: (draft: RestoredComposerDraft | null, onConsumed?: () => void) => view.rerender(ui(running, draft, onConsumed)),
+  };
 }
 
 it("私聊从名册筛选并用完整名字补全，Enter 先选候选再发送", async () => {
@@ -122,7 +129,17 @@ it("拖入普通文件后保留名称并以附件引用发送，不要求填写�
   expect(screen.getByText("报告.pdf")).toBeVisible();
   expect(screen.getByText("report.docx")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await waitFor(() => expect(onSend).toHaveBeenCalledWith("[File #1] [File #2]", [`file:${"a".repeat(32)}`, `file:${"b".repeat(32)}`]));
+  await waitFor(() => expect(onSend).toHaveBeenCalledWith(
+    "[File #1] [File #2]",
+    [`file:${"a".repeat(32)}`, `file:${"b".repeat(32)}`],
+    {
+      images: [],
+      files: [
+        { attachment_id: `file:${"a".repeat(32)}`, name: "报告.pdf", size: 3 },
+        { attachment_id: `file:${"b".repeat(32)}`, name: "report.docx", size: 3 },
+      ],
+    },
+  ));
 });
 
 it("上传失败保留文件并阻止缺附件发送，重试成功后才可提交", async () => {
@@ -138,7 +155,11 @@ it("上传失败保留文件并阻止缺附件发送，重试成功后才可提�
   await waitFor(() => expect(screen.getByRole("button", { name: "发送" })).toBeEnabled());
   expect(upload).toHaveBeenCalledTimes(2);
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await waitFor(() => expect(onSend).toHaveBeenCalledWith("分析文件 [File #1]", [`file:${"a".repeat(32)}`]));
+  await waitFor(() => expect(onSend).toHaveBeenCalledWith(
+    "分析文件 [File #1]",
+    [`file:${"a".repeat(32)}`],
+    { images: [], files: [{ attachment_id: `file:${"a".repeat(32)}`, name: "notes.txt", size: 1 }] },
+  ));
 });
 
 it("运行中仍用发送立即提交文字和附件，停止保持为独立操作", async () => {
@@ -149,7 +170,11 @@ it("运行中仍用发送立即提交文字和附件，停止保持为独立操�
   await waitFor(() => expect(screen.getByRole("button", { name: "发送", exact: true })).toBeEnabled());
   expect(screen.getByRole("button", { name: "停止", exact: true })).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "发送", exact: true }));
-  await waitFor(() => expect(onSend).toHaveBeenCalledWith("改为分析这个附件 [File #1]", [`file:${"a".repeat(32)}`]));
+  await waitFor(() => expect(onSend).toHaveBeenCalledWith(
+    "改为分析这个附件 [File #1]",
+    [`file:${"a".repeat(32)}`],
+    { images: [], files: [{ attachment_id: `file:${"a".repeat(32)}`, name: "empty.txt", size: 0 }] },
+  ));
   expect(screen.queryByRole("button", { name: "立即发送" })).not.toBeInTheDocument();
   expect(container.querySelector('input[type="file"]')).not.toHaveAttribute("accept");
   stop();
@@ -168,7 +193,11 @@ it("本机选择直接返回已挂入附件，浏览器不传服务器路径", a
     connectionId: "connection", sessionId: "session",
   });
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await waitFor(() => expect(onSend).toHaveBeenCalledWith("[File #1]", [`file:${"a".repeat(32)}`]));
+  await waitFor(() => expect(onSend).toHaveBeenCalledWith(
+    "[File #1]",
+    [`file:${"a".repeat(32)}`],
+    { images: [], files: [{ attachment_id: `file:${"a".repeat(32)}`, name: "a.log", size: 12 }] },
+  ));
 });
 
 it("本机选择失败可重新选择，取消会移除失败项并恢复发送", async () => {
@@ -215,50 +244,38 @@ it("切换会话和重新打开页面后恢复各自的文字草稿，清空也�
   expect(screen.getByLabelText("消息")).toHaveValue("");
 });
 
-it("发送等待确认或失败时保留草稿，确认成功才清除", async () => {
-  const first = showComposer();
-  let reject!: (error: Error) => void;
-  first.onSend.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; }));
-  fireEvent.change(screen.getByLabelText("消息"), { target: { value: "需要保存" } });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  first.unmount();
-  const retry = showComposer();
-  expect(screen.getByLabelText("消息")).toHaveValue("需要保存");
-  reject(new Error("offline"));
-  await Promise.resolve();
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await waitFor(() => expect(screen.getByLabelText("消息")).toHaveValue(""));
-  retry.unmount();
-  showComposer();
-  expect(screen.getByLabelText("消息")).toHaveValue("");
-});
-
-it("发送确认后不覆盖用户在等待期间新写的文字", async () => {
+it("发送后立即清空输入框与本地草稿，不阻塞继续输入下一条", () => {
   const view = showComposer();
-  let resolve!: () => void;
-  view.onSend.mockImplementationOnce(() => new Promise<void>((done) => { resolve = done; }));
-  fireEvent.change(screen.getByLabelText("消息"), { target: { value: "已提交" } });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  fireEvent.change(screen.getByLabelText("消息"), { target: { value: "马上发出" } });
+  fireEvent.keyDown(screen.getByLabelText("消息"), { key: "Enter" });
+  expect(view.onSend).toHaveBeenCalledWith("马上发出", []);
+  expect(screen.getByLabelText("消息")).toHaveValue("");
+  expect(localStorage.getItem("konden.composerDraft.session")).toBeNull();
   fireEvent.change(screen.getByLabelText("消息"), { target: { value: "下一条草稿" } });
-  resolve();
-  await waitFor(() => expect(screen.getByLabelText("消息")).toHaveValue("下一条草稿"));
   view.unmount();
   showComposer();
   expect(screen.getByLabelText("消息")).toHaveValue("下一条草稿");
 });
 
-it("运行中发送失败后保留文字草稿，刷新后也不自动发送", async () => {
-  const view = showComposer(true);
-  view.onSend.mockRejectedValueOnce(new Error("发送失败"));
-  fireEvent.change(screen.getByLabelText("消息"), { target: { value: "改为执行新要求" } });
-  fireEvent.click(screen.getByRole("button", { name: "发送", exact: true }));
-  await waitFor(() => expect(view.onSend).toHaveBeenCalledOnce());
-  expect(screen.getByLabelText("消息")).toHaveValue("改为执行新要求");
-  view.unmount();
-  const restored = showComposer(true);
-  expect(screen.getByLabelText("消息")).toHaveValue("改为执行新要求");
-  restored.stop();
-  expect(restored.onSend).not.toHaveBeenCalled();
+it("放回输入框会还原原文与附件且不覆盖正在写的新草稿", async () => {
+  const view = showComposer();
+  const consumed = vi.fn();
+  fireEvent.change(screen.getByLabelText("消息"), { target: { value: "正在写的新草稿" } });
+  view.restore({
+    id: "restore-1",
+    text: "需要重发的正文 [File #1]",
+    images: [],
+    files: [{ attachment_id: `file:${"a".repeat(32)}`, name: "notes.txt", size: 10 }],
+  }, consumed);
+  expect(consumed).toHaveBeenCalledOnce();
+  expect(screen.getByLabelText("消息")).toHaveValue("正在写的新草稿\n需要重发的正文");
+  expect(screen.getByText("notes.txt")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(view.onSend).toHaveBeenCalledWith(
+    "正在写的新草稿\n需要重发的正文 [File #1]",
+    [`file:${"a".repeat(32)}`],
+    { images: [], files: [{ attachment_id: `file:${"a".repeat(32)}`, name: "notes.txt", size: 10 }] },
+  ));
 });
 
 it("模型选择未确认前不发送消息，确认后才可使用新选择发送", async () => {
