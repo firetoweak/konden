@@ -13,6 +13,7 @@ from konden.runtime import (
     ToolBinding,
     UserMessageReceived,
 )
+from konden.runtime.model import rejected_tool_arguments
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
 from tests.fixtures.memory_journal import MemoryJournal
 from tests.runtime.test_boundary_slice import RecordingTool, runtime_for
@@ -126,6 +127,64 @@ class RuntimeSemanticSliceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(model.frames), 2)
         self.assertEqual((await runtime.state("session")).status, RuntimeStatus.WAITING)
+        await scheduler.close()
+
+    async def test_ends_step_tool_closes_continuation_for_its_whole_batch(self):
+        async def work(_context, _arguments):
+            return "sent"
+
+        async def rest(_context, _arguments):
+            return "resting"
+
+        model = ScriptedDecisionMaker((
+            lambda _frame: ModelDecision(command_requests=(InvokeTool("work"), InvokeTool("rest"))),
+            lambda _frame: ModelDecision(command_requests=(InvokeTool("rest"),)),
+        ))
+        runtime = AgentRuntime(
+            MemoryJournal(), model,
+            {"work": ToolBinding(work), "rest": ToolBinding(rest, decision_on_outcome=False, ends_step=True)},
+            SequentialIds(),
+        )
+        scheduler = SettlingScheduler(runtime, "session")
+        await runtime.create_session("session")
+        await runtime.receive_user_message("session", "go", delivery_id="user-1")
+        await scheduler.wake("session")
+        await scheduler.join()
+
+        self.assertEqual(len(model.frames), 1)
+        state = await runtime.state("session")
+        self.assertEqual(state.status, RuntimeStatus.WAITING)
+        self.assertTrue(all(c.phase is CommandPhase.TERMINAL for c in state.commands))
+
+        await runtime.receive_user_message("session", "again", delivery_id="user-2")
+        await scheduler.wake("session")
+        await scheduler.join()
+        self.assertEqual(len(model.frames), 2)
+        await scheduler.close()
+
+    async def test_rejected_arguments_still_reach_the_model_beside_an_ends_step_tool(self):
+        async def rest(_context, _arguments):
+            return "resting"
+
+        model = ScriptedDecisionMaker((
+            lambda _frame: ModelDecision(command_requests=(
+                InvokeTool("work", rejected_tool_arguments("{", code="INVALID_JSON", error="bad", hint="fix")),
+                InvokeTool("rest"),
+            )),
+            lambda _frame: ModelDecision(command_requests=(InvokeTool("rest"),)),
+        ))
+        runtime = AgentRuntime(
+            MemoryJournal(), model,
+            {"work": ToolBinding(rest), "rest": ToolBinding(rest, decision_on_outcome=False, ends_step=True)},
+            SequentialIds(),
+        )
+        scheduler = SettlingScheduler(runtime, "session")
+        await runtime.create_session("session")
+        await runtime.receive_user_message("session", "go", delivery_id="user-1")
+        await scheduler.wake("session")
+        await scheduler.join()
+
+        self.assertEqual(len(model.frames), 2)
         await scheduler.close()
 
     async def test_domain_fact_requesting_decision_becomes_next_trigger(self):

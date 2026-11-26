@@ -16,6 +16,7 @@ from pydantic import (
     field_validator,
 )
 
+from konden.assistant.rest import REST
 from konden.automation.once import MAX_DELAY_SECONDS
 from konden.runtime import (
     CommandOutcome,
@@ -69,15 +70,17 @@ class TimedQuestion(Question):
 def ask_user_schema(model):
     return {"type": "function", "function": {
         "name": ASK_USER, "parameters": model.model_json_schema(),
-        "description": "单独调用，在私聊中发一张可以点选或自由回答的澄清卡片。发出后可继续做不依赖答案的工作。",
+        "description": "在私聊中发一张可以点选或自由回答的澄清卡片。除 rest 外不和其他工具同批调用。发出后可继续做不依赖答案的工作；没有其他能做的事时，和 rest 同批调用。",
     }}
 
 
 def clarification_reply(decision: ModelDecision, model: type[Question]) -> tuple[ModelDecision, list[str] | None]:
-    calls = decision.command_requests
-    if len(calls) != 1 or calls[0].name != ASK_USER or argument_rejection(calls[0]) is not None:
+    asks = [call for call in decision.command_requests if call.name == ASK_USER]
+    resting = tuple(call for call in decision.command_requests if call.name == REST)
+    if len(asks) != 1 or len(asks) + len(resting) != len(decision.command_requests) \
+            or argument_rejection(asks[0]) is not None:
         return decision, None
-    arguments = calls[0].argument_dict()
+    arguments = asks[0].argument_dict()
     try:
         question = model.model_validate(arguments)
     except ValidationError as exc:
@@ -86,9 +89,9 @@ def clarification_reply(decision: ModelDecision, model: type[Question]) -> tuple
             json.dumps(arguments, ensure_ascii=False), code="VALIDATION_ERROR",
             error="；".join(errors), hint="修正问题和选项后重新提问。",
         )
-        return ModelDecision(decision.content, (InvokeTool(ASK_USER, rejected),)), None
+        return ModelDecision(decision.content, (InvokeTool(ASK_USER, rejected), *resting)), None
     call = InvokeTool(ASK_USER, tuple(question.model_dump(exclude_none=True).items()))
-    return ModelDecision(question.question, (call,)), question.options
+    return ModelDecision(question.question, (call, *resting)), question.options
 
 
 def questions_by_id(events: tuple[Event, ...]) -> dict[str, StepCommitted]:
@@ -126,7 +129,7 @@ def has_answer(events, question_id: str) -> bool:
 
 async def _acknowledge(event: Event | None, transport):
     deadline = deadline_for(event.payload.step) if event is not None else None
-    result = {"message": "问题已发出。继续处理不依赖答案的工作。只剩待答事项时，在普通正文记下等待的决定即可结束本轮。"}
+    result = {"message": "问题已发出。继续处理不依赖答案的工作。只剩待答事项时就休息，答复到达会叫醒你。"}
     if deadline is not None:
         registered = await transport("schedule_once", event.session_id, {
             "schedule_id": SCHEDULE_PREFIX + event.payload.step.step_id, "delay_seconds": deadline["after_seconds"],

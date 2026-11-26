@@ -207,7 +207,9 @@ class PromptVocabularyTests(unittest.IsolatedAsyncioTestCase):
     def test_default_prompt_names_only_real_tools_and_fields(self):
         # Colleague and person messaging tools are assembled only for long-lived Agents.
         from konden.assistant.clarification import TimedQuestion, ask_user_schema
-        agent_schemas = [ask_user_schema(TimedQuestion), *MESSAGE_SCHEMAS, *SHARED_MEMORY_SCHEMAS, *PERSONAL_MEMORY_SCHEMAS]
+        from konden.assistant.rest import REST_SCHEMA
+        agent_schemas = [ask_user_schema(TimedQuestion), REST_SCHEMA, *MESSAGE_SCHEMAS,
+                         *SHARED_MEMORY_SCHEMAS, *PERSONAL_MEMORY_SCHEMAS]
         agent_references = {schema["function"]["name"] for schema in agent_schemas} | _schema_field_names(agent_schemas)
         for prompt, extra in ((DEFAULT_ASSISTANT_PROMPT, set()), (BOT_PROMPT, agent_references)):
             unknown = (

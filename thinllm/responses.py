@@ -43,7 +43,7 @@ class ResponsesClient(ChatCompletionsClient):
             raise InvalidLLMResponse("invalid_web_search_response", "Malformed web search sources") from error
         return {"summary": result.response.content, "searched": searched, "sources": list(sources.values())}
 
-    def _payload(self, messages, model, tools, reasoning_effort) -> dict[str, object]:
+    def _payload(self, messages, model, tools, reasoning_effort, tool_choice="auto") -> dict[str, object]:
         instructions = []
         items = []
         for message in messages:
@@ -84,7 +84,7 @@ class ResponsesClient(ChatCompletionsClient):
         }
         if tools:
             payload["tools"] = [{"type": "function", "strict": False, **tool["function"]} for tool in tools]
-            payload["tool_choice"] = "auto"
+            payload["tool_choice"] = tool_choice
             payload["parallel_tool_calls"] = True
         if reasoning_effort is not None:
             payload["reasoning"] = {"effort": reasoning_effort, "summary": "auto"}

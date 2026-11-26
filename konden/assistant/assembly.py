@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import sys
 
 from konden.assistant.a2a import A2AToolset
@@ -75,6 +75,7 @@ from konden.assistant.personal_memory import (
     personal_memory_bindings,
     personal_memory_store,
 )
+from konden.assistant.rest import REST, REST_SCHEMA, rest_binding
 from konden.assistant.runner import SessionScheduler
 from konden.assistant.sessions import AssistantSessions
 from konden.assistant.shared_memory import (
@@ -270,7 +271,7 @@ async def build_assistant_assembly(
                    *((A2AToolset(session_transport, session_id),) if connected_agent else ())),
         base_schemas=[
             *builtin_tools.schemas,
-            *([ask_user_schema(question_model)] if agent is not None else []),
+            *([ask_user_schema(question_model), REST_SCHEMA] if agent is not None else []),
             *colleague_schemas,
             *(SHARED_MEMORY_SCHEMAS if shared_memory is not None else []),
             *(PERSONAL_MEMORY_SCHEMAS if personal_memory is not None else []),
@@ -297,6 +298,7 @@ async def build_assistant_assembly(
             "read_image",
             UPDATE_PLAN,
             ASK_USER,
+            REST,
             DELIVER_TOOL_NAME,
             *subagents.bindings(),
             FIND_HISTORY,
@@ -324,6 +326,7 @@ async def build_assistant_assembly(
     )
     bindings = {
         **({ASK_USER: clarification_binding(journal, session_transport)} if agent is not None else {}),
+        **(rest_binding() if agent is not None else {}),
         **bind_executor_tools(
             builtin_tools,
             gateway,
@@ -352,6 +355,12 @@ async def build_assistant_assembly(
     if "execute_command" in bindings:
         bindings["execute_command"] = with_command_interrupts(bindings["execute_command"], command_interrupts)
     bindings = _with_tool_progress(bindings, tool_progress_sink)
+    if agent is not None:
+        # Bot 只在调用 rest 时休息；其余调用执行完都接着下一步。
+        bindings = {
+            name: binding if name in (REST, DELIVER_TOOL_NAME, SUBMIT) else replace(binding, decision_on_outcome=True)
+            for name, binding in bindings.items()
+        }
     decision = JournalBackedLlmDecisionMaker(
         journal,
         config.llm,
@@ -460,7 +469,7 @@ def _with_tool_progress(bindings, sink):
         return bindings
     projected = {}
     for name, binding in bindings.items():
-        if name == DELIVER_TOOL_NAME:
+        if name in (DELIVER_TOOL_NAME, REST):
             projected[name] = binding
             continue
 

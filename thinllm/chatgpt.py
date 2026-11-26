@@ -8,8 +8,8 @@ class ChatGPTResponsesClient(ResponsesClient):
     def __init__(self, endpoint, **kwargs):
         super().__init__(endpoint, auth=ChatGPTAuth(endpoint.auth_file), **kwargs)
 
-    def _payload(self, messages, model, tools, reasoning_effort):
-        payload = super()._payload(messages, model, tools, reasoning_effort)
+    def _payload(self, messages, model, tools, reasoning_effort, tool_choice="auto"):
+        payload = super()._payload(messages, model, tools, reasoning_effort, tool_choice)
         if tools:
             payload["input"].append({"type": "additional_tools", "role": "developer", "tools": payload.pop("tools")})
         return payload

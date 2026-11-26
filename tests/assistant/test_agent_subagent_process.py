@@ -21,6 +21,7 @@ from konden.paths import KondenHome
 from konden.runtime import StepCommitted
 from tests.assistant.test_agent_worktrees_process import git, tree
 from tests.execution.test_host_process_process import shell, until
+from tests.fixtures.rest import finish
 from tests.fixtures.session_worker import config_for, is_subagent_request
 
 pytestmark = pytest.mark.process
@@ -44,9 +45,9 @@ class DelegatingLlm:
                 call = ToolCall("run", "execute_command", json.dumps({"command": shell(sys.executable, "-u", "-c", code), "wait_seconds": 0}))
             elif COMMAND_FINISHED in text:
                 assert "VERIFIED" in text
-                return self.reply("CHILD_DONE verified shared files")
+                return self.reply(tools, "CHILD_DONE verified shared files")
             else:
-                return self.reply("子任务命令正在执行")
+                return self.reply(tools, "子任务命令正在执行")
         elif "delegate" not in names:
             call = ToolCall("delegate", "delegate", json.dumps({"task": "验证共享文件并执行命令", "cwd": str(self.directory)}))
         elif "CHILD_DONE" in text and "reclaim" not in names:
@@ -56,11 +57,11 @@ class DelegatingLlm:
         if call is not None:
             return LLMCallResult(LLMResponse(content="", calls=(call,)), LLMUsage(input_tokens=1, output_tokens=1))
         self.parent_replies.append("PARENT_RESPONSIVE")
-        return self.reply("PARENT_RESPONSIVE")
+        return self.reply(tools, "PARENT_RESPONSIVE")
 
     @staticmethod
-    def reply(text):
-        return LLMCallResult(LLMResponse(content=text), LLMUsage(input_tokens=1, output_tokens=1))
+    def reply(tools, text):
+        return LLMCallResult(finish(tools, text), LLMUsage(input_tokens=1, output_tokens=1))
 
 
 @pytest.mark.parametrize(("long", "external"), [(False, False), (True, False), (False, True)])

@@ -23,6 +23,7 @@ from konden.runtime import SqliteJournal, replay
 from konden.runtime.json_values import thaw_value
 from tests.assistant.test_agent_worktrees_process import tree
 from tests.fixtures.compact_worker import HANDOFF
+from tests.fixtures.rest import finish
 from tests.fixtures.session_worker import ProcessLlm, config_for, is_subagent_request
 
 pytestmark = pytest.mark.process
@@ -114,7 +115,7 @@ class WorktreeLlm(ProcessLlm):
             self.read_started.set()
             await self.read_release.wait()
             calls = (ToolCall("agent-read", "read_file", json.dumps({"path": note})),)
-        return LLMCallResult(LLMResponse(content="" if calls else "done", calls=calls),
+        return LLMCallResult(LLMResponse(calls=calls) if calls else finish(tools),
                              LLMUsage(input_tokens=10, output_tokens=5))
 
 

@@ -49,13 +49,13 @@ async def clarification_round_trip(root):
         AgentCreated(name="Ada", directory=str(directory)), delivery_id="identity"))
     llm = AsyncMock()
     llm.chat.side_effect = [LLMCallResult(response, LLMUsage(input_tokens=1, output_tokens=1)) for response in (
-        LLMResponse(content="你好。"),
+        LLMResponse(calls=(ToolCall("greet", "rest", "{}"),)),
         LLMResponse(calls=(ToolCall("bad", "ask_user", '{"question":" "}'),)),
         LLMResponse(content="私有工作笔记", calls=(ToolCall("ask", "ask_user", '{"question":"保留附录吗？","options":["yes","no"]}'),)),
         LLMResponse(content="私有工作笔记", calls=(ToolCall("report", "send_message", '{"recipient":"user","text":"周报正文已经整理好了。"}'),)),
-        LLMResponse(content="结束工作"),
+        LLMResponse(calls=(ToolCall("done", "rest", "{}"),)),
         LLMResponse(calls=(ToolCall("write", "write_file", '{"path":"note.txt","content":"unapproved"}'),)),
-        LLMResponse(content="会保留附录。"),
+        LLMResponse(calls=(ToolCall("answered", "rest", "{}"),)),
     )]
     emitted = []
     assembly = await build_assistant_assembly(

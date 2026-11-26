@@ -21,6 +21,7 @@ from konden.assistant.personal_memory import (
     personal_memory_bindings,
     personal_memory_store,
 )
+from konden.assistant.rest import REST
 from konden.assistant.shared_memory import (
     READ_SHARED_MEMORY,
     UPDATE_SHARED_MEMORY,
@@ -30,11 +31,12 @@ from konden.assistant.shared_memory import (
 )
 from konden.assistant.workspaces import directory_binding
 from konden.config import AssistantConfig
-from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage
+from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
 from konden.paths import KondenHome
 from konden.runtime import AgentRuntime, DomainFactCommitted, StateProjector
 from tests.fixtures.artifacts import MemoryArtifactGateway
 from tests.fixtures.memory_journal import MemoryJournal
+from tests.fixtures.projection import without_tool_bodies
 from tests.fixtures.workspaces import workspace_record
 from tests.session_scheduler import SettlingScheduler
 
@@ -163,7 +165,8 @@ class SharedMemoryTest(unittest.IsolatedAsyncioTestCase):
                                    and e.payload.fact_type == data["fact"]
                                    and dict(e.payload.data) == data["data"] for e in events)
                 requests.append(messages)
-                return LLMCallResult(LLMResponse(content="done"), LLMUsage(input_tokens=1, output_tokens=1))
+                return LLMCallResult(LLMResponse(calls=(ToolCall(f"rest-{len(requests)}", REST, "{}"),)),
+                                     LLMUsage(input_tokens=1, output_tokens=1))
 
         runtime = AgentRuntime(journal, None, {})
         await runtime.create_session("ada")
@@ -193,12 +196,15 @@ class SharedMemoryTest(unittest.IsolatedAsyncioTestCase):
         def memories(messages):
             return [m for m in messages if str(m["content"]).startswith("<working_memory>")]
 
+        def assert_prefix(later, earlier):
+            self.assertEqual(without_tool_bodies(later[:len(earlier)]), without_tool_bodies(earlier))
+
         try:
             first = await turn("first")
             second = await turn("second")
             third = await turn("third")
-            self.assertEqual(second[:len(first)], first)
-            self.assertEqual(third[:len(second)], second)
+            assert_prefix(second, first)
+            assert_prefix(third, second)
             self.assertEqual(len(memories(third)), 2)
             before_update = await journal.snapshot("ada")
             shared.update(UpdateSharedMemory(version=1, content="Conclude before explaining."),
@@ -208,18 +214,18 @@ class SharedMemoryTest(unittest.IsolatedAsyncioTestCase):
             await decide(frames[-1])
             self.assertEqual(requests[-1], third)
             changed = await turn("changed")
-            self.assertEqual(changed[:len(third)], third)
+            assert_prefix(changed, third)
             self.assertEqual(len(memories(changed)), 3)
             self.assertIn("Conclude before explaining.", memories(changed)[-1]["content"])
             self.assertIn("Explain before concluding.", str(changed))
             own.update(UpdatePersonalMemory(version=1, content=""),
                        author="user", source="user", operation_id="clear")
             cleared = await turn("cleared")
-            self.assertEqual(cleared[:len(changed)], changed)
+            assert_prefix(cleared, changed)
             self.assertEqual(len(memories(cleared)), 4)
             self.assertIn('"content": ""', memories(cleared)[-1]["content"])
             unchanged = await turn("unchanged")
-            self.assertEqual(unchanged[:len(cleared)], cleared)
+            assert_prefix(unchanged, cleared)
             self.assertEqual(memories(unchanged), memories(cleared))
             observed = memory_observations(await journal.snapshot("ada"))
             self.assertEqual(observed[SHARED_MEMORY], shared.read().model_dump())

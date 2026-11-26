@@ -32,6 +32,7 @@ from konden.assistant.external_messages import (
 )
 from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
 from konden.assistant.host.session_store import SessionStore
+from konden.assistant.rest import REST
 from konden.assistant.runner import SessionNotFoundError, pending_authorization_ids
 from konden.assistant.sessions import SessionView, session_view
 from konden.assistant.subagent.subagent import (
@@ -662,7 +663,7 @@ def project_conversation(
         messages: list[StepItem] = []
         for command_state in step.commands:
             effect = command_state.command.effect
-            if effect.name == DELIVER_TOOL_NAME:
+            if effect.name in (DELIVER_TOOL_NAME, REST):
                 continue
             if effect.name == SEND_FILE:
                 if not _file_sent(command_state):

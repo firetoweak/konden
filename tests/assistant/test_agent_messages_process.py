@@ -64,6 +64,7 @@ from konden.runtime import (
 from tests.assistant.test_runner import ScriptedDecisionMaker
 from tests.assistant.test_supervisor import until
 from tests.fixtures.agent_messages import interrupted_send_config
+from tests.fixtures.rest import finish
 from tests.fixtures.session_worker import ProcessLlm, config_for
 
 pytestmark = pytest.mark.process
@@ -120,7 +121,7 @@ class MessagingLlm(ProcessLlm):
                 calls = (ToolCall("send", SEND_MESSAGE, json.dumps({"recipient": "Lin", "text": "请核对接口"})),)
         elif "Kai" in text and "list_colleagues" not in called:
             calls = (ToolCall("colleagues", "list_colleagues", "{}"),)
-        return LLMCallResult(LLMResponse(content="" if calls else "done", calls=calls),
+        return LLMCallResult(LLMResponse(calls=calls) if calls else finish(tools),
                              LLMUsage(input_tokens=10, output_tokens=5))
 
 
@@ -284,7 +285,7 @@ class AgentMessagesProcessTest(unittest.IsolatedAsyncioTestCase):
                 ),))
                 pending_input = None
             else:
-                response = LLMResponse(content="已交付")
+                response = finish(tools, "已交付")
             return LLMCallResult(response, LLMUsage(10, 5))
 
         async def send(text):

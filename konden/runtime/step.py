@@ -60,6 +60,7 @@ class StepRunner:
         id_factory: IdFactory = random_id,
         requires_authorization: Mapping[str, bool | AuthorizationPolicy] | None = None,
         decision_on_outcome: Mapping[str, bool] | None = None,
+        ends_step: set[str] | None = None,
     ) -> None:
         self._journal = journal
         self._projector = projector
@@ -70,6 +71,7 @@ class StepRunner:
         self._decision_on_outcome = dict(
             {} if decision_on_outcome is None else decision_on_outcome
         )
+        self._ends_step = set() if ends_step is None else set(ends_step)
         self._id_factory = id_factory
 
     def bind(
@@ -78,9 +80,14 @@ class StepRunner:
         *,
         decision_on_outcome: bool,
         requires_authorization: bool | AuthorizationPolicy = False,
+        ends_step: bool = False,
     ) -> None:
         self._decision_on_outcome[name] = decision_on_outcome
         self._requires_authorization[name] = requires_authorization
+        if ends_step:
+            self._ends_step.add(name)
+        else:
+            self._ends_step.discard(name)
 
     async def commit(
         self,
@@ -97,6 +104,10 @@ class StepRunner:
             artifact_refs = ()
             decision_metadata = None
         commands: list[Command] = []
+        ends_step = any(
+            request.name in self._ends_step and argument_rejection(request) is None
+            for request in decision.command_requests
+        )
         for request in decision.command_requests:
             command_id = self._id_factory("command")
             if argument_rejection(request) is not None:
@@ -108,7 +119,7 @@ class StepRunner:
                 verdict = (
                     policy(request.argument_dict()) if callable(policy) else policy
                 )
-                decision_on_outcome = self._decision_on_outcome[request.name]
+                decision_on_outcome = self._decision_on_outcome[request.name] and not ends_step
                 if type(verdict) is bool:
                     requires_authorization = verdict
                 else:
