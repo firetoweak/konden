@@ -222,7 +222,7 @@ class ExecutionTraceQueries:
         first = store.read(ref, 0, 1)
         return first.content if first.next_offset is None else store.read(ref, 0, first.total_chars).content
 
-    def _request(self, event):
+    def _replay_manifest(self, event):
         for ref in event.artifact_refs:
             if not is_valid_artifact_id(ref):
                 continue
@@ -230,15 +230,15 @@ class ExecutionTraceQueries:
             if raw.startswith("{"):
                 manifest = json.loads(raw)
                 if manifest.get("schema") == "decision-replay-manifest/v2":
-                    return manifest["request"]
+                    return manifest
         return None
 
     def _step_detail(self, event, kind, events, state, part):
         step = event.payload.step
         if kind == "input":
-            request = self._request(event)
-            if request is not None:
-                return {"kind": kind, "request": request, "triggers": []}
+            manifest = self._replay_manifest(event)
+            if manifest is not None:
+                return {"kind": kind, "request": manifest["request"], "triggers": []}
             by_id = {item.event_id: item for item in events}
             return {"kind": kind, "request": None, "triggers": [
                 {"sequence": item.sequence, "kind": item.kind,
@@ -249,8 +249,22 @@ class ExecutionTraceQueries:
             metadata = event.payload.decision_metadata
             extensions = metadata.get(MESSAGE_EXTENSIONS) if isinstance(metadata, Mapping) else None
             reasoning = extensions.get("reasoning_content") if isinstance(extensions, Mapping) else None
-            return {"kind": kind, "text": step.decision.content, "reasoning": reasoning if isinstance(reasoning, str) else None,
-                    "tools": [command.effect.name for command in step.commands]}
+            manifest = self._replay_manifest(event)
+            if manifest is None:
+                output = {
+                    "content": step.decision.content,
+                    "calls": [
+                        {"name": effect.name, "arguments": effect.argument_dict()}
+                        for effect in step.decision.command_requests
+                    ],
+                }
+                source = "committed"
+            else:
+                response = manifest["response"]
+                output = {"content": response["content"], "calls": response["calls"]}
+                source = "recorded"
+            return {"kind": kind, "output": output, "output_source": source,
+                    "reasoning": reasoning if isinstance(reasoning, str) else None}
         if part is None or not 0 <= part < len(step.commands):
             raise SessionNotFoundError("调用不存在")
         command = state.command(step.commands[part].command_id)
@@ -292,9 +306,9 @@ class ExecutionTraceQueries:
             first_catalog = next(item for item in events if isinstance(item.payload, DomainFactCommitted)
                                  and item.payload.fact_type == CATALOG)
             first_step = next((item for item in events if isinstance(item.payload, StepCommitted)), None)
-            request = await asyncio.to_thread(self._request, first_step) if first_catalog is event and first_step else None
-            return {"kind": kind, "toolsets": thaw_value(payload.data["toolsets"]),
-                    "tools": (request["tools"] or []) if request else []}
+            manifest = await asyncio.to_thread(self._replay_manifest, first_step) if first_catalog is event and first_step else None
+            tools = manifest["request"]["tools"] if manifest is not None else None
+            return {"kind": kind, "toolsets": thaw_value(payload.data["toolsets"]), "tools": tools or []}
         if isinstance(payload, DomainFactCommitted) and kind == "compact" and payload.fact_type in (CREATED, WINDOW):
             for anchor, handoff, published in _compact_entries(events):
                 if anchor is event or handoff is event:

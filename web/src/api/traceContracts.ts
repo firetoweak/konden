@@ -32,7 +32,12 @@ const toolset = z.object({ id: z.string(), description: z.string() });
 export const traceDetailSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("input"), request: request.nullable(),
     triggers: z.object({ sequence: z.number(), kind: z.string(), text: z.string().nullable() }).array() }),
-  z.object({ kind: z.literal("model"), text: z.string(), reasoning: z.string().nullable(), tools: z.string().array() }),
+  z.object({ kind: z.literal("model"), reasoning: z.string().nullable(),
+    output_source: z.enum(["recorded", "committed"]),
+    output: z.object({ content: z.string(), calls: z.object({
+      id: z.string().optional(), name: z.string(), arguments: z.union([z.string(), z.record(z.string(), z.json())]),
+    }).array() }),
+  }),
   z.object({ kind: z.literal("tool"), arguments: z.record(z.string(), z.unknown()),
     outcome: z.object({ status: z.string(), value: z.unknown(), error_type: z.string().nullable(),
       error_message: z.string().nullable() }).nullable(),

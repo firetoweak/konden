@@ -124,9 +124,8 @@ function DetailContent({ detail, entry, scope }: { detail: Detail; entry: TraceE
       <p className="trace-detail-meta">{entry.usage?.input_tokens !== undefined && `输入 ${entry.usage.input_tokens} tokens · `}
         {entry.usage?.output_tokens !== undefined && `输出 ${entry.usage.output_tokens} tokens · `}{cacheLabel(entry)}</p>
       {detail.reasoning && <Disclosure title="思考" initiallyOpen><Code value={detail.reasoning} /></Disclosure>}
-      {detail.text && <><h4>模型输出</h4><Code value={detail.text} /></>}
-      {detail.tools.length > 0 && <><h4>本步提交的调用</h4><Code value={detail.tools.join("\n")} /></>}
-      {!detail.reasoning && !detail.text && !detail.tools.length && <p>无文本内容</p>}
+      <h4>{detail.output_source === "recorded" ? "模型输出" : "已提交的决策"}</h4>
+      <Code value={detail.output} />
     </>;
     case "catalog": return <>
       <h4>登记的工具集 · {detail.toolsets.length} 个</h4><Code value={detail.toolsets.map((item) => item.id).join("\n")} />
