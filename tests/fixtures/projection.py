@@ -34,6 +34,11 @@ def project_chat_messages(
     ]
 
 
+def without_tool_bodies(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Older tool results age into references on their own schedule; compare everything else."""
+    return [{**m, "content": None} if m["role"] == "tool" else m for m in messages]
+
+
 def parse_tool_result_meta(content: object) -> tuple[bool, str | None]:
     meta = _externalized_meta(content)
     if meta is None:

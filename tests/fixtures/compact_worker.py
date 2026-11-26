@@ -7,6 +7,7 @@ from pathlib import Path
 
 from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
+from tests.fixtures.rest import finish
 from tests.fixtures.session_worker import is_subagent_request
 
 HANDOFF = """## 用户要什么
@@ -30,7 +31,8 @@ class CompactLlm:
     async def __aexit__(self, *args):
         return None
 
-    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None, reasoning_effort=None):
+    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None, reasoning_effort=None,
+                   tool_choice="auto"):
         if any("<self_handoff>" in str(m["content"]) for m in messages):
             request = self.workspace / "handoff_request.json"
             if not request.exists():
@@ -91,7 +93,7 @@ class CompactLlm:
                     calls=(ToolCall("read", "read_file", '{"path":"input.txt"}'),),
                 )
             else:
-                response = LLMResponse(content="正常回复", calls=())
+                response = finish(tools, "正常回复")
         if response.content and on_content_delta is not None:
             emitted = on_content_delta(response.content)
             if isawaitable(emitted):
@@ -101,7 +103,8 @@ class CompactLlm:
 
 
 class ChildCompactLlm(CompactLlm):
-    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None):
+    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None,
+                   tool_choice="auto"):
         if any("<self_handoff>" in str(m["content"]) for m in messages):
             return await super().chat(
                 messages, model, tools=tools,

@@ -67,14 +67,17 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
                 "question": question, "deadline": {"after_seconds": 60, "plan": plan},
             }, ensure_ascii=False)),))
 
+        def rest():
+            return LLMResponse(calls=(ToolCall("rest", "rest", "{}"),))
+
         requests = []
         replies = iter([ask("图表放哪里？", "放附录"),
                         LLMResponse(calls=(ToolCall("report", "send_message", '{"recipient":"user","text":"已完成正文"}'),)),
-                        LLMResponse(content="等待答复"),
-                        ask("周报用哪种格式？", "使用 Markdown"), LLMResponse(content="已整理材料"),
-                        LLMResponse(content="收到图表位置"), LLMResponse(content="已记下格式偏好"),
-                        LLMResponse(content="已按聊天中补充的要求调整格式"),
-                        LLMResponse(content="收到补答，改为纯文本")])
+                        rest(),
+                        ask("周报用哪种格式？", "使用 Markdown"), rest(),
+                        rest(), rest(),
+                        rest(),
+                        rest()])
 
         class Model(ProcessLlm):
             async def chat(client, messages, model, **kwargs):

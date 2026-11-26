@@ -36,6 +36,7 @@ from konden.paths import KondenHome
 from konden.runtime import AgentRuntime, DomainFactCommitted, StateProjector
 from tests.fixtures.artifacts import MemoryArtifactGateway
 from tests.fixtures.memory_journal import MemoryJournal
+from tests.fixtures.projection import without_tool_bodies
 from tests.fixtures.workspaces import workspace_record
 from tests.session_scheduler import SettlingScheduler
 
@@ -196,10 +197,7 @@ class SharedMemoryTest(unittest.IsolatedAsyncioTestCase):
             return [m for m in messages if str(m["content"]).startswith("<working_memory>")]
 
         def assert_prefix(later, earlier):
-            # Older tool results age into references on their own schedule; memory must not rewrite the rest.
-            def shape(messages):
-                return [{**m, "content": None} if m["role"] == "tool" else m for m in messages]
-            self.assertEqual(shape(later[:len(earlier)]), shape(earlier))
+            self.assertEqual(without_tool_bodies(later[:len(earlier)]), without_tool_bodies(earlier))
 
         try:
             first = await turn("first")

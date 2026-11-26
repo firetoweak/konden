@@ -31,6 +31,7 @@ from tests.fixtures.compact_worker import (
     child_config_for,
     config_for,
 )
+from tests.fixtures.projection import without_tool_bodies
 
 pytestmark = pytest.mark.process
 
@@ -115,7 +116,7 @@ class CompactTest(unittest.IsolatedAsyncioTestCase):
         await self.host.receive_user_message(ada.session_id, "换窗后第二轮。", delivery_id="after-second")
         await self.host.wait_quiescent(ada.session_id)
         second_after = request_for("换窗后第二轮。")
-        self.assertEqual(second_after[:len(first_after)], first_after)
+        self.assertEqual(without_tool_bodies(second_after[:len(first_after)]), without_tool_bodies(first_after))
         personal_memory_store(self.home, ada).update(
             UpdatePersonalMemory(version=1, content=""),
             author="用户", source="user", operation_id="clear-after",
@@ -123,7 +124,7 @@ class CompactTest(unittest.IsolatedAsyncioTestCase):
         await self.host.receive_user_message(ada.session_id, "清空后继续。", delivery_id="after-clear")
         await self.host.wait_quiescent(ada.session_id)
         after_clear = request_for("清空后继续。")
-        self.assertEqual(after_clear[:len(second_after)], second_after)
+        self.assertEqual(without_tool_bodies(after_clear[:len(second_after)]), without_tool_bodies(second_after))
         latest = after_clear[-1]["content"]
         self.assertIn('"content": ""', latest)
         snapshot = await self.host.request("compact_snapshot", ada.session_id, {})
