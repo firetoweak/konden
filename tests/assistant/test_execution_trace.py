@@ -92,6 +92,48 @@ def test_trace_preserves_canonical_failure_and_unknown_and_loads_request_on_sele
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("recorded", [True, False])
+def test_model_trace_shows_content_and_complete_tool_calls(tmp_path, recorded):
+    async def exercise():
+        session_id = "trace-bot"
+        store = SessionStore(tmp_path / "sessions")
+        await make_bot(store, session_id, tmp_path)
+        response = {
+            "content": "先查看原来的配置。",
+            "calls": [{"id": "call-1", "name": "read_file", "arguments": '{"path": "config.json"}'}],
+        }
+        refs = ()
+        if recorded:
+            artifact = FileArtifactGateway(store.root).for_session(session_id).save(json.dumps({
+                "schema": "decision-replay-manifest/v2",
+                "request": {"model": "recorded/model", "tools": None, "messages": []},
+                "response": {**response, "message_extensions": {}},
+            }))
+            refs = (artifact.artifact_id,)
+
+        async def read_file(_context, _arguments):
+            raise AssertionError("Trace lookup must not execute the tool")
+
+        decision = ModelDecision("核对当前配置。", (InvokeTool("read_file", (("path", "approved.json"),)),))
+        runtime = AgentRuntime(store.journal(session_id), ScriptedDecisionMaker((
+            lambda _: RecordedDecision(decision, refs),
+        )), {"read_file": ToolBinding(read_file, requires_authorization=True)}, SequentialIds())
+        await runtime.receive_user_message(session_id, "检查配置", delivery_id="message")
+        await runtime.advance(session_id)
+        trace = ExecutionTraceQueries(store)
+        index = await trace.index(session_id, [])
+        node = next(entry for entry in index["entries"] if entry["kind"] == "model")
+        detail = await trace.detail(session_id, [], node["id"])
+
+        assert detail["output_source"] == ("recorded" if recorded else "committed")
+        assert detail["output"] == (response if recorded else {
+            "content": "核对当前配置。",
+            "calls": [{"name": "read_file", "arguments": {"path": "approved.json"}}],
+        })
+
+    asyncio.run(exercise())
+
+
 def test_subagent_trace_follows_the_committed_parent_command(tmp_path):
     async def exercise():
         parent, other = "parent", "other"
