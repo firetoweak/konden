@@ -28,5 +28,10 @@ def assistant_failure_message(error: BaseException) -> str | None:
                 "模型这一拍没有给出可用回复或工具调用。"
                 "下一条消息会从同一触发重试。"
             )
+        if error.code == "missing_tool_call":
+            return (
+                "模型这一拍只回了正文，没有调用任何工具；Bot 的回复和休息都必须通过工具表达。"
+                "下一条消息会从同一触发重试。"
+            )
         return f"模型响应不符合约定：{error}"
     return None

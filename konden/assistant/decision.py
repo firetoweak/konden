@@ -41,6 +41,7 @@ from konden.assistant.delivery import (
 )
 from konden.assistant.loop_guard import NOTICE, LoopGuard
 from konden.assistant.management import ManagementSurface
+from konden.assistant.rest import REST
 from konden.assistant.skills import SkillToolAdapter
 from konden.assistant.subagent.subagent import SubAgentHost
 from konden.assistant.toolsets import ToolSurface
@@ -86,9 +87,10 @@ def _invoke_requests(
     allowed_tool_names: Set[str],
     exclusive_tool_names: Set[str] = frozenset(),
 ) -> tuple[InvokeTool, ...]:
-    if len(calls) != 1 and any(call.name in exclusive_tool_names for call in calls):
+    working = [call for call in calls if call.name != REST]
+    if len(working) > 1 and any(call.name in exclusive_tool_names for call in working):
         raise InvalidLLMResponse(
-            "invalid_tool_batch", "an exclusive tool must be the only tool call",
+            "invalid_tool_batch", "an exclusive tool must be the only tool call besides rest",
         )
     requests: list[InvokeTool] = []
     for call in calls:
@@ -341,18 +343,19 @@ class JournalBackedLlmDecisionMaker:
         control_calls = tuple(
             call for call in response.calls if call.name in control_names
         )
-        if control_calls and len(response.calls) != 1:
+        if control_calls and sum(call.name != REST for call in response.calls) != 1:
             raise InvalidLLMResponse(
                 "invalid_control_batch",
-                "a host control tool must be the only tool call",
+                "a host control tool must be the only tool call besides rest",
             )
         if control_calls:
             call = control_calls[0]
             tool = _invoke_tool(call)
+            resting = tuple(_invoke_tool(c) for c in response.calls if c.name == REST)
             if argument_rejection(tool) is not None:
                 return ModelDecision(
                     content=response.content,
-                    command_requests=(tool,),
+                    command_requests=(tool, *resting),
                 )
             try:
                 self._control.stage(frame, call.name, tool.argument_dict())
@@ -369,7 +372,7 @@ class JournalBackedLlmDecisionMaker:
                         code="VALIDATION_ERROR",
                         error=error,
                         hint="按工具 schema 修正参数后重试。",
-                    )),),
+                    )), *resting),
                 )
             return ModelDecision(
                 content=(
@@ -449,6 +452,10 @@ class JournalBackedLlmDecisionMaker:
             else self._reasoning_effort
         )
         options = {} if effort is None else {"reasoning_effort": effort}
+        reading = self._compact is not None and self._compact.is_reader
+        explicit_end = REST in allowed_tool_names and not reading
+        if explicit_end:
+            options["tool_choice"] = "required"
         output_id = frame.trigger_event.event_id
         show_preview = (
             self._preview.enabled
@@ -494,6 +501,10 @@ class JournalBackedLlmDecisionMaker:
                 ) from None
             raise
         await self._preview.finish_thinking(frame.state.session_id, output_id)
+        if explicit_end and not result.response.calls:
+            raise InvalidLLMResponse(
+                "missing_tool_call", "tool_choice=required but the model returned no tool call",
+            )
         usage = result.usage
         if self._context_usage_sink is not None:
             self._context_usage_sink(

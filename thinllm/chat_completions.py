@@ -93,11 +93,12 @@ class ChatCompletionsClient:
         on_content_delta: ContentDeltaSink | None = None,
         on_reasoning_delta: ContentDeltaSink | None = None,
         reasoning_effort: str | None = None,
+        tool_choice: str = "auto",
     ) -> LLMCallResult:
-        payload = self._payload(messages, model, tools, reasoning_effort)
+        payload = self._payload(messages, model, tools, reasoning_effort, tool_choice)
         return await self._request(payload, model, on_content_delta, on_reasoning_delta)
 
-    def _payload(self, messages, model, tools, reasoning_effort) -> dict[str, object]:
+    def _payload(self, messages, model, tools, reasoning_effort, tool_choice="auto") -> dict[str, object]:
         messages = [{key: value for key, value in message.items() if key != "responses_output"}
                     for message in messages]
         if self._endpoint.pads_reasoning_content:
@@ -121,7 +122,7 @@ class ChatCompletionsClient:
         }
         if tools:
             payload["tools"] = tools
-            payload["tool_choice"] = "auto"
+            payload["tool_choice"] = tool_choice
         if reasoning_effort is not None:
             payload["reasoning_effort"] = reasoning_effort
         return payload

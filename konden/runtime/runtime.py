@@ -94,6 +94,7 @@ class AgentRuntime:
                 name: binding.decision_on_outcome
                 for name, binding in tool_bindings.items()
             },
+            ends_step={name for name, binding in tool_bindings.items() if binding.ends_step},
         )
         self.dispatcher = Dispatcher(
             journal,
@@ -116,6 +117,7 @@ class AgentRuntime:
             name,
             decision_on_outcome=binding.decision_on_outcome,
             requires_authorization=binding.requires_authorization,
+            ends_step=binding.ends_step,
         )
 
     async def create_session(self, session_id: str) -> bool:

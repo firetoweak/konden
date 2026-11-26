@@ -12,6 +12,7 @@ from konden.llm.api import LLMCallResult, LLMResponse, LLMTransientError, LLMUsa
 class _FakeLlm:
     def __init__(self):
         self.efforts = []
+        self.tool_choices = []
 
     async def chat(
         self,
@@ -22,8 +23,10 @@ class _FakeLlm:
         on_content_delta=None,
         on_reasoning_delta=None,
         reasoning_effort=None,
+        tool_choice="auto",
     ):
         self.efforts.append(reasoning_effort)
+        self.tool_choices.append(tool_choice)
         if model == "fail":
             raise LLMTransientError("provider timeout")
         if on_reasoning_delta is not None:
@@ -86,6 +89,7 @@ class LlmPortTest(unittest.IsolatedAsyncioTestCase):
                 on_content_delta=deltas.append,
                 on_reasoning_delta=thoughts.append,
                 reasoning_effort="high",
+                tool_choice="required",
             )
             self.assertEqual(result.response.content, "hello")
             self.assertEqual(deltas, ["hel", "lo"])
@@ -93,6 +97,7 @@ class LlmPortTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(LLMTransientError):
                 await port.chat([{"role": "user", "content": "hi"}], "fail")
             self.assertEqual(llm.efforts, ["high", None])
+            self.assertEqual(llm.tool_choices, ["required", "auto"])
         finally:
             await host.close(RuntimeError("done"))
             await worker.close(RuntimeError("done"))

@@ -117,7 +117,7 @@ def test_stream_and_tool_history_use_responses_without_losing_native_output(resp
                 "tool_calls": [{"id": "command_" + call.id, "function": {"name": call.name, "arguments": call.arguments}}
                                for call in first.response.calls],
             }, *[{"role": "tool", "tool_call_id": "command_" + call.id, "content": "42"}
-                 for call in first.response.calls]], model, tools)
+                 for call in first.response.calls]], model, tools, tool_choice="required")
         assert second.response.content == "OK"
         assert str(requests[0].url) == "https://api.openai.com/v1/responses"
         assert requests[0].headers["authorization"] == header
@@ -137,7 +137,9 @@ def test_stream_and_tool_history_use_responses_without_losing_native_output(resp
         assert payload["input"][0]["content"][1] == {
             "type": "input_image", "image_url": "data:image/png;base64,AA==", "detail": "low",
         }
+        assert payload["tool_choice"] == "auto"
         replay = json.loads(requests[1].content)
+        assert replay["tool_choice"] == "required"
         assert "reasoning" not in replay
         assert replay["input"][1:] == [
             *output[:2],

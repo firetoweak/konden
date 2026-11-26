@@ -58,10 +58,13 @@ class ToolBinding:
     handler: ToolHandler
     decision_on_outcome: bool = True
     requires_authorization: bool | AuthorizationPolicy = False
+    ends_step: bool = False
 
     def __post_init__(self) -> None:
         if type(self.decision_on_outcome) is not bool:
             raise TypeError("decision_on_outcome must be bool")
+        if type(self.ends_step) is not bool:
+            raise TypeError("ends_step must be bool")
         if type(self.requires_authorization) is not bool and not callable(
             self.requires_authorization
         ):

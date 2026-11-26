@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from konden.config import AssistantConfig
 from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
+from tests.fixtures.rest import finish
 
 
 def is_subagent_request(tools):
@@ -26,7 +27,8 @@ class ProcessLlm:
     async def __aexit__(self, *args):
         pass
 
-    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None):
+    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None,
+                   tool_choice="auto"):
         images = [
             part
             for message in messages
@@ -64,15 +66,15 @@ class ProcessLlm:
                 ToolCall(f"delegate-{i}", "delegate", '{"task":"read something"}')
                 for i in range(2)
             )
-        content = "" if calls else ("child done" if is_subagent_request(tools) else "done")
-        if content and on_content_delta is not None:
-            emitted = on_content_delta(content)
+        if calls:
+            response = LLMResponse(calls=calls)
+        else:
+            response = finish(tools, "child done" if is_subagent_request(tools) else "done")
+        if response.content and on_content_delta is not None:
+            emitted = on_content_delta(response.content)
             if isawaitable(emitted):
                 await emitted
-        return LLMCallResult(
-            LLMResponse(content=content, calls=calls),
-            LLMUsage(input_tokens=10, output_tokens=5),
-        )
+        return LLMCallResult(response, LLMUsage(input_tokens=10, output_tokens=5))
 
 
 def config_for(workspace: Path):
@@ -84,7 +86,8 @@ def config_for(workspace: Path):
 
 
 class CancellableProcessLlm(ProcessLlm):
-    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None):
+    async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None,
+                   tool_choice="auto"):
         if "CANCEL_PROCESS" not in json.dumps(messages):
             return await super().chat(
                 messages,
