@@ -105,7 +105,7 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
     setSavedNotice(false);
     setDraft((previous) => {
       const favorites = { ...previous.favorites };
-      if (checked) favorites[item.id] = { effort: null, compactTokens: 50_000 };
+      if (checked) favorites[item.id] = { effort: null, compactTokens: 500_000 };
       else delete favorites[item.id];
       return { ...previous, favorites, defaultModel: previous.defaultModel ?? item.id };
     });

@@ -61,7 +61,7 @@ it("常用模型先编辑草稿，撤销不保存，保存才提交偏好", asyn
   expect(checkbox).not.toBeChecked();
   fireEvent.click(checkbox);
   fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
-  await waitFor(() => expect(saved).toHaveBeenCalledWith(expect.objectContaining({ favorites: expect.objectContaining({ "openai/plain": { effort: null, compactTokens: 50_000 } }) })));
+  await waitFor(() => expect(saved).toHaveBeenCalledWith(expect.objectContaining({ favorites: expect.objectContaining({ "openai/plain": { effort: null, compactTokens: 500_000 } }) })));
   expect(PREFERENCES.favorites["openai/plain"]).toBeUndefined();
   expect(screen.getByRole("checkbox", { name: "在输入框显示 OpenAI Alpha" })).toBeDisabled();
 });
