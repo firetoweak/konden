@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { AgentHome } from "../src/features/sessions/AgentHome";
 import { CreateAgentModal } from "../src/features/sessions/CreateAgentModal";
+import { SettingsDrawer } from "../src/features/settings/SettingsMenu";
 import runtimeReducer, { connected } from "../src/realtime/runtimeSlice";
 
 const queries = vi.hoisted(() => ({
@@ -57,9 +58,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function HomeWithCreateDialog() {
   const [opened, setOpened] = useState(false);
+  const [settingsOpened, setSettingsOpened] = useState(false);
   const navigate = useNavigate();
   return <>
-    <AgentHome onCreateAgent={() => setOpened(true)} />
+    <AgentHome onCreateAgent={() => setOpened(true)} onConfigureModels={() => setSettingsOpened(true)} />
+    <SettingsDrawer section="models" opened={settingsOpened} fromCreate={false} onClose={() => setSettingsOpened(false)} />
     <CreateAgentModal opened={opened} configuring={false} returnedFromSettings={false} connectionId="connection"
       onConfigureModels={() => {}} onClose={() => setOpened(false)} onCreated={(id) => navigate(`/sessions/${id}`)} />
   </>;
@@ -115,12 +118,17 @@ it("名册为空时引导先配好模型，再给第一位伙伴起名并进入�
   queries.modelReady = false;
   renderHome();
   expect(screen.getByText("模型配置表单")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "模型配置" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "开始" })).toBeDisabled();
   cleanup();
   queries.modelReady = true;
   renderHome();
   expect(screen.queryByText("模型配置表单")).not.toBeInTheDocument();
   fireEvent.change(screen.getByRole("textbox", { name: /给它起个名字/ }), { target: { value: "阿青" } });
+  fireEvent.click(screen.getByRole("button", { name: "模型配置" }));
+  expect(await screen.findByRole("dialog", { name: "模型配置" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+  expect(screen.getByRole("textbox", { name: /给它起个名字/ })).toHaveValue("阿青");
   fireEvent.click(screen.getByRole("button", { name: "开始" }));
   await waitFor(() => expect(queries.createAgent).toHaveBeenCalledWith({ connectionId: "connection", path: null, name: "阿青" }));
   expect(await screen.findByText("新 Agent 对话")).toBeInTheDocument();

@@ -163,7 +163,7 @@ export function App() {
           <IconMenu2 size={19} />
         </ActionIcon>
         <Routes>
-          <Route path="/" element={<AgentHome onCreateAgent={openCreateAgent} />} />
+          <Route path="/" element={<AgentHome onCreateAgent={openCreateAgent} onConfigureModels={() => openSettings("models")} />} />
           <Route path="/capabilities" element={<CapabilitiesPage />} />
           <Route path="/groups/:groupId" element={<GroupChatPage />} />
           <Route path="/sessions/:sessionId" element={<SessionConversation />} />

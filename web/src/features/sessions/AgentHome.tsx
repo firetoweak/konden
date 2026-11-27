@@ -9,7 +9,7 @@ import { FirstBotOnboarding } from "./FirstBotOnboarding";
 import { CreateGroupModal } from "../groups/CreateGroupModal";
 import { BotAvatar } from "../conversation/ChatPresentation";
 
-export function AgentHome({ onCreateAgent }: { onCreateAgent: () => void }) {
+export function AgentHome({ onCreateAgent, onConfigureModels }: { onCreateAgent: () => void; onConfigureModels: () => void }) {
   const navigate = useNavigate();
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
   const { data: agents = [], isLoading, isError } = useGetAgentsQuery();
@@ -22,7 +22,8 @@ export function AgentHome({ onCreateAgent }: { onCreateAgent: () => void }) {
     <div className="home-scroll"><div className="home-content">
       <div className="home-intro"><Title order={1}>找一位 Bot，聊聊接下来要做的事。</Title><Text c="dimmed" className="home-description">从私聊开始，需要一起讨论时再邀请伙伴加入群聊。代码项目按需关联。</Text></div>
       {isError ? <Alert color="red" title="工作台加载失败">请检查后端连接后刷新。</Alert> : null}
-      {isLoading ? <Stack><Skeleton h={100} /></Stack> : agents.length === 0 ? <FirstBotOnboarding connectionId={connectionId} onCreated={(id) => navigate(`/sessions/${encodeURIComponent(id)}`)} /> : null}
+      {isLoading ? <Stack><Skeleton h={100} /></Stack> : agents.length === 0 ? <FirstBotOnboarding connectionId={connectionId}
+        onConfigureModels={onConfigureModels} onCreated={(id) => navigate(`/sessions/${encodeURIComponent(id)}`)} /> : null}
       <div className="agent-grid">{agents.map((agent) => <Link className="agent-card" key={agent.session_id} to={`/sessions/${encodeURIComponent(agent.session_id)}`}><BotAvatar name={agent.name} sessionId={agent.session_id} /><div className="home-agent-identity"><Text fw={600}>{agent.name}</Text></div><AgentStatus agent={agent} /><span className="agent-card-action">打开对话<IconArrowRight size={15} /></span></Link>)}</div>
       <Group justify="space-between" mt="xl"><Title order={2}>群聊</Title><Button variant="default" size="compact-sm" disabled={connectionId === null || agents.length < 2} onClick={() => setGroupCreating(true)}>新建群聊</Button></Group>
       <div className="home-groups">{groups.map((group) => <Link key={group.group_id} to={`/groups/${encodeURIComponent(group.group_id)}`}><IconUsersGroup size={16} /><span>{group.name}</span><Text size="xs" c="dimmed">{group.members.length} 位成员</Text></Link>)}</div>
