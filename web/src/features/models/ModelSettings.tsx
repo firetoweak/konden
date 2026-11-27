@@ -17,11 +17,11 @@ function searchConfig(value: SearchSettings): SearchConfig {
   return {enabled:value.enabled, provider:value.provider, openai_model:value.openaiModel};
 }
 
-export function ModelSettings({ active = true }: { active?: boolean }) {
+export function ModelSettings({ active = true, onSaveAndReturn }: { active?: boolean; onSaveAndReturn?: () => void }) {
   const dispatch = useAppDispatch();
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
   const chatGPT = useChatGPTAuthorization(connectionId);
-  const {data, error} = useGetModelSettingsQuery(undefined, {skip:!active, pollingInterval:active ? 5000 : 0});
+  const {data, error} = useGetModelSettingsQuery(undefined, {pollingInterval:active ? 5000 : 0});
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   useEffect(() => { if (data) setPreferences(preferencesFrom(data.config)); }, [data]);
   const api = useMemo<ModelSettingsApi>(() => ({
@@ -32,6 +32,7 @@ export function ModelSettings({ active = true }: { active?: boolean }) {
     async savePreferences(value) {
       if (connectionId === null) throw new Error("连接已断开，请等待重新连接。");
       const saved = await dispatch(kondenApi.endpoints.saveModelSettings.initiate({connectionId,config:configFrom(value)})).unwrap();
+      dispatch(kondenApi.util.updateQueryData("getModelSettings", undefined, () => saved));
       return preferencesFrom(saved.config);
     },
     async testModel(model, effort) {
@@ -69,6 +70,9 @@ export function ModelSettings({ active = true }: { active?: boolean }) {
   if (error) return <Alert color="red" title="模型配置读取失败">{JSON.stringify(error)}</Alert>;
   if (!data || !preferences) return <Stack p="lg"><Skeleton height={50}/><Skeleton height={150}/></Stack>;
   return <ModelSettingsPanel active={active} connected={connectionId !== null} preferences={preferences}
-    allModels={data.config.model.candidates.map(configuredModel)} onSaved={setPreferences} api={api}
+    allModels={data.config.model.candidates.map(configuredModel)} onSaved={(saved) => {
+      setPreferences(saved);
+      onSaveAndReturn?.();
+    }} saveLabel={onSaveAndReturn ? "保存并返回" : undefined} api={api}
     searchApi={searchApi} imageApi={imageApi} connections={data.providers} chatGPT={chatGPT} />;
 }

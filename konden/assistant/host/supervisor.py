@@ -1258,11 +1258,10 @@ class HostSupervisor:
 
     async def create_agent(
         self, *, name: str, workspace_id: str | None = None, path: str | None = None,
+        model: str | None = None,
     ) -> AgentRecord:
         """Create a persistent Bot directory, optionally preparing a coding project."""
         project = None if workspace_id is None else self.workspaces.get(workspace_id)
-        if self.models is not None:
-            self.models.require_default_ready()
         session_id = f"agent-{uuid4().hex}"
         directory = self.home.agent_directories_root / hashlib.sha256(session_id.encode()).hexdigest()[:20]
         if name == USER_RECIPIENT:
@@ -1275,15 +1274,19 @@ class HostSupervisor:
                     if pending.exists() and entry.name == name:
                         return await finish_on_cancel(self._finish_agent_creation(entry))
                     raise AgentNameTaken(f"已有 Agent：{name}")
+            profile = None if self.models is None else self.models.agent_profile(model)
             # A cancelled request must not leave a worktree without its identity fact.
             if path is not None:
                 project = self.agent_projects.resolve(path=path)
             identity = AgentCreated(name=name, directory=str(directory),
                                     reused_name=any(name in entry.names for entry in entries))
-            return await finish_on_cancel(self._create_agent(project, session_id, identity))
+            return await finish_on_cancel(self._create_agent(project, session_id, identity, profile))
 
-    async def _create_agent(self, project, session_id, identity) -> AgentRecord:
+    async def _create_agent(self, project, session_id, identity, profile: dict | None) -> AgentRecord:
         colleagues = tuple(entry.session_id for entry in await self.agents.list())
+        creation = {"colleagues": colleagues}
+        if profile is not None:
+            creation["model_profile"] = profile
         directory = Path(identity.directory)
         directory.mkdir(parents=True)
         linked = None
@@ -1295,7 +1298,7 @@ class HostSupervisor:
                 session_id, directory=directory,
                 initial_fact=fact_arguments(identity, delivery_id="created"),
                 additional_facts=(() if linked is None else (fact_arguments(linked, delivery_id="link:created"),)),
-                agent_colleagues=colleagues,
+                agent_creation=creation,
             )
         except BaseException as error:
             try:
@@ -1317,12 +1320,12 @@ class HostSupervisor:
     async def _finish_agent_creation(self, agent: AgentRecord) -> AgentRecord:
         session_id, identity = agent.session_id, agent.identity
         pending = self.store.require(session_id).parent / "agent-creation.json"
-        colleagues = json.loads(pending.read_text(encoding="utf-8"))["colleagues"]
+        creation = json.loads(pending.read_text(encoding="utf-8"))
         if self.models is not None:
-            self.models.initialize_session(session_id)
+            self.models.initialize_session(session_id, profile=creation.get("model_profile"))
         # Colleagues learn of the join before anything the new Agent does;
         # replaying its creation fact then starts the Worker for its first decision.
-        await self.agent_messages.joined(agent, colleagues)
+        await self.agent_messages.joined(agent, creation["colleagues"])
         await self.request("fact", session_id, fact_arguments(identity, delivery_id="created"))
         pending.unlink()
         return agent

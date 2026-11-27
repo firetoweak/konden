@@ -108,6 +108,7 @@ body {
 .settings-drawer .mantine-Drawer-header { border-bottom: 1px solid var(--konden-border); padding: 20px 24px; }
 .settings-drawer .mantine-Drawer-title { font-size: 17px; font-weight: 650; }
 .settings-drawer .mantine-Drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; }
+.create-agent-model-header { padding-top: 8px; border-top: 1px solid var(--konden-border); }
 
 .sidebar-content { min-height: 0; }
 .sidebar-search input { background: transparent; border-color: var(--konden-border-strong); border-radius: 8px; }

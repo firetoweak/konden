@@ -87,7 +87,7 @@ function renderSidebar(initialEntry: string, compact = false) {
           <AppShell navbar={{ width: 240, breakpoint: 0 }}>
             <AppShell.Navbar data-compact={compact}>
               <CurrentPath />
-              <AgentSidebar compact={compact} onNavigate={() => {}} />
+              <AgentSidebar compact={compact} onNavigate={() => {}} onCreateAgent={() => {}} onOpenSettings={() => {}} />
             </AppShell.Navbar>
           </AppShell>
         </MemoryRouter>
@@ -312,7 +312,7 @@ it("名册用干活、等授权、等人回话和空闲标出状态，运行中�
   store.dispatch(sessionActivity({ sessionId: "parent", activity: "idle" }));
   const sidebar = () => <Provider store={store}><MantineProvider><MemoryRouter>
     <AppShell navbar={{ width: 240, breakpoint: 0 }}><AppShell.Navbar>
-      <AgentSidebar onNavigate={() => {}} />
+      <AgentSidebar onNavigate={() => {}} onCreateAgent={() => {}} onOpenSettings={() => {}} />
     </AppShell.Navbar></AppShell>
   </MemoryRouter></MantineProvider></Provider>;
   const view = render(sidebar());

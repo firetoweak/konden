@@ -253,6 +253,7 @@ class AgentAvatarRequest(ConnectionRequest):
 
 class CreateAgentRequest(AgentNameRequest):
     path: str | None = Field(default=None, min_length=1)
+    model: str | None = Field(default=None, min_length=1)
 
 
 class LinkProjectRequest(ConnectionRequest):
@@ -874,7 +875,7 @@ def create_web_app(
     @app.post("/api/agents", status_code=201)
     async def create_agent(body: CreateAgentRequest, request: Request):
         return await _channel(request).create_agent(
-            body.connection_id, body.path, body.name,
+            body.connection_id, body.path, body.name, body.model,
         )
 
     @app.delete("/api/agents/{session_id}", status_code=204)

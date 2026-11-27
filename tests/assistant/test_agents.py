@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -128,25 +127,50 @@ class AgentRosterTest(unittest.IsolatedAsyncioTestCase):
             self.request.assert_not_awaited()
 
     async def test_retry_finishes_creation_after_model_initialization_failed(self):
+        candidates = [
+            {"model": "vllm/default", "compact_threshold_tokens": 1000},
+            {"model": "vllm/chosen", "compact_threshold_tokens": 2000, "reasoning_effort": "high"},
+        ]
+        write_json(self.home.config_path, {"model": {"default": "vllm/default", "candidates": candidates}})
+        self.host.models = ModelSettings(self.home, self.store.root, path=self.home.config_path)
         colleague = await self.create("Ada")
         self.request.reset_mock()
-        with patch.object(self.host, "models", SimpleNamespace(
-                require_default_ready=lambda: None,
-                initialize_session=Mock(side_effect=PermissionError("models.json is locked")))):
+        with patch("konden.model_settings.write_json", side_effect=PermissionError("models.json is locked")):
             with self.assertRaises(PermissionError):
-                await self.create()
+                await self.host.create_agent(name="konden", workspace_id=self.workspace.workspace_id,
+                                             model="vllm/chosen")
         self.request.assert_not_awaited()
         rebuilt = AgentRoster(SessionStore(self.store.root))
         entries = await rebuilt.list()
         self.assertEqual(len(entries), 2)
         agent = await rebuilt.resolve("konden")
+        candidates[1]["reasoning_effort"] = "low"
+        write_json(self.home.config_path, {"model": {"default": "vllm/default", "candidates": candidates}})
+        self.host.models = ModelSettings(self.home, self.store.root, path=self.home.config_path)
         self.assertEqual(await self.create(), agent)
+        self.assertEqual(self.host.model_selection(agent.session_id)["selected"], {
+            "model": "vllm/chosen", "reasoning_effort": "high", "compact_threshold_tokens": 2000,
+        })
+        self.assertEqual(self.host.model_selection(colleague.session_id)["selected"]["model"], "vllm/default")
         sent = [(sid, args["fact_type"]) for _, sid, args in
                 (call.args for call in self.request.await_args_list)]
         self.assertEqual(sent, [(colleague.session_id, COLLEAGUE_JOINED), (agent.session_id, AGENT_CREATED)])
         self.assertFalse((self.store.require(agent.session_id).parent / "agent-creation.json").exists())
         with self.assertRaises(AgentNameTaken):
             await self.create()
+
+    async def test_creation_can_choose_a_usable_model_when_default_connection_is_missing(self):
+        candidates = [{"model": model, "compact_threshold_tokens": 1000} for model in ("deepseek/pro", "vllm/chat")]
+        write_json(self.home.config_path, {"model": {"default": "deepseek/pro", "candidates": candidates}})
+        self.host.models = ModelSettings(self.home, self.store.root, path=self.home.config_path)
+        with self.assertRaisesRegex(ModelConfigurationError, "不在已选模型中"):
+            await self.host.create_agent(name="Ada", model="vllm/removed")
+        self.assertEqual(self.store.journals(), ())
+        self.request.assert_not_awaited()
+
+        agent = await self.host.create_agent(name="Ada", model="vllm/chat")
+        self.assertEqual(self.host.model_selection(agent.session_id)["selected"]["model"], "vllm/chat")
+        self.assertEqual(self.host.models.config().default_model, "deepseek/pro")
 
     async def test_restart_finishes_a_partial_join_without_notifying_later_colleagues(self):
         first = await self.create("Ada")

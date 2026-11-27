@@ -2,9 +2,9 @@ import { ActionIcon, AppShell } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { IconMenu2 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useNavigate } from "react-router-dom";
 
-import { useAppDispatch } from "./hooks";
+import { useAppDispatch, useAppSelector } from "./hooks";
 import { useGetAgentsQuery, useGetAvatarsQuery } from "../api/kondenApi";
 import { BotAvatars, BotIdentities } from "../features/conversation/ChatPresentation";
 import {
@@ -19,18 +19,29 @@ import { SessionConversation } from "../features/conversation/SessionConversatio
 import { GroupChatPage } from "../features/groups/GroupChatPage";
 import { AgentHome } from "../features/sessions/AgentHome";
 import { AgentSidebar } from "../features/sessions/AgentSidebar";
+import { CreateAgentModal } from "../features/sessions/CreateAgentModal";
+import { SettingsDrawer, type SettingsSection } from "../features/settings/SettingsMenu";
 import { ExternalSessionPage } from "../features/external/ExternalSessionPage";
 import { NewLocalCodexConversation } from "../features/external/LocalCodexConversation";
 import { CapabilitiesPage } from "../features/capabilities/CapabilitiesPage";
 import { openEventBridge } from "../realtime/eventBridge";
 
+type Dialog = { kind: "create"; returnedFromSettings?: true }
+  | { kind: "settings" }
+  | { kind: "create-settings" }
+  | null;
+
 export function App() {
+  const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const connectionId = useAppSelector((state) => state.runtime.connectionId);
   const { data: agents } = useGetAgentsQuery();
   const { data: avatars = {} } = useGetAvatarsQuery();
   const identities = useMemo(() => new Map(agents?.map((agent) => [agent.name, agent.session_id])), [agents]);
   const [navigationOpened, { close: closeNavigation, toggle: toggleNavigation }] =
     useDisclosure(false);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
   const compactSidebar = useMediaQuery("(min-width: 48em)") && sidebarWidth < COMPACT_SIDEBAR_THRESHOLD;
   const [resizingSidebar, setResizingSidebar] = useState(false);
@@ -39,6 +50,28 @@ export function App() {
   sidebarWidthRef.current = sidebarWidth;
 
   useEffect(() => openEventBridge(dispatch), [dispatch]);
+
+  function openCreateAgent() {
+    setDialog({ kind: "create" });
+  }
+
+  function openSettings(section: SettingsSection) {
+    setSettingsSection(section);
+    setDialog({ kind: "settings" });
+    closeNavigation();
+  }
+
+  function openCreateSettings() {
+    setSettingsSection("models");
+    setDialog({ kind: "create-settings" });
+  }
+
+  function closeSettings() {
+    setDialog((current) => {
+      if (current !== dialog) return current;
+      return current?.kind === "create-settings" ? { kind: "create", returnedFromSettings: true } : null;
+    });
+  }
 
   function beginSidebarResize(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) {
@@ -98,7 +131,7 @@ export function App() {
       transitionDuration={resizingSidebar ? 0 : 180}
     >
       <AppShell.Navbar className="app-navbar" data-compact={compactSidebar} p={0}>
-        <AgentSidebar compact={compactSidebar} onNavigate={closeNavigation} />
+        <AgentSidebar compact={compactSidebar} onNavigate={closeNavigation} onCreateAgent={openCreateAgent} onOpenSettings={openSettings} />
         <div
           aria-label="调节侧栏宽度"
           aria-orientation="vertical"
@@ -130,7 +163,7 @@ export function App() {
           <IconMenu2 size={19} />
         </ActionIcon>
         <Routes>
-          <Route path="/" element={<AgentHome />} />
+          <Route path="/" element={<AgentHome onCreateAgent={openCreateAgent} />} />
           <Route path="/capabilities" element={<CapabilitiesPage />} />
           <Route path="/groups/:groupId" element={<GroupChatPage />} />
           <Route path="/sessions/:sessionId" element={<SessionConversation />} />
@@ -139,6 +172,16 @@ export function App() {
         </Routes>
       </AppShell.Main>
     </AppShell>
+    <CreateAgentModal opened={dialog?.kind === "create"} configuring={dialog?.kind === "create-settings"}
+      returnedFromSettings={dialog?.kind === "create" && dialog.returnedFromSettings === true}
+      connectionId={connectionId} onConfigureModels={openCreateSettings} onClose={() => setDialog(null)}
+      onCreated={(id) => {
+        setDialog(null);
+        closeNavigation();
+        navigate(`/sessions/${encodeURIComponent(id)}`);
+      }} />
+    <SettingsDrawer section={settingsSection} opened={dialog?.kind === "settings" || dialog?.kind === "create-settings"}
+      fromCreate={dialog?.kind === "create-settings"} onClose={closeSettings} />
     </BotAvatars>
     </BotIdentities>
   );

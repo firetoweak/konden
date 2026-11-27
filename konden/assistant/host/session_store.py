@@ -84,7 +84,7 @@ class SessionStore:
         directory: Path | None = None,
         initial_fact: dict | None = None,
         additional_facts: tuple[dict, ...] = (),
-        agent_colleagues: tuple[str, ...] | None = None,
+        agent_creation: dict | None = None,
     ) -> None:
         if workspace_id is not None and directory is not None:
             raise ValueError("Session binds either a project or a directory")
@@ -122,8 +122,8 @@ class SessionStore:
                     ),
                 )
             )
-        if agent_colleagues is not None:
-            (staging / "agent-creation.json").write_text(json.dumps({"colleagues": agent_colleagues}), encoding="utf-8")
+        if agent_creation is not None:
+            (staging / "agent-creation.json").write_text(json.dumps(agent_creation), encoding="utf-8")
         for attempt in range(10):
             try:
                 staging.rename(path.parent)

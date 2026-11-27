@@ -151,9 +151,9 @@ class WebChannel:
         self._require_connection(connection_id)
         await self._sessions.external_messages.revoke_connection(external_id)
 
-    async def create_agent(self, connection_id: str, path: str | None, name: str):
+    async def create_agent(self, connection_id: str, path: str | None, name: str, model: str | None):
         connection = self._require_connection(connection_id)
-        record = await self._sessions.create_agent(name=name, path=path)
+        record = await self._sessions.create_agent(name=name, path=path, model=model)
         await self._sessions.select(connection.owner, record.session_id)
         return await self._queries.agent_entry(record.session_id)
 

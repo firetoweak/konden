@@ -111,18 +111,22 @@ class ModelSettings:
         await self.validate_profiles(list(updated.models))
         return self.save(data)
 
-    def require_candidate(self, model: str):
+    def require_candidate(self, model: str) -> ModelConfig:
         config = self.config()
         try:
             return config.get_model(model)
         except ValueError as error:
-            raise ModelConfigurationError(f"模型 {model} 不在已选模型中，请在会话输入区选择可用模型") from error
+            raise ModelConfigurationError(f"模型 {model} 不在已选模型中，请重新选择可用模型") from error
 
-    def initialize_session(self, session_id: str, *, parent: str | None = None):
+    def initialize_session(self, session_id: str, *, parent: str | None = None, profile: dict | None = None):
         if session_id in self._selected:
             return
-        selected = {**self._selected, session_id: (dict(self._selected[parent]) if parent is not None
-                                                  else self._choice(self.config().default))}
+        if parent is not None:
+            choice = dict(self._selected[parent])
+        else:
+            initial = self.config().default if profile is None else ModelConfig.from_dict(profile)
+            choice = self._choice(initial)
+        selected = {**self._selected, session_id: choice}
         write_json(self._selection_path, selected)
         self._selected = selected
 
@@ -170,18 +174,17 @@ class ModelSettings:
         model = self.selected(session_id)
         if model is None:
             raise ModelConfigurationError("请先在会话输入区选择模型")
-        self._require_usable(model)
+        self._require_usable(self.require_candidate(model))
 
-    def require_default_ready(self):
-        """A new Agent decides right after creation, so it needs a usable default first."""
-        model = self.config().default_model
-        if model is None:
+    def agent_profile(self, model: str | None) -> dict:
+        profile = self.config().default if model is None else self.require_candidate(model)
+        if profile is None:
             raise ModelConfigurationError("请先在模型配置中设置默认模型")
-        self._require_usable(model)
+        self._require_usable(profile)
+        return profile.to_dict()
 
-    def _require_usable(self, model: str):
-        self.require_candidate(model)
-        provider = model.partition("/")[0]
+    def _require_usable(self, profile: ModelConfig):
+        provider = profile.model.partition("/")[0]
         status = next(item for item in self.provider_states() if item["provider"] == provider)
         if not status["configured"]:
             raise ModelConfigurationError(f"请先在 connections.json 中配置 {provider}.{status['missing']}")

@@ -55,7 +55,7 @@ class SessionStoreListingTest(unittest.IsolatedAsyncioTestCase):
                 return rename(source, target)
 
             with patch("konden.assistant.host.session_store.os.rename", side_effect=briefly_read):
-                await store.create("created", workspace_id="workspace-1", agent_colleagues=("peer",))
+                await store.create("created", workspace_id="workspace-1", agent_creation={"colleagues": ("peer",)})
 
             journal = SqliteJournal(store.require("created"))
             self.assertEqual(await journal.session_identity(), "created")

@@ -26,6 +26,25 @@ const agent = { session_id: "agent-test", name: "Ada", projects: [], activity: "
 const projects: Workspace[] = ["C:/one/app", "C:/two/app"].map((path, i) => ({
   workspace_id: `workspace-${i}`, name: "app", task_root: path, full_access: false, created_at: "2026-10-23",
 }));
+const modelSettings = {
+  config: { model: { default: "vllm/chat", candidates: [
+    { model: "vllm/chat", compact_threshold_tokens: 50000 },
+    { model: "vllm/research", compact_threshold_tokens: 50000 },
+  ] } },
+  providers: [{ provider: "vllm", configured: true, missing: null, local: true }],
+  connections_path: "C:/konden/connections.json",
+};
+
+function mockCreateRequests(action: (request: Request) => Response | Promise<Response>) {
+  const fetch = vi.fn(async (request: Request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/api/model-settings") return Response.json(modelSettings);
+    if (path === "/api/workspaces") return Response.json([]);
+    return action(request);
+  });
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
+}
 
 function showModal(workspaces: Workspace[] = [], link = false) {
   const store = configureStore({
@@ -36,17 +55,17 @@ function showModal(workspaces: Workspace[] = [], link = false) {
   const onCreated = vi.fn();
   render(<Provider store={store}><MantineProvider env="test">
     {link ? <LinkProjectModal opened agent={{ ...agent, projects: [] }} workspaces={workspaces} connectionId="connection" onClose={onClose} />
-      : <CreateAgentModal opened workspaces={workspaces} connectionId="connection" onClose={onClose} onCreated={onCreated} />}
+      : <CreateAgentModal opened configuring={false} returnedFromSettings={false} connectionId="connection"
+        onConfigureModels={() => {}} onClose={onClose} onCreated={onCreated} />}
   </MantineProvider></Provider>);
   return { store, onClose, onCreated };
 }
 
 it("选目录只填写同页草稿，取消创建不登记项目", async () => {
-  const fetch = vi.fn(async (request: Request) => {
+  const fetch = mockCreateRequests((request) => {
     expect(new URL(request.url).pathname).toBe("/api/workspaces/select-directory");
     return Response.json({ directory: { path: "D:/项目/助手", name: "助手" } });
   });
-  vi.stubGlobal("fetch", fetch);
   const { store, onClose } = showModal();
   fireEvent.change(screen.getByLabelText("名字"), { target: { value: "Ada" } });
   fireEvent.click(screen.getByRole("button", { name: "选择文件夹" }));
@@ -55,23 +74,32 @@ it("选目录只填写同页草稿，取消创建不登记项目", async () => {
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   fireEvent.keyDown(screen.getByLabelText("名字"), { key: "Escape" });
   await waitFor(() => expect(onClose).toHaveBeenCalled());
-  expect(fetch).toHaveBeenCalledOnce();
+  expect(fetch.mock.calls.filter(([request]) => request.method !== "GET").map(([request]) =>
+    new URL(request.url).pathname)).toEqual(["/api/workspaces/select-directory"]);
   store.dispatch(kondenApi.util.resetApiState());
 });
 
-it.each(["", " D:/项目/助手 "])("确认时一次提交名字和可选目录：%j", async (path) => {
+it.each([
+  { path: "", model: "" },
+  { path: " D:/项目/助手 ", model: "" },
+  { path: " D:/项目/助手 ", model: "vllm/research" },
+])("确认时一次提交名字、目录与所选模型：%j", async ({ path, model }) => {
   const submissions: unknown[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+  mockCreateRequests(async (request) => {
     expect(new URL(request.url).pathname).toBe("/api/agents");
     submissions.push(await request.json());
     return Response.json(agent, { status: 201 });
-  }));
+  });
   const { store, onCreated } = showModal();
   fireEvent.change(screen.getByLabelText("名字"), { target: { value: "Ada" } });
   fireEvent.change(screen.getByRole("combobox", { name: "代码目录（可选）", exact: true }), { target: { value: path } });
-  fireEvent.click(screen.getByRole("button", { name: "创建", exact: true }));
+  const submit = screen.getByRole("button", { name: "创建", exact: true });
+  await waitFor(() => expect(submit).toBeEnabled());
+  if (model) fireEvent.change(screen.getByRole("combobox", { name: "模型", exact: true }), { target: { value: model } });
+  fireEvent.click(submit);
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith("agent-test"));
-  expect(submissions).toEqual([{ connection_id: "connection", path: path.trim() || null, name: "Ada" }]);
+  expect(submissions).toEqual([{ connection_id: "connection", path: path.trim() || null, name: "Ada",
+    ...(model ? { model } : {}) }]);
   store.dispatch(kondenApi.util.resetApiState());
 });
 
@@ -94,9 +122,13 @@ it("同名项目同时展示完整路径，后续关联使用选择的目录", a
 });
 
 it("选择取消保留原目录，桌面不可用时可继续手填", async () => {
-  vi.stubGlobal("fetch", vi.fn()
+  const pickDirectory = vi.fn()
     .mockResolvedValueOnce(Response.json({ directory: null }))
-    .mockResolvedValueOnce(Response.json({ detail: "当前 Python 未安装 Tcl/Tk" }, { status: 503 })));
+    .mockResolvedValueOnce(Response.json({ detail: "当前 Python 未安装 Tcl/Tk" }, { status: 503 }));
+  mockCreateRequests((request) => {
+    expect(new URL(request.url).pathname).toBe("/api/workspaces/select-directory");
+    return pickDirectory();
+  });
   const { store } = showModal();
   fireEvent.change(screen.getByRole("combobox", { name: "代码目录（可选）", exact: true }), { target: { value: "C:/existing" } });
   fireEvent.click(screen.getByRole("button", { name: "选择文件夹" }));

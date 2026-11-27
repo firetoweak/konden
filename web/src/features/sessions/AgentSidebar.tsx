@@ -2,17 +2,21 @@ import { ActionIcon, AppShell, Group, Popover, ScrollArea, Stack, Text, TextInpu
 import { IconMessages, IconPlugConnected, IconPlugConnectedX, IconPlus, IconSearch, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { useMatch, useNavigate } from "react-router-dom";
-import { useGetAgentsQuery, useGetGroupsQuery, useGetInboxQuery, useGetWorkspacesQuery } from "../../api/kondenApi";
+import { useGetAgentsQuery, useGetGroupsQuery, useGetInboxQuery } from "../../api/kondenApi";
 import { useAppSelector } from "../../app/hooks";
 import { ColorSchemeSwitcher } from "../../app/ColorSchemeSwitcher";
-import { CreateAgentModal } from "./CreateAgentModal";
 import { BotRoster } from "./BotRoster";
 import { AutoAuthorize } from "./AutoAuthorize";
-import { SettingsMenu } from "../settings/SettingsMenu";
+import { SettingsMenu, type SettingsSection } from "../settings/SettingsMenu";
 import { ExternalRoster } from "../external/ExternalRoster";
 import { CapabilitiesIcon } from "../capabilities/CapabilitiesIcon";
 
-export function AgentSidebar({ onNavigate, compact = false }: { onNavigate: () => void; compact?: boolean }) {
+export function AgentSidebar({ onNavigate, onCreateAgent, onOpenSettings, compact = false }: {
+  onNavigate: () => void;
+  onCreateAgent: () => void;
+  onOpenSettings: (section: SettingsSection) => void;
+  compact?: boolean;
+}) {
   const navigate = useNavigate();
   const sessionId = useMatch("/sessions/:sessionId")?.params.sessionId;
   const groupId = useMatch("/groups/:groupId")?.params.groupId;
@@ -21,10 +25,8 @@ export function AgentSidebar({ onNavigate, compact = false }: { onNavigate: () =
   const { data: agents = [] } = useGetAgentsQuery();
   const { data: chats = [] } = useGetGroupsQuery();
   const { data: inbox = [] } = useGetInboxQuery();
-  const { data: workspaces = [] } = useGetWorkspacesQuery();
   const [search, setSearch] = useState("");
   const [searchOpened, setSearchOpened] = useState(false);
-  const [creating, setCreating] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const searchTrigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -48,7 +50,7 @@ export function AgentSidebar({ onNavigate, compact = false }: { onNavigate: () =
         </Tooltip>
         <Group className="sidebar-actions" gap={4}>
           <Tooltip label="新建 Bot" events={{ hover: true, focus: true, touch: false }}>
-            <ActionIcon className="sidebar-create" aria-label="新建 Bot" variant="subtle" size={32} disabled={connectionId === null} onClick={() => setCreating(true)}><IconPlus size={19} /></ActionIcon>
+            <ActionIcon className="sidebar-create" aria-label="新建 Bot" variant="subtle" size={32} disabled={connectionId === null} onClick={onCreateAgent}><IconPlus size={19} /></ActionIcon>
           </Tooltip>
           <Popover opened={compact && searchOpened} onClose={closeSearch} position="right-start" width={260} withinPortal>
             <Popover.Target>
@@ -70,7 +72,7 @@ export function AgentSidebar({ onNavigate, compact = false }: { onNavigate: () =
         <ActionIcon className="capabilities-trigger" aria-label="能力" aria-current={capabilitiesOpened ? "page" : undefined}
           variant="subtle" color="gray" size={32} onClick={() => open("/capabilities")}><CapabilitiesIcon size={20} /></ActionIcon>
       </Tooltip>
-      <SettingsMenu onOpen={onNavigate} /><ColorSchemeSwitcher />
+      <SettingsMenu onOpen={onOpenSettings} /><ColorSchemeSwitcher />
       <Tooltip label={connectionId === null ? "正在连接…" : "已连接"}>
         <span className="connection-status" data-connected={connectionId !== null} role="status" aria-label={connectionId === null ? "正在连接…" : "已连接"}>
           {connectionId === null ? <IconPlugConnectedX aria-hidden="true" size={16} /> : <IconPlugConnected aria-hidden="true" size={16} />}
@@ -78,6 +80,5 @@ export function AgentSidebar({ onNavigate, compact = false }: { onNavigate: () =
       </Tooltip>
       <AutoAuthorize compact={compact} />
     </Group>{connectionId === null && !compact ? <Text size="xs" c="dimmed" px={8}>正在连接…</Text> : null}</AppShell.Section>
-    <CreateAgentModal opened={creating} workspaces={workspaces} connectionId={connectionId} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); open(`/sessions/${encodeURIComponent(id)}`); }} />
   </Stack>;
 }

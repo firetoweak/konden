@@ -13,7 +13,8 @@ vi.mock("../src/api/kondenApi",()=>({
   useGetModelSettingsQuery:()=>({data}),
   useGetChatGPTAuthorizationQuery:()=>({}),
   useStartChatGPTAuthorizationMutation:()=>[vi.fn(),{isLoading:false}],
-  kondenApi:{endpoints:Object.fromEntries(["getModelCatalog","saveModelSettings","getSearchConfig"].map((kind)=>[kind,{initiate:(value:unknown)=>({kind,value})}]))},
+  kondenApi:{endpoints:Object.fromEntries(["getModelCatalog","saveModelSettings","getSearchConfig"].map((kind)=>[kind,{initiate:(value:unknown)=>({kind,value})}])),
+    util:{updateQueryData:()=>({kind:"updateQueryData"})}},
 }));
 beforeEach(()=>{
   dispatch.mockReset().mockImplementation((action)=>({unwrap:async()=>{
@@ -42,5 +43,5 @@ it("真实接口适配保留原始模型标识，保存所选强度，恢复默�
   fireEvent.click(screen.getByRole("combobox",{name:"StepFun Step 5 默认推理强度"}));
   fireEvent.click(await screen.findByRole("option",{name:"供应商默认",exact:true}));
   fireEvent.click(screen.getByRole("button",{name:"保存配置",exact:true}));
-  await waitFor(()=>expect(dispatch).toHaveBeenLastCalledWith({kind:"saveModelSettings",value:{connectionId:"connection",config:data.config}}));
+  await waitFor(()=>expect(dispatch).toHaveBeenCalledWith({kind:"saveModelSettings",value:{connectionId:"connection",config:data.config}}));
 });
