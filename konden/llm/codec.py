@@ -39,6 +39,7 @@ def encode_llm_result(result: LLMCallResult) -> dict[str, object]:
         "input_tokens": result.usage.input_tokens,
         "output_tokens": result.usage.output_tokens,
         "cached_input_tokens": result.usage.cached_input_tokens,
+        "cache_write_input_tokens": result.usage.cache_write_input_tokens,
     }
 
 
@@ -57,6 +58,7 @@ def decode_llm_result(payload: dict[str, object]) -> LLMCallResult:
             payload["input_tokens"],
             payload["output_tokens"],
             payload["cached_input_tokens"],
+            payload["cache_write_input_tokens"],
         ),
     )
 

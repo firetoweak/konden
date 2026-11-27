@@ -577,7 +577,8 @@ class JournalBackedLlmDecisionMaker:
             "usage": {
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
-                "cached_input_tokens": usage.cached_input_tokens,
+                "cache_read_input_tokens": usage.cached_input_tokens,
+                "cache_write_input_tokens": usage.cache_write_input_tokens,
             },
         }
         artifact = self._projector.gateway.for_session(frame.state.session_id).save(
