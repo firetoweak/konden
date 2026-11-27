@@ -129,24 +129,24 @@ def test_stream_and_tool_history_use_responses_without_losing_native_output(resp
         functions = [{"type": "function", "strict": False, **tools[0]["function"]}]
         if endpoint.provider == "openai-chatgpt":
             additional_tools = [{"type": "additional_tools", "role": "developer", "tools": functions}]
-            assert payload["input"][1:] == additional_tools
             assert "tools" not in payload
         else:
             additional_tools = []
             assert payload["tools"] == functions
-        assert payload["input"][0]["content"][1] == {
-            "type": "input_image", "image_url": "data:image/png;base64,AA==", "detail": "low",
-        }
+        assert payload["input"] == [*additional_tools, {"role": "user", "content": [
+            {"type": "input_text", "text": "read"},
+            {"type": "input_image", "image_url": "data:image/png;base64,AA==", "detail": "low"},
+        ]}]
         assert payload["tool_choice"] == "auto"
         replay = json.loads(requests[1].content)
         assert replay["tool_choice"] == "required"
         assert "reasoning" not in replay
-        assert replay["input"][1:] == [
+        assert replay["input"] == [
+            *payload["input"],
             *output[:2],
             {**CALL, "call_id": "command_call_1"}, {**CALL, "call_id": "command_call_2"},
             {"type": "function_call_output", "call_id": "command_call_1", "output": "42"},
             {"type": "function_call_output", "call_id": "command_call_2", "output": "42"},
-            *additional_tools,
         ]
 
     asyncio.run(run())
