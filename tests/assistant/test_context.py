@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from konden.assistant.agents import (
+    AgentCreated,
     PrivateMessage,
     Speaker,
     fact_arguments,
@@ -55,7 +56,7 @@ class ArtifactBoundaryTest(unittest.TestCase):
             self.assertIsNotNone(artifact_id)
             self.assertEqual(externalized["data"]["background"], reference)
             self.assertEqual(externalized["code"], "COMMAND_BACKGROUND")
-            # A subsequent projection must retain the same handoff too.
+            # A subsequent projection/dehydration must retain the same handoff too.
             again, _ = externalize_payload(externalized, store, max_chars=200, preview_chars=10)
             self.assertEqual(again["data"]["background"], reference)
 
@@ -112,6 +113,7 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
             events, StateProjector().project_visible(self.SESSION, events), self.SESSION, "sys",
         )
         result = json.loads(self._tool_messages(prepared.messages)[0]["content"])
+        self.assertEqual(len(prepared.age_dehydrated_command_ids), 1)
         self.assertEqual(result["data"]["child_session_id"], child_id)
 
     async def test_schedule_trigger_times_reach_the_model_in_local_time(self):
@@ -237,7 +239,7 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
             if message["role"] == "assistant"
         ], ["human reply", "peer reply"])
 
-    async def test_error_or_unknown_result_keeps_reported_status(self):
+    async def test_error_or_unknown_result_is_not_age_dehydrated(self):
         for ok in (False, None):
             with self.subTest(ok=ok):
                 async def failed(_context, _arguments):
@@ -255,6 +257,7 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
                 prepared = self._projector().prepare(
                     events, StateProjector().project_visible(self.SESSION, events), self.SESSION,
                 )
+                self.assertEqual(prepared.age_dehydrated_command_ids, ())
                 payload = json.loads(self._tool_messages(prepared.messages)[0]["content"])
                 self.assertEqual(set(payload), {"ok", "code", "data", "error", "hint"})
                 self.assertIs(payload["ok"], ok)
@@ -287,6 +290,7 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["code"], "REMOTE_FAILED")
         self.assertEqual(payload["data"]["reference"], artifact_id)
         self.assertTrue(payload["data"]["preview"])
+        self.assertEqual(prepared.age_dehydrated_command_ids, ())
 
     def _projector(self, **overrides) -> ModelContextProjector:
         gateway = overrides.pop("gateway", MemoryArtifactGateway())
@@ -521,7 +525,7 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
     def _tool_messages(self, messages):
         return [message for message in messages if message["role"] == "tool"]
 
-    async def test_late_result_remains_visible_after_two_human_interjections(self):
+    async def test_result_after_two_human_interjections_is_not_dehydrated_as_already_seen(self):
         started, release = asyncio.Event(), asyncio.Event()
 
         async def work(_context, _arguments):
@@ -548,11 +552,12 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
         prepared = self._projector().prepare(
             events, StateProjector().project_visible(self.SESSION, events), self.SESSION, "sys",
         )
+        self.assertEqual(prepared.age_dehydrated_command_ids, ())
         self.assertEqual(json.loads(self._tool_messages(prepared.messages)[0]["content"]), _result("LATE_RESULT"))
 
-    async def test_user_followup_preserves_an_already_read_tool_result(self):
+    async def test_latest_user_turn_is_not_age_dehydrated(self):
         async def ping(_context, _arguments):
-            return _result("original-result")
+            return _result("fresh-result")
 
         events, _delivered = await self._history(
             (
@@ -561,10 +566,9 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
                     command_requests=(InvokeTool("ping"),),
                 ),
                 lambda _frame: _deliver("done"),
-                lambda _frame: _deliver("followed up"),
             ),
             {"ping": ToolBinding(ping)},
-            ("go", "continue"),
+            ("go",),
         )
         prepared = self._projector().prepare(
             events,
@@ -573,9 +577,10 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
             "sys",
         )
         tool = self._tool_messages(prepared.messages)[0]
-        self.assertEqual(json.loads(tool["content"]), _result("original-result"))
+        self.assertIn("fresh-result", tool["content"])
+        self.assertEqual(prepared.age_dehydrated_command_ids, ())
 
-    async def test_a_colleague_followup_preserves_an_already_read_tool_result(self):
+    async def test_a_colleague_message_opens_a_new_protection_window(self):
         async def ping(_context, _arguments):
             return _result("old-result")
 
@@ -604,8 +609,8 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
             self.SESSION,
             "sys",
         )
-        tool = self._tool_messages(prepared.messages)[0]
-        self.assertEqual(json.loads(tool["content"]), _result("old-result"))
+        self.assertNotIn("old-result", self._tool_messages(prepared.messages)[0]["content"])
+        self.assertEqual(len(prepared.age_dehydrated_command_ids), 1)
 
     async def test_failed_result_before_latest_user_stays(self):
         async def boom(_context, _arguments):
@@ -637,8 +642,51 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
         )
         tool = self._tool_messages(prepared.messages)[0]
         self.assertIn("failed-on-purpose", tool["content"])
+        self.assertEqual(prepared.age_dehydrated_command_ids, ())
 
-    async def test_oversized_result_is_externalized_on_first_observation(self):
+    async def test_control_results_and_agent_creation_open_new_protection_windows(self):
+        from konden.assistant.control import (
+            CONTROL_CONCLUDED,
+            CONTROL_FAILED,
+            CONTROL_PREPARATION_FAILED,
+            CONTROL_REJECTED,
+            CONTROL_SUCCEEDED,
+        )
+        facts = [{"fact_type": kind, "data": {
+            "request_id": "request", "action": "test", "message": "done", "data": {},
+        }, "source": "assistant.control", "delivery_id": "control", "requests_decision": True}
+            for kind in (CONTROL_CONCLUDED, CONTROL_REJECTED, CONTROL_SUCCEEDED, CONTROL_FAILED,
+                         CONTROL_PREPARATION_FAILED)]
+        facts.append(fact_arguments(AgentCreated(name="Ada", directory=str(Path.cwd())), delivery_id="created"))
+        for fact in facts:
+            with self.subTest(fact=fact["fact_type"]):
+                async def ping(_context, _arguments):
+                    return _result("7 bytes")
+
+                runtime = AgentRuntime(MemoryJournal(), ScriptedDecisionMaker((
+                    lambda _: ModelDecision(command_requests=(InvokeTool("ping"),)),
+                    lambda _: _deliver("used"),
+                    lambda _: _deliver("seen"),
+                )), {"ping": ToolBinding(ping), **deliver_binding(lambda *_: None)})
+                try:
+                    await runtime.receive_user_message(self.SESSION, "go", delivery_id="go")
+                    await settle_session(runtime, self.SESSION)
+                    await runtime.receive_domain_fact(self.SESSION, **fact)
+                    await runtime.advance(self.SESSION)
+                    while runtime.dispatcher.active_count:
+                        await asyncio.sleep(0)
+                    events = await runtime.snapshot(self.SESSION)
+                    prepared = self._projector().prepare(
+                        events, StateProjector().project_visible(self.SESSION, events), self.SESSION,
+                    )
+                    self.assertEqual(len(prepared.age_dehydrated_command_ids), 1)
+                    tool = self._tool_messages(prepared.messages)[0]
+                    self.assertIn("引用不表示原结果很大或失败", tool["content"])
+                    self.assertNotIn("7 bytes", tool["content"])
+                finally:
+                    await runtime.dispatcher.close()
+
+    async def test_oversized_result_in_protection_window_is_stubbed(self):
         blob = "N" * 200
 
         async def ping(_context, _arguments):
@@ -722,7 +770,7 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(full_outcome["ok"], False)
         self.assertEqual(full_outcome["error"], failure_body)
 
-    async def test_followup_keeps_oversized_result_preview_and_reference(self):
+    async def test_old_oversized_success_drops_preview_without_new_artifact(self):
         blob = "old-large-result-" + "Y" * 200
 
         async def ping(_context, _arguments):
@@ -756,10 +804,14 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(tool["content"])
         artifact_id = payload["data"]["reference"]
         self.assertEqual(payload["ok"], True)
-        self.assertTrue(payload["data"]["preview"])
+        self.assertEqual(payload["data"]["preview"], "")
         self.assertIn(
             tool["tool_call_id"],
             prepared.size_externalized_command_ids,
+        )
+        self.assertIn(
+            tool["tool_call_id"],
+            prepared.age_dehydrated_command_ids,
         )
         store = gateway.for_session(self.SESSION)
         self.assertEqual(tuple(store.contents), (artifact_id,))

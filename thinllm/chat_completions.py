@@ -94,9 +94,16 @@ class ChatCompletionsClient:
         on_reasoning_delta: ContentDeltaSink | None = None,
         reasoning_effort: str | None = None,
         tool_choice: str = "auto",
+        session_id: str | None = None,
     ) -> LLMCallResult:
         payload = self._payload(messages, model, tools, reasoning_effort, tool_choice)
-        return await self._request(payload, model, on_content_delta, on_reasoning_delta)
+        return await self._request(
+            payload, model, on_content_delta, on_reasoning_delta,
+            headers=self._request_headers(session_id),
+        )
+
+    def _request_headers(self, session_id: str | None) -> dict[str, str] | None:
+        return None
 
     def _payload(self, messages, model, tools, reasoning_effort, tool_choice="auto") -> dict[str, object]:
         messages = [{key: value for key, value in message.items() if key != "responses_output"}
@@ -127,7 +134,7 @@ class ChatCompletionsClient:
             payload["reasoning_effort"] = reasoning_effort
         return payload
 
-    async def _request(self, payload, model, on_content_delta, on_reasoning_delta):
+    async def _request(self, payload, model, on_content_delta, on_reasoning_delta, *, headers=None):
         attempt = 0
         while True:
             stream = _Stream()
@@ -135,7 +142,7 @@ class ChatCompletionsClient:
                 started = perf_counter()
                 outcome = "failed"
                 try:
-                    await self._stream(payload, stream, on_content_delta, on_reasoning_delta)
+                    await self._stream(payload, stream, on_content_delta, on_reasoning_delta, headers=headers)
                     result = self._result(stream)
                     outcome = "completed"
                 except asyncio.CancelledError:
@@ -173,12 +180,15 @@ class ChatCompletionsClient:
         stream: _Stream,
         on_content_delta: ContentDeltaSink | None,
         on_reasoning_delta: ContentDeltaSink | None,
+        *,
+        headers: dict[str, str] | None = None,
     ) -> None:
         try:
             async with self._client.stream(
                 "POST",
                 self._request_path,
                 json=payload,
+                headers=headers,
             ) as response:
                 if not 200 <= response.status_code < 300:
                     await response.aread()

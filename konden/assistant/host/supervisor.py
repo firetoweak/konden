@@ -467,7 +467,7 @@ class HostSupervisor:
                 )
 
             return await complete_llm_chat(
-                self.llm, arguments, on_delta, on_reasoning_delta
+                self.llm, arguments, on_delta, on_reasoning_delta, session_id=session_id
             )
         if operation == "compact_boundary":
             return await self.compact.boundary(session_id, arguments)
@@ -841,8 +841,10 @@ class HostSupervisor:
                 raise ValueError(f"Unknown Host signal: {kind}")
 
         async def route(operation, target, arguments):
-            if operation in {CREATE_GROUP, SEND_MESSAGE, SEND_GROUP_MESSAGE, LIST_COLLEAGUES} and target != session_id:
-                raise ValueError("communication request does not belong to this Worker")
+            if target != session_id and operation in {
+                CREATE_GROUP, SEND_MESSAGE, SEND_GROUP_MESSAGE, LIST_COLLEAGUES, "llm_chat",
+            }:
+                raise ValueError("request does not belong to this Worker")
             return await self._route(
                 operation,
                 target,

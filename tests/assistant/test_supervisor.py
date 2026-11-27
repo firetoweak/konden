@@ -546,7 +546,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         class StreamingChildLlm(ProcessLlm):
             async def chat(client, messages, model, *, tools=None,
-                           on_content_delta=None, on_reasoning_delta=None):
+                           on_content_delta=None, on_reasoning_delta=None, session_id=None):
                 if not is_subagent_request(tools):
                     return await super().chat(
                         messages, model, tools=tools,

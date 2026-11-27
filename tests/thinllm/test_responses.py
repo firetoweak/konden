@@ -40,6 +40,35 @@ def sse(*events):
     return b"".join(b"data: " + json.dumps(event).encode() + b"\n\n" for event in events)
 
 
+def test_session_affinity_is_scoped_to_each_chatgpt_request(responses_connection):
+    endpoint, model, _ = responses_connection
+    seen = {}
+
+    def handle(request):
+        payload = json.loads(request.content)
+        text = payload["input"][0]["content"][0]["text"]
+        seen[text] = request.headers.get("session-id")
+        assert "prompt_cache_key" not in payload
+        return httpx.Response(200, content=sse(completed()))
+
+    async def run():
+        async with create_client(endpoint, transport=httpx.MockTransport(handle)) as client:
+            await asyncio.gather(
+                client.chat([{"role": "user", "content": "first"}], model, session_id="session-a"),
+                client.chat([{"role": "user", "content": "other"}], model, session_id="session-b"),
+            )
+            await client.chat([{"role": "user", "content": "again"}], model, session_id="session-a")
+            await client.chat([{"role": "user", "content": "check"}], model)
+
+    asyncio.run(run())
+    assert seen["check"] is None
+    if endpoint.provider == "openai-chatgpt":
+        assert seen["first"] and seen["first"] == seen["again"]
+        assert seen["other"] and seen["other"] != seen["first"]
+    else:
+        assert all(value is None for value in seen.values())
+
+
 @pytest.mark.parametrize("searched", [False, True])
 def test_openai_search_keeps_auto_choice_and_distinguishes_direct_answers(searched, responses_connection):
     endpoint, model, header = responses_connection

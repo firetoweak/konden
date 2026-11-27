@@ -350,7 +350,9 @@ class CompactContext:
         messages.extend(item.message for item in own)
         return PreparedModelContext(
             messages=messages,
+            protection_start_index=0,
             size_externalized_command_ids=(),
+            age_dehydrated_command_ids=(),
             source_sequences=tuple([0] * len(messages)),
         )
 

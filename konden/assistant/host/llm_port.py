@@ -77,7 +77,7 @@ class WorkerLlmPort:
         raise decode_llm_error(payload["error"])
 
 
-async def complete_llm_chat(llm, arguments, on_delta, on_reasoning_delta=None):
+async def complete_llm_chat(llm, arguments, on_delta, on_reasoning_delta=None, *, session_id: str):
     options = {} if arguments["reasoning_effort"] is None else {"reasoning_effort": arguments["reasoning_effort"]}
     if arguments["tool_choice"] != "auto":
         options["tool_choice"] = arguments["tool_choice"]
@@ -90,6 +90,7 @@ async def complete_llm_chat(llm, arguments, on_delta, on_reasoning_delta=None):
             on_reasoning_delta=(
                 on_reasoning_delta if arguments.get("stream_reasoning") else None
             ),
+            session_id=session_id,
             **options,
         )
     except Exception as error:
