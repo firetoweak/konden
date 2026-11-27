@@ -16,7 +16,7 @@ MAX_READ_CHARS = 32_000
 SEARCH_FRAGMENT_CHARS = 1_200
 SEARCH_CONTEXT_CHARS = 160
 CONTENT_HINT = (
-    "此处展示结果引用；引用不表示原结果很大或失败。"
+    "此处展示结果引用。"
     "完整结果用 read_content 读取 data.reference；原结果本身不完整的部分，仍需用原工具补查。"
 )
 

@@ -101,7 +101,7 @@ def test_largest_unicode_page_fits_runtime_and_preserves_original_hint(query):
 
 
 class ReaderProjectionTest(unittest.IsolatedAsyncioTestCase):
-    async def test_dehydration_keeps_original_reference_without_another_artifact(self):
+    async def test_followup_preserves_original_content_read_without_another_artifact(self):
         gateway = MemoryArtifactGateway()
         store = gateway.for_session("s")
         ref = store.save("needle " + "x" * 40000).artifact_id
@@ -117,12 +117,12 @@ class ReaderProjectionTest(unittest.IsolatedAsyncioTestCase):
         projector = ModelContextProjector(gateway=gateway)
         events = await runtime.snapshot("s")
         prepared = projector.prepare(events, StateProjector().project_visible("s", events), "s")
-        tool = json.loads(next(m["content"] for m in prepared.messages if m["role"] == "tool"))
-        assert len(tool["data"]["fragments"][0]["content"]) == 32000
+        original = json.loads(next(m["content"] for m in prepared.messages if m["role"] == "tool"))
+        assert original["data"]["reference"] == ref
+        assert len(original["data"]["fragments"][0]["content"]) == 32000
         await runtime.receive_user_message("s", "继续", delivery_id="next")
         events = await runtime.snapshot("s")
         with patch.object(store, "save", side_effect=AssertionError("reader must not create a nested artifact")):
             prepared = projector.prepare(events, StateProjector().project_visible("s", events), "s")
         tool = json.loads(next(m["content"] for m in prepared.messages if m["role"] == "tool"))
-        assert tool["data"]["reference"] == ref
-        assert tool["data"]["fragments"] == [{"offset": 0, "end_offset": 32000}]
+        assert tool == original

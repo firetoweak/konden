@@ -107,9 +107,7 @@ class ModelContextSettings:
 @dataclass(frozen=True, slots=True)
 class PreparedModelContext:
     messages: list[dict[str, object]]
-    protection_start_index: int
     size_externalized_command_ids: tuple[str, ...]
-    age_dehydrated_command_ids: tuple[str, ...]
     source_sequences: tuple[int, ...] = ()
     evicted_image_command_ids: tuple[str, ...] = ()
     projector_version: int = PROJECTOR_VERSION
@@ -122,8 +120,6 @@ class _Projected:
     kind: str
     command_id: str | None = None
     sequence: int = 0
-    observed_position: int = 0
-    result_position: int = 0
 
 
 def outcome_text(outcome: CommandOutcome) -> str:
@@ -393,7 +389,7 @@ def _translate_visible_events(
             ))
             continue
         if isinstance(payload, StepCommitted):
-            items.extend(_project_step(steps[event.event_id], sequences))
+            items.extend(_project_step(steps[event.event_id]))
     return _hoist_tool_images(items)
 
 
@@ -432,7 +428,7 @@ def _shown_tool(state: CommandState) -> InvokeTool | None:
     return effect
 
 
-def _project_step(step: StepState, sequences: Mapping[str, int]) -> list[_Projected]:
+def _project_step(step: StepState) -> list[_Projected]:
     """一个回合译成一组消息：assistant 及其每个命令的表示，缺一不可。
 
     以回合为单位生成，而不是等 Outcome 事件在流里漂过来。配平因此是构造
@@ -477,8 +473,7 @@ def _project_step(step: StepState, sequences: Mapping[str, int]) -> list[_Projec
             }
             for state, effect in shown
         ]
-    items.append(_Projected(message, "assistant", sequence=step.sequence,
-                            observed_position=step.step.observed_journal_position))
+    items.append(_Projected(message, "assistant", sequence=step.sequence))
     for state, effect in shown:
         command_id = state.command.command_id
         if state.authorization_rejected_by_event_id is not None:
@@ -497,8 +492,6 @@ def _project_step(step: StepState, sequences: Mapping[str, int]) -> list[_Projec
                 "tool",
                 command_id,
                 step.sequence,
-                result_position=(sequences[state.canonical_outcome_event_id]
-                                 if state.canonical_outcome_event_id is not None else 0),
             )
         )
     return items
@@ -630,7 +623,7 @@ def _stub_content(
     if outcome.get("images"):
         stub["images"] = outcome["images"]
     if outcome["code"] == "COMMAND_BACKGROUND":
-        # The handoff stays addressable when output is externalized or dehydrated.
+        # The handoff stays addressable when output is externalized.
         stub["data"]["background"] = outcome["data"]["background"]
     elif outcome["code"] == "DELEGATED":
         stub["data"]["child_session_id"] = outcome["data"]["child_session_id"]
@@ -686,7 +679,7 @@ def catalog_for_model(data: Mapping[str, object]) -> dict[str, object]:
 
 
 class ModelContextProjector:
-    """产品层 Model Context：保护窗 + 体积外置 + Level 1 脱水。
+    """从冻结事实投影模型上下文，并按大小限制外置结果。
 
     Journal 事实不变。command_id → artifact_id 只活在投影缓存里。
     """
@@ -735,13 +728,6 @@ class ModelContextProjector:
         ]
         store = self._gateway.for_session(session_id)
         size_ids = self._externalize_oversized(items, session_id, store)
-        protection_start = self._protection_start(items)
-        age_ids = self._dehydrate_eligible(
-            items,
-            session_id,
-            store,
-            protection_start,
-        )
         evicted_ids = self._evict_images(items)
         messages = [
             items[0].message,
@@ -765,15 +751,13 @@ class ModelContextProjector:
                 *(item.sequence for item in items[1:]),
                 *((0,) if plan_text is not None else ()),
             ),
-            protection_start_index=protection_start,
             size_externalized_command_ids=tuple(size_ids),
-            age_dehydrated_command_ids=tuple(age_ids),
             evicted_image_command_ids=tuple(evicted_ids),
             work_plan_context=plan_text,
         )
 
     def _evict_images(self, items: list[_Projected]) -> list[str]:
-        """工具图片数量超出时最旧先脱水。
+        """工具图片数量超出上限时，最早的图片先移出内嵌内容。
 
         纯资源规则：不判断旧图是否已被新图取代，那属于模型的语义判断。
         模型认为旧图仍需要，用保留在文字里的 id 调 read_image 取回。
@@ -836,109 +820,6 @@ class ModelContextProjector:
             changed.append(item.command_id)
         return changed
 
-    def _dehydrate_eligible(
-        self,
-        items: list[_Projected],
-        session_id: str,
-        store: ArtifactStore,
-        protection_start: int,
-    ) -> list[str]:
-        changed: list[str] = []
-        read_ids = _content_read_ids(items)
-        payloads = [item.message for item in items]
-        index = 0
-        while index < len(payloads):
-            message = payloads[index]
-            if (
-                index >= protection_start
-                or items[index].kind != "assistant"
-                or "tool_calls" not in message
-            ):
-                index += 1
-                continue
-            calls = message["tool_calls"]
-            if type(calls) is not list or not calls:
-                raise TypeError("projected assistant tool_calls must be a list")
-
-            result_end = index + 1
-            while result_end < len(payloads) and items[result_end].kind == "tool":
-                result_end += 1
-
-            results = payloads[index + 1 : result_end]
-            call_ids = [call["id"] for call in calls]
-            result_ids = [result["tool_call_id"] for result in results]
-            batch_complete = (
-                len(result_ids) == len(call_ids)
-                and set(result_ids) == set(call_ids)
-                and result_end <= protection_start
-            )
-            if not batch_complete:
-                index += 1
-                continue
-
-            # Results are displayed beside their calls, even when they arrive
-            # after a later reply. Display order does not prove observation.
-            last_result = max(item.result_position for item in items[index + 1:result_end])
-            consumed = any(
-                items[later].kind == "assistant"
-                and items[later].observed_position >= last_result
-                for later in range(result_end, protection_start)
-            )
-            succeeded = all(_tool_succeeded(result) for result in results)
-            if consumed and succeeded:
-                for tool_index in range(index + 1, result_end):
-                    item = items[tool_index]
-                    if item.command_id is None:
-                        raise ValueError("projected tool message lacks command id")
-                    if item.command_id in read_ids:
-                        result = json.loads(item.message["content"])
-                        for fragment in result["data"]["fragments"]:
-                            del fragment["content"]
-                        result["hint"] = "此处仅保留已读位置；需要原文时用 read_content 读取原 reference 和片段范围。"
-                        item.message["content"] = json.dumps(result, ensure_ascii=False)
-                        changed.append(item.command_id)
-                        continue
-                    meta = _externalized_meta(item.message["content"])
-                    if meta is not None:
-                        if meta.get("preview"):
-                            payload = json.loads(item.message["content"])
-                            payload["data"]["preview"] = ""
-                            item.message["content"] = json.dumps(
-                                payload,
-                                ensure_ascii=False,
-                                separators=(",", ":"),
-                            )
-                            changed.append(item.command_id)
-                        continue
-                    original = item.message["content"]
-                    if not isinstance(original, str):
-                        original = json.dumps(
-                            thaw_value(original),
-                            ensure_ascii=False,
-                        )
-                    artifact_id = self._save(
-                        session_id,
-                        item.command_id,
-                        original,
-                        store,
-                    )
-                    item.message["content"] = _stub_content(
-                        original,
-                        len(original),
-                        artifact_id,
-                    )
-                    changed.append(item.command_id)
-            index = result_end
-        return changed
-
-    def _protection_start(self, items: list[_Projected]) -> int:
-        """The window opens at the latest reason to act from outside the Session."""
-        last_trigger = 0
-        for index, item in enumerate(items):
-            if item.kind in {"user", "trigger"}:
-                last_trigger = index
-        return last_trigger
-
     def _save(
         self,
         session_id: str,
@@ -953,21 +834,6 @@ class ModelContextProjector:
         artifact_id = store.save(content).artifact_id
         self._index[key] = artifact_id
         return artifact_id
-
-
-def _tool_succeeded(message: Mapping[str, object]) -> bool:
-    content = message["content"]
-    if not isinstance(content, str):
-        raise TypeError("projected tool content must be str")
-    payload = json.loads(content)
-    if not isinstance(payload, dict):
-        raise TypeError("projected tool content must be a JSON object")
-    ok = payload["ok"]
-    if ok is None:
-        return False
-    if type(ok) is not bool:
-        raise TypeError("projected tool ok must be bool")
-    return ok
 
 
 def _content_read_ids(items: list[_Projected]) -> set[str]:
