@@ -1,7 +1,8 @@
 import { MantineProvider } from "@mantine/core";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { SettingsMenu } from "../src/features/settings/SettingsMenu";
+import { SettingsDrawer, SettingsMenu, type SettingsSection } from "../src/features/settings/SettingsMenu";
 import { sharedMemorySchema } from "../src/api/contracts";
 
 const state = vi.hoisted(() => ({
@@ -27,8 +28,17 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "fonts"); });
 
+function Settings() {
+  const [section, setSection] = useState<SettingsSection>("models");
+  const [opened, setOpened] = useState(false);
+  return <>
+    <SettingsMenu onOpen={(next) => { setSection(next); setOpened(true); }} />
+    <SettingsDrawer section={section} opened={opened} fromCreate={false} onClose={() => setOpened(false)} />
+  </>;
+}
+
 function app() {
-  return <MantineProvider env="test"><SettingsMenu onOpen={() => {}} /></MantineProvider>;
+  return <MantineProvider env="test"><Settings /></MantineProvider>;
 }
 async function open(name: string) {
   fireEvent.click(screen.getByRole("button", { name: "设置", exact: true }));

@@ -1,6 +1,6 @@
  .model-settings-content {display:flex;flex-direction:column;height:min(800px,calc(100dvh - 90px));min-height:420px;}
-.settings-drawer .mantine-Drawer-body:has(.model-settings-content) {padding:0;overflow:hidden;}
-.settings-drawer .mantine-Drawer-body > div:has(.model-settings-content) {height:100%;}
+.settings-drawer .mantine-Drawer-body:has(> div:not([hidden]) .model-settings-content) {padding:0;overflow:hidden;}
+.settings-drawer .mantine-Drawer-body > div:not([hidden]):has(.model-settings-content) {height:100%;}
 .settings-drawer .model-settings-content {height:100%;min-height:0;}
 .composer-model-controls { display: flex; align-items: center; min-width: 0; }
 .model-picker-trigger { min-width: 0; max-width: 100%; --button-hover: var(--konden-hover); }

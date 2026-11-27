@@ -166,9 +166,9 @@ class _Sessions:
     def set_model(self, session_id, model, reasoning_effort=None):
         return self.models.select(session_id, model, reasoning_effort)
 
-    async def create_agent(self, *, name, path):
+    async def create_agent(self, *, name, path, model):
         workspace_id = None if path is None else "workspace-old"
-        self.calls.append(("create_agent", name, path))
+        self.calls.append(("create_agent", name, path, model))
         if name == "taken":
             raise AgentNameTaken(f"项目内已有 Agent：{name}")
         if name == "nogit":
@@ -1057,8 +1057,16 @@ class WebFirstSliceTest(unittest.TestCase):
         self.assertEqual(body["status"], "waiting")
         self.assertNotIn("worktree", body)
         self.assertNotIn("branch", body)
-        self.assertEqual(self.sessions.calls[0], ("create_agent", "konden", "C:/project"))
+        self.assertEqual(self.sessions.calls[0], ("create_agent", "konden", "C:/project", None))
         self.assertEqual(self.sessions.calls[1][0], "select")
+
+        chosen = self.client.post("/api/agents", json={
+            "connection_id": self.connection.connection_id,
+            "name": "资料助手",
+            "model": "vllm/research",
+        })
+        self.assertEqual(chosen.status_code, 201)
+        self.assertIn(("create_agent", "资料助手", None, "vllm/research"), self.sessions.calls)
 
         self.assertEqual(self.client.post("/api/agents", json={
             "connection_id": self.connection.connection_id,

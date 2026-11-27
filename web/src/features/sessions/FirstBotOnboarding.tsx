@@ -1,10 +1,15 @@
 import { Alert, Button, Group, Skeleton, Text, TextInput, Title } from "@mantine/core";
+import { IconAdjustments } from "@tabler/icons-react";
 import { useState } from "react";
 import { useCreateAgentMutation, useGetModelSettingsQuery } from "../../api/kondenApi";
 import { ModelSettings } from "../models/ModelSettings";
 
 /** 名册为空时的起点：先确保 Bot 能开口，再给第一位伙伴起名，由它向用户介绍团队能做什么。 */
-export function FirstBotOnboarding({ connectionId, onCreated }: { connectionId: string | null; onCreated: (sessionId: string) => void }) {
+export function FirstBotOnboarding({ connectionId, onConfigureModels, onCreated }: {
+  connectionId: string | null;
+  onConfigureModels: () => void;
+  onCreated: (sessionId: string) => void;
+}) {
   const { data: settings, isLoading: settingsLoading } = useGetModelSettingsQuery();
   const [createAgent, { isLoading }] = useCreateAgentMutation();
   const [name, setName] = useState("小柯");
@@ -42,7 +47,11 @@ export function FirstBotOnboarding({ connectionId, onCreated }: { connectionId: 
             void submit();
           }
         }} />
-      <Button loading={isLoading} disabled={!canSubmit} onClick={() => void submit()}>开始</Button>
+      <Group gap="xs">
+        <Button loading={isLoading} disabled={!canSubmit} onClick={() => void submit()}>开始</Button>
+        {modelReady ? <Button variant="subtle" leftSection={<IconAdjustments size={16} />}
+          disabled={isLoading} onClick={onConfigureModels}>模型配置</Button> : null}
+      </Group>
     </Group>
     {error === null ? null : <Alert color="red" title="无法创建">{error}</Alert>}
   </div>;

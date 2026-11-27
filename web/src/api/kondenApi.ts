@@ -582,12 +582,12 @@ export const kondenApi = createApi({
     }),
     createAgent: build.mutation<
       AgentRosterEntry,
-      { connectionId: string; path: string | null; name: string }
+      { connectionId: string; path: string | null; name: string; model?: string }
     >({
-      query: ({ connectionId, path, name }) => ({
+      query: ({ connectionId, path, name, model }) => ({
         url: "/agents",
         method: "POST",
-        body: { connection_id: connectionId, path, name },
+        body: { connection_id: connectionId, path, name, model },
       }),
       transformResponse: (value: unknown) => agentRosterEntrySchema.parse(value),
       transformErrorResponse: (response) => {

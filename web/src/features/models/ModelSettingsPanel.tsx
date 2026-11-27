@@ -12,7 +12,7 @@ import { ImageSettingsPanel, type ImageApi } from "./ImageSettingsPanel";
 import { ProviderPicker } from "./ProviderPicker";
 import type { ChatGPTAuthorization } from "./useChatGPTAuthorization";
 
-export function ModelSettingsPanel({ active, connected, preferences, allModels, onSaved, api, searchApi, imageApi, connections, chatGPT }: {
+export function ModelSettingsPanel({ active, connected, preferences, allModels, onSaved, saveLabel = "保存配置", api, searchApi, imageApi, connections, chatGPT }: {
   active: boolean;
   connected: boolean;
   searchApi: SearchApi;
@@ -22,6 +22,7 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
   preferences: Preferences;
   allModels: CatalogModel[];
   onSaved(value: Preferences): void;
+  saveLabel?: string;
   api: ModelSettingsApi;
 }) {
   const [draft, setDraft] = useState(() => structuredClone(preferences));
@@ -197,7 +198,7 @@ export function ModelSettingsPanel({ active, connected, preferences, allModels, 
         <Group gap="xs" wrap="nowrap">
           <Button variant="subtle" color="gray" disabled={!changed || disabled}
             onClick={() => { setDraft(structuredClone(preferences)); setSavedNotice(false); setSaveError(null); }}>撤销修改</Button>
-          <Button disabled={!changed || hasInvalidThreshold || disabled} loading={saving} onClick={() => void save()}>保存配置</Button>
+          <Button disabled={!changed || hasInvalidThreshold || disabled} loading={saving} onClick={() => void save()}>{saveLabel}</Button>
         </Group>
       </div>
     </div> : null}
