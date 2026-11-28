@@ -13,7 +13,6 @@ from konden.assistant.agent_messages import (
 from konden.assistant.agent_tools import (
     AGENT_GIT_SCHEMAS,
     AGENT_GIT_TOOLS,
-    EXCLUSIVE_PROJECT_TOOLS,
     agent_git_bindings,
 )
 from konden.assistant.agents import project_agent
@@ -185,7 +184,6 @@ async def build_assistant_assembly(
     )
     command_interrupts = builtin_tools.command_interrupts
 
-    exclusive_tools = EXCLUSIVE_PROJECT_TOOLS if connected_agent else frozenset()
     settings = ModelContextSettings()
     gateway = FileArtifactGateway(sessions_root)
     projector = ModelContextProjector(
@@ -382,7 +380,6 @@ async def build_assistant_assembly(
         context_usage_sink=context_usage_sink,
         subagents=subagents,
         compact=compact_context,
-        exclusive_tool_names=exclusive_tools,
         explicit_messages=agent is not None,
         loop_guard=LoopGuard(),
         preview=preview,

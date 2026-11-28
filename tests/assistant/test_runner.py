@@ -5,7 +5,6 @@ from collections.abc import Awaitable, Callable
 import unittest
 
 from konden.assistant.control import AssistantControlPlane
-from konden.assistant.rest import REST
 from konden.assistant.runner import SessionScheduler
 from konden.llm.api import InvalidLLMResponse, LLMProviderError, LLMResponse, ToolCall
 from konden.runtime import (
@@ -326,21 +325,6 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
             decision.command_requests[0].argument_dict(),
             {"path": "a.py"},
         )
-
-    def test_exclusive_batch_uses_declarations_not_tool_names(self):
-        calls = (ToolCall("one", "arbitrary_exclusive", "{}"), ToolCall("two", "read", "{}"))
-        with self.assertRaisesRegex(InvalidLLMResponse, "only tool call"):
-            decision_from_llm(LLMResponse(calls=calls), {"arbitrary_exclusive", "read"}, {"arbitrary_exclusive"})
-
-    def test_exclusive_tool_may_share_its_batch_only_with_rest(self):
-        resting = decision_from_llm(
-            LLMResponse(calls=(ToolCall("one", "arbitrary_exclusive", "{}"), ToolCall("two", REST, "{}"))),
-            {"arbitrary_exclusive", REST}, {"arbitrary_exclusive"},
-        )
-        self.assertEqual([request.name for request in resting.command_requests], ["arbitrary_exclusive", REST])
-        calls = (ToolCall("one", "arbitrary_exclusive", "{}"), ToolCall("two", "read", "{}"), ToolCall("three", REST, "{}"))
-        with self.assertRaisesRegex(InvalidLLMResponse, "only tool call"):
-            decision_from_llm(LLMResponse(calls=calls), {"arbitrary_exclusive", "read", REST}, {"arbitrary_exclusive"})
 
     def test_invalid_tool_arguments_stay_on_the_tool_call(self):
         broken = decision_from_llm(

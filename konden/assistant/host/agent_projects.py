@@ -45,6 +45,7 @@ class AgentProjects:
         self.host = host
         self._locks: dict[str, asyncio.Lock] = {}
         self._landing: dict[str, asyncio.Lock] = {}
+        self._worktree_merges: dict[str, asyncio.Lock] = {}
 
     def _lock(self, session_id: str) -> asyncio.Lock:
         return self._locks.setdefault(session_id, asyncio.Lock())
@@ -242,10 +243,12 @@ class AgentProjects:
     async def land(self, session_id: str, name: str) -> dict:
         agent = await self._agent(session_id)
         linked = self._require(agent, name)
-        async with self._landing.setdefault(linked.workspace_id, asyncio.Lock()):
-            return asdict(await asyncio.to_thread(self.host.agent_worktrees.land, agent, linked))
+        async with self._worktree_merges.setdefault(linked.worktree, asyncio.Lock()):
+            async with self._landing.setdefault(linked.workspace_id, asyncio.Lock()):
+                return asdict(await asyncio.to_thread(self.host.agent_worktrees.land, agent, linked))
 
     async def sync(self, session_id: str, name: str) -> dict:
         agent = await self._agent(session_id)
         linked = self._require(agent, name)
-        return asdict(await asyncio.to_thread(self.host.agent_worktrees.sync, agent, linked))
+        async with self._worktree_merges.setdefault(linked.worktree, asyncio.Lock()):
+            return asdict(await asyncio.to_thread(self.host.agent_worktrees.sync, agent, linked))

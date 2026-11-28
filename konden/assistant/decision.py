@@ -78,13 +78,7 @@ class ToolRunner(Protocol):
 def _invoke_requests(
     calls: Sequence[ToolCall],
     allowed_tool_names: Set[str],
-    exclusive_tool_names: Set[str] = frozenset(),
 ) -> tuple[InvokeTool, ...]:
-    working = [call for call in calls if call.name != REST]
-    if len(working) > 1 and any(call.name in exclusive_tool_names for call in working):
-        raise InvalidLLMResponse(
-            "invalid_tool_batch", "an exclusive tool must be the only tool call besides rest",
-        )
     requests: list[InvokeTool] = []
     for call in calls:
         if call.name == DELIVER_TOOL_NAME:
@@ -233,10 +227,8 @@ class JournalBackedLlmDecisionMaker:
         compact: CompactContext | None = None,
         loop_guard: LoopGuard,
         preview: PreviewEmitter,
-        exclusive_tool_names: Set[str] = frozenset(),
         explicit_messages: bool = False,
     ) -> None:
-        self._exclusive_tool_names = exclusive_tool_names
         self._explicit_messages = explicit_messages
         self._journal = journal
         self._llm = llm
@@ -371,11 +363,7 @@ class JournalBackedLlmDecisionMaker:
 
         return ModelDecision(
             content=response.content,
-            command_requests=_invoke_requests(
-                response.calls,
-                allowed_tool_names,
-                self._exclusive_tool_names,
-            ),
+            command_requests=_invoke_requests(response.calls, allowed_tool_names),
         )
 
     def with_loop_guard(self, prepared, events, position):
