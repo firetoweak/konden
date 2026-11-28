@@ -30,14 +30,14 @@ export function elapsed([start, end]: Range) {
 export function cacheMiss(entry: TraceEntry) {
   const input = entry.usage?.input_tokens;
   const cached = entry.usage?.cached_input_tokens;
-  if (input === undefined || cached === undefined || input <= 0 || cached < 0 || cached > input) return null;
-  return { tokens: input - cached, ratio: (input - cached) / input };
+  if (input === undefined || cached === undefined || input < 0 || cached < 0 || cached > input) return null;
+  return { tokens: input - cached, ratio: input === 0 ? 0 : (input - cached) / input };
 }
 
 const percent = new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 1 });
 export function cacheLabel(entry: TraceEntry) {
   const miss = cacheMiss(entry);
-  return miss === null ? "未记录缓存统计" : `缓存未命中 ${miss.tokens.toLocaleString("zh-CN")} tokens（${percent.format(miss.ratio)}）`;
+  return miss === null ? "缓存命中未知" : `缓存未命中 ${miss.tokens.toLocaleString("zh-CN")} tokens（${percent.format(miss.ratio)}）`;
 }
 
 type Anchor = { time: number; position: number; width: number; activeUntil: number };

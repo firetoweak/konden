@@ -122,7 +122,10 @@ function DetailContent({ detail, entry, scope }: { detail: Detail; entry: TraceE
     case "user": return <><Code value={detail.text} />{detail.images.map((id) => <PromptImage key={id} {...scope} id={id} name="用户附件" />)}</>;
     case "model": return <>
       <p className="trace-detail-meta">{entry.usage?.input_tokens !== undefined && `输入 ${entry.usage.input_tokens} tokens · `}
-        {entry.usage?.output_tokens !== undefined && `输出 ${entry.usage.output_tokens} tokens · `}{cacheLabel(entry)}</p>
+        {entry.usage?.output_tokens !== undefined && `输出 ${entry.usage.output_tokens} tokens · `}
+        {entry.usage?.cached_input_tokens !== undefined && `缓存命中 ${entry.usage.cached_input_tokens.toLocaleString("zh-CN")} tokens · `}
+        {cacheLabel(entry)}
+        {entry.usage?.cache_write_input_tokens !== undefined && ` · 缓存写入 ${entry.usage.cache_write_input_tokens.toLocaleString("zh-CN")} tokens`}</p>
       {detail.reasoning && <Disclosure title="思考" initiallyOpen><Code value={detail.reasoning} /></Disclosure>}
       <h4>{detail.output_source === "recorded" ? "模型输出" : "已提交的决策"}</h4>
       <Code value={detail.output} />

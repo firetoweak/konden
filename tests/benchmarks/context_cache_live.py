@@ -197,6 +197,8 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
                 elapsed = time.perf_counter() - started
                 usage = completion.usage
                 cached = usage.cached_input_tokens
+                if cached is None:
+                    raise ValueError("Provider 未返回缓存命中 token 数，无法计算该实验的命中率。")
                 row = {
                     "variant": name,
                     "step": step_index + 1,

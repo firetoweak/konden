@@ -11,7 +11,9 @@ class ChatGPTResponsesClient(ResponsesClient):
     def _payload(self, messages, model, tools, reasoning_effort, tool_choice="auto"):
         payload = super()._payload(messages, model, tools, reasoning_effort, tool_choice)
         if tools:
-            payload["input"].append({"type": "additional_tools", "role": "developer", "tools": payload.pop("tools")})
+            payload["input"].insert(0, {
+                "type": "additional_tools", "role": "developer", "tools": payload.pop("tools"),
+            })
         return payload
 
     def _raise_llm_error(self, status_code, code, message):
