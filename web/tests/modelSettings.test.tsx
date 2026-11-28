@@ -13,7 +13,7 @@ const CHATGPT = { local: true, waiting: false, opening: false, message: null, co
 const MODELS: CatalogModel[] = [
   { id: "openai/alpha", provider: "openai", webSearch:true, name: "Alpha", description: "alpha", contextTokens: 100_000,
     efforts: [{ value: "medium", label: "中" }, { value: "high", label: "高" }], defaultEffort: "medium" },
-  { id: "openai/plain", provider: "openai", webSearch:true, name: "Plain", description: "plain", contextTokens: 100_000,
+  { id: "openai/plain", provider: "openai", webSearch:true, name: "Plain", description: "plain", contextTokens: null,
     efforts: [], defaultEffort: null },
   { id: "deepseek/beta", provider: "deepseek", name: "Beta", description: "beta", contextTokens: 100_000,
     efforts: [{ value: "low", label: "低" }, { value: "high", label: "高" }, { value: "max", label: "最高" }], defaultEffort: "high" },
@@ -49,6 +49,11 @@ it("常用模型先编辑草稿，撤销不保存，保存才提交偏好", asyn
   expect(checkbox).toBeChecked();
   expect(api.savePreferences).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("tab", { name: /已选模型/ }));
+  const alpha = within(screen.getByRole("listitem", { name: "OpenAI Alpha" }));
+  const plain = within(screen.getByRole("listitem", { name: "OpenAI Plain" }));
+  expect(alpha.getByRole("button", { name: "OpenAI Alpha 更多设置", expanded: false })).toBeVisible();
+  expect(alpha.getByText(`OpenAI · 上下文容量：${(100_000).toLocaleString()} tokens`)).toBeVisible();
+  expect(plain.getByText("OpenAI · 上下文容量未知")).toBeVisible();
   expect(screen.getByRole("button", { name: "测试 OpenAI Plain" })).toBeVisible();
   expect(screen.getByRole("button", { name: "测试 DeepSeek Beta" })).toBeVisible();
   expect(screen.getByRole("button", { name: "删除 OpenAI Alpha" })).toBeDisabled();
