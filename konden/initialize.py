@@ -4,9 +4,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import getpass
+import json
+from pathlib import Path
 import sys
 
-from konden.config import AppConfig, config_path, load_app_config, write_json
+from konden.config import (
+    AppConfig,
+    config_path,
+    load_app_config,
+    parse_app_config,
+    write_json,
+)
 from konden.llm.config import (
     ModelConfig,
     initial_connections,
@@ -17,13 +25,67 @@ from konden.paths import KondenHome
 from thinllm import PROVIDERS, MissingProviderSetting, resolve_endpoint
 
 
+def _upgrade_codex_candidates(data: object, path: Path) -> bool:
+    if type(data) is not dict or set(data) != {"model"}:
+        return False
+    model = data["model"]
+    if type(model) is not dict or set(model) != {"default", "candidates"} or type(model["candidates"]) is not list:
+        return False
+    retired, remaining = [], []
+    for candidate in model["candidates"]:
+        name = candidate.get("model") if type(candidate) is dict else None
+        if type(name) is str and name.startswith("openai-codex/"):
+            # Validate the old profile shape before removing it from the active list.
+            ModelConfig.from_dict({**candidate, "model": "openai-chatgpt/" + name.partition("/")[2]})
+            retired.append(name)
+        else:
+            remaining.append(candidate)
+    if not retired:
+        return False
+    if len(set(retired)) != len(retired):
+        raise ValueError("候选模型不能重复")
+    if model["default"] is None:
+        raise ValueError("有候选模型时必须选择默认模型")
+    if model["default"] in retired:
+        if remaining:
+            raise ValueError(
+                f"{path} 的默认模型使用已停用的 openai-codex。"
+                "请将 model.default 改为一个仍受支持的候选模型，再重新运行准备命令。"
+            )
+        model["default"] = None
+    model["candidates"] = remaining
+    return True
+
+
 def initialize():
     home = KondenHome.default()
     home.initialize()
-    load_app_config()
-    if not home.connections_path.exists():
-        write_json(home.connections_path, initial_connections())
-    load_connections(home.connections_path)
+    path = config_path()
+    upgrade_candidates = False
+    if path.is_file():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        upgrade_candidates = _upgrade_codex_candidates(data, path)
+        parse_app_config(data)
+    else:
+        load_app_config()
+
+    create_connections = not home.connections_path.exists()
+    connections = (initial_connections() if create_connections
+                   else json.loads(home.connections_path.read_text(encoding="utf-8")))
+    upgrade_connection = type(connections) is dict and "openai-codex" in connections
+    if upgrade_connection:
+        legacy = connections.pop("openai-codex")
+        if type(legacy) is not dict or set(legacy) != {"auth_file"} or type(legacy["auth_file"]) is not str:
+            raise ValueError("旧 openai-codex 连接必须包含字符串 auth_file")
+        connections.setdefault("openai-chatgpt", {"auth_file": ""})
+    parse_connections(connections)
+
+    if upgrade_candidates:
+        write_json(path, data)
+    if create_connections or upgrade_connection:
+        write_json(home.connections_path, connections)
+    if upgrade_candidates or upgrade_connection:
+        print("已移除停用的 Codex 订阅设置。需要继续使用 ChatGPT 订阅时，请在模型配置中授权并重新选择模型。")
     return home
 
 

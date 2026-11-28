@@ -37,6 +37,66 @@ def test_initialize_preserves_existing_files_and_rejects_corruption(home):
     assert home.connections_path.read_text(encoding="utf-8") == "{"
 
 
+@pytest.mark.parametrize("has_current_connection", [False, True])
+def test_initialize_upgrades_retired_codex_settings(home, has_current_connection, capsys):
+    active = {"model": "deepseek/my-model", "compact_threshold_tokens": 64000, "reasoning_effort": "high"}
+    retired = {"model": "openai-codex/old-model", "compact_threshold_tokens": 50000}
+    write_json(config_path(), {"model": {"default": active["model"], "candidates": [retired, active]}})
+    connections = load_connections(home.connections_path)
+    connections["deepseek"]["api_key"] = "existing-key"
+    if has_current_connection:
+        connections["openai-chatgpt"]["auth_file"] = "current.json"
+    legacy = {**connections, "openai-codex": {"auth_file": "old.json"}}
+    if not has_current_connection:
+        del legacy["openai-chatgpt"]
+    write_json(home.connections_path, legacy)
+
+    assert initialize.main([]) == 0
+
+    assert load_app_config().to_dict() == {"model": {"default": active["model"], "candidates": [active]}}
+    assert load_connections(home.connections_path) == connections
+    assert "已移除停用的 Codex 订阅设置" in capsys.readouterr().out
+    paths = (config_path(), home.connections_path)
+    before = [path.read_bytes() for path in paths]
+    initialize.initialize()
+    assert [path.read_bytes() for path in paths] == before
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("other_model", [False, True])
+def test_initialize_handles_retired_default_without_selecting_a_replacement(home, other_model):
+    retired = {"model": "openai-codex/old-model", "compact_threshold_tokens": 50000}
+    candidates = [retired]
+    if other_model:
+        candidates.append({"model": "deepseek/my-model", "compact_threshold_tokens": 64000})
+    path = config_path()
+    write_json(path, {"model": {"default": retired["model"], "candidates": candidates}})
+    before = path.read_bytes()
+
+    if other_model:
+        with pytest.raises(ValueError, match=r"model\.default"):
+            initialize.initialize()
+        assert path.read_bytes() == before
+    else:
+        initialize.initialize()
+        assert load_app_config().to_dict() == {"model": {"default": None, "candidates": []}}
+
+
+def test_initialize_leaves_legacy_candidates_intact_if_connections_are_invalid(home):
+    active = {"model": "deepseek/my-model", "compact_threshold_tokens": 64000}
+    retired = {"model": "openai-codex/old-model", "compact_threshold_tokens": 50000}
+    path = config_path()
+    write_json(path, {"model": {"default": active["model"], "candidates": [active, retired]}})
+    before = path.read_bytes()
+    home.connections_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="必须包含全部内置供应商"):
+        initialize.initialize()
+
+    assert path.read_bytes() == before
+    assert home.connections_path.read_text(encoding="utf-8") == "{}"
+
+
 def test_wizard_adds_default_without_replacing_other_models_or_credentials(home, monkeypatch, capsys):
     existing = {"model": "stepfun/step-5-preview", "compact_threshold_tokens": 64000,
                 "reasoning_effort": "high"}
