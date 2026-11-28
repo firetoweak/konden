@@ -23,7 +23,8 @@ from konden.assistant.attachments import AttachmentGateway, AttachmentStore
 from konden.assistant.clarification import (
     ANSWER_SOURCE,
     DEADLINE_REACHED,
-    clarification_options,
+    QUESTION_SENT,
+    is_retired_question_id,
     question_text,
     questions_by_id,
 )
@@ -77,7 +78,7 @@ _INTERNAL_FACT_TYPES = frozenset({
     SESSION_WORKSPACE_FACT,
     SESSION_DIRECTORY_FACT,
     "compact.task", "compact.handoff_created", "compact.window_rolled_over",
-    "bot.memory_review", USER_MESSAGE_SENT,
+    "bot.memory_review", USER_MESSAGE_SENT, QUESTION_SENT,
 })
 _IMAGE_EVICTED_HINT = "\n这张图片已不再内嵌显示；用 read_image 和上面的 id 可以再次查看。"
 _USER_ATTACHMENT_HINT = "\n（图片附件 id：{ids}；用 read_image 可以再次查看。）"
@@ -302,9 +303,10 @@ def _translate_visible_events(
         if isinstance(payload, UserMessageReceived):
             text = payload.content
             if event.delivery is not None and event.delivery.source == ANSWER_SOURCE:
-                question = questions[event.delivery.delivery_id]
-                asked = question_text(question.step.decision.content, clarification_options(question.decision_metadata))
-                text = f"针对你的提问：\n{asked}\n\n我的回答：\n{text}"
+                question_id = event.delivery.delivery_id
+                if not is_retired_question_id(question_id):
+                    asked = question_text(questions[question_id])
+                    text = f"针对你的提问：\n{asked}\n\n我的回答：\n{text}"
             direct = bot and (event.delivery is None or event.delivery.source not in {USER_SOURCE, ANSWER_SOURCE})
             items.append(_received_at(event, direct=direct))
             items.append(
@@ -331,8 +333,10 @@ def _translate_visible_events(
             if payload.fact_type == "assistant.catalog":
                 shown_data = catalog_for_model(shown_data)
             elif payload.fact_type == DEADLINE_REACHED:
-                question = questions[shown_data.pop("question_id")]
-                shown_data["question"] = question_text(question.step.decision.content, clarification_options(question.decision_metadata))
+                question_id = shown_data.pop("question_id")
+                if is_retired_question_id(question_id):
+                    continue
+                shown_data["question"] = question_text(questions[question_id])
                 shown_data["notice"] = "该卡片的等待时间已到，用户仍可补答。结合最新对话与卡片上说明的打算决定下一步。"
             elif payload.fact_type in AGENT_FACT_TYPES:
                 shown_data = agent_fact_for_model(payload)
@@ -456,7 +460,7 @@ def _project_step(step: StepState, sequences: Mapping[str, int]) -> list[_Projec
         for state in step.commands
         if (effect := _shown_tool(state)) is not None
     ]
-    content = question_text(step.step.decision.content, clarification_options(metadata))
+    content = step.step.decision.content
     if not content and not shown:
         return items
     message: dict[str, object] = (

@@ -32,13 +32,14 @@ async def _bot(root, *responses):
     return store, llm, assembly, failures
 
 
-def test_bot_asks_and_rests_in_one_batch_without_another_model_call(tmp_path):
+def test_bot_can_deliver_two_cards_and_rest_in_one_batch_without_another_model_call(tmp_path):
     async def run():
         store, llm, assembly, _failures = await _bot(
             tmp_path,
             LLMResponse(calls=(ToolCall("greet", "rest", "{}"),)),
             LLMResponse(calls=(
                 ToolCall("ask", "ask_user", '{"question":"喜欢哪种风格？","options":["简洁","诗意"]}'),
+                ToolCall("ask-again", "ask_user", '{"question":"名称用什么语言？","options":["中文","英语"]}'),
                 ToolCall("done", "rest", "{}"),
             )),
         )
@@ -52,7 +53,8 @@ def test_bot_asks_and_rests_in_one_batch_without_another_model_call(tmp_path):
             events, state = await store.projected("ada")
             view = project_conversation("ada", events, state.steps, session=await assembly.sessions.view("ada"))
             cards = [item.clarification for item in view.items if getattr(item, "clarification", None)]
-            assert [card.options for card in cards] == [("简洁", "诗意")]
+            assert {card.options for card in cards} == {("简洁", "诗意"), ("中文", "英语")}
+            assert len({card.question_id for card in cards}) == 2
             assert not any(tool.name == "rest" for item in view.items for tool in getattr(item, "tools", ()))
         finally:
             await assembly.scheduler.close()

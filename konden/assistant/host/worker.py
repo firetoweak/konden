@@ -214,7 +214,7 @@ async def _run_session(connection, session_id, journal, config_factory, home_roo
 
             await recover_command_attempts(journal, session_id, peer.request)
             await recover_schedule_attempts(journal, session_id, peer.request)
-            await recover_clarification_attempts(journal, session_id, peer.request)
+            await recover_clarification_attempts(journal, session_id, peer.request, sink)
             await recover_routine_attempts(journal, session_id, peer.request)
             await resume_session(
                 assembly.runtime,

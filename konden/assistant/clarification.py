@@ -1,10 +1,8 @@
-"""A clarification is an assistant reply with optional choices, answered once in its session."""
+"""A clarification is a delivered question, answered once in its session."""
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-import json
 from typing import Annotated
 
 from pydantic import (
@@ -16,26 +14,24 @@ from pydantic import (
     field_validator,
 )
 
-from konden.assistant.rest import REST
+from konden.assistant.delivery import emit_delivery
 from konden.automation.once import MAX_DELAY_SECONDS
 from konden.runtime import (
+    AgentRuntime,
     CommandOutcome,
     CommandOutcomeReceived,
     CommandPhase,
+    DomainFactCommitted,
     Event,
     EventDraft,
-    InvokeTool,
-    ModelDecision,
     OutcomeStatus,
-    StepCommitted,
     UserMessageReceived,
     replay,
 )
 from konden.runtime.dispatcher import ToolBinding
-from konden.runtime.model import argument_rejection, rejected_tool_arguments
 
 ASK_USER = "ask_user"
-CLARIFICATION_OPTIONS = "clarification_options"
+QUESTION_SENT = "clarification.question_sent"
 ANSWER_SOURCE = "clarification_answer"
 DEADLINE_REACHED = "clarification.deadline_reached"
 SCHEDULE_PREFIX = "clarification:"
@@ -67,59 +63,29 @@ class TimedQuestion(Question):
     deadline: Deadline | None = Field(default=None, description="能按明确假设推进时可设时限。用户之后仍可补答；必须等人决定时省略。")
 
 
-def ask_user_schema(model):
+def ask_user_schema(model: type[Question]):
     return {"type": "function", "function": {
         "name": ASK_USER, "parameters": model.model_json_schema(),
-        "description": "在私聊中发一张可以点选或自由回答的澄清卡片。除 rest 外不和其他工具同批调用。发出后可继续做不依赖答案的工作；没有其他能做的事时，和 rest 同批调用。",
+        "description": "在私聊中发一张可以点选或自由回答的澄清卡片。必要的引导写在卡片里，同批消息和卡片的展示顺序不保证。发出后可继续做不依赖答案的工作；没有其他能做的事时，可和 rest 同批调用。",
     }}
 
 
-def clarification_reply(decision: ModelDecision, model: type[Question]) -> tuple[ModelDecision, list[str] | None]:
-    asks = [call for call in decision.command_requests if call.name == ASK_USER]
-    resting = tuple(call for call in decision.command_requests if call.name == REST)
-    if len(asks) != 1 or len(asks) + len(resting) != len(decision.command_requests) \
-            or argument_rejection(asks[0]) is not None:
-        return decision, None
-    arguments = asks[0].argument_dict()
-    try:
-        question = model.model_validate(arguments)
-    except ValidationError as exc:
-        errors = [f"{'.'.join(map(str, item['loc']))}: {item['msg']}" for item in exc.errors(include_url=False)]
-        rejected = rejected_tool_arguments(
-            json.dumps(arguments, ensure_ascii=False), code="VALIDATION_ERROR",
-            error="；".join(errors), hint="修正问题和选项后重新提问。",
-        )
-        return ModelDecision(decision.content, (InvokeTool(ASK_USER, rejected), *resting)), None
-    call = InvokeTool(ASK_USER, tuple(question.model_dump(exclude_none=True).items()))
-    return ModelDecision(question.question, (call, *resting)), question.options
+def questions_by_id(events: tuple[Event, ...]) -> dict[str, Event]:
+    return {
+        event.delivery.delivery_id: event
+        for event in events
+        if isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == QUESTION_SENT
+    }
 
 
-def questions_by_id(events: tuple[Event, ...]) -> dict[str, StepCommitted]:
-    questions = {}
-    for event in events:
-        payload = event.payload
-        if isinstance(payload, StepCommitted) and clarification_options(payload.decision_metadata) is not None:
-            questions[payload.step.step_id] = payload
-    return questions
+def is_retired_question_id(question_id: str) -> bool:
+    """References from before the cutover used the persisted Step ID."""
+    return question_id.startswith("step_")
 
 
-def clarification_options(metadata: object) -> tuple[str, ...] | None:
-    if isinstance(metadata, Mapping) and CLARIFICATION_OPTIONS in metadata:
-        return tuple(metadata[CLARIFICATION_OPTIONS])
-    return None
-
-
-def question_text(content: str, options: Sequence[str] | None) -> str:
-    if not options:
-        return content
-    return content + "\n" + "\n".join(f"- {option}" for option in options)
-
-
-def deadline_for(step):
-    for command in step.commands:
-        if command.effect.name == ASK_USER:
-            return command.effect.argument_dict().get("deadline")
-    return None
+def question_text(event: Event) -> str:
+    data = event.payload.data
+    return "\n".join((data["question"], *(f"- {option}" for option in data["options"])))
 
 
 def has_answer(events, question_id: str) -> bool:
@@ -127,41 +93,49 @@ def has_answer(events, question_id: str) -> bool:
                and e.delivery.source == ANSWER_SOURCE and e.delivery.delivery_id == question_id for e in events)
 
 
-async def _acknowledge(event: Event | None, transport):
-    deadline = deadline_for(event.payload.step) if event is not None else None
-    result = {"message": "问题已发出。继续处理不依赖答案的工作。只剩待答事项时就休息，答复到达会叫醒你。"}
+async def _complete_delivery(event: Event, transport, sink):
+    question_id = event.delivery.delivery_id
+    if sink is not None:
+        await emit_delivery(sink, event.session_id, question_id, event.payload.data["question"])
+    deadline = event.payload.data.get("deadline")
+    result = {"question_id": question_id, "message": "问题已发出。继续处理不依赖答案的工作。只剩待答事项时就休息，答复到达会叫醒你。"}
     if deadline is not None:
         registered = await transport("schedule_once", event.session_id, {
-            "schedule_id": SCHEDULE_PREFIX + event.payload.step.step_id, "delay_seconds": deadline["after_seconds"],
+            "schedule_id": SCHEDULE_PREFIX + question_id, "delay_seconds": deadline["after_seconds"],
             "started_at": event.occurred_at.isoformat(), "purpose": deadline["plan"],
         })
         result.update(wait_until=registered["due_at"], plan=deadline["plan"])
     return {"ok": True, "code": "QUESTION_SENT", "data": result}
 
 
-def clarification_binding(journal, transport):
+def clarification_binding(journal, model: type[Question], transport, sink):
+    runtime = AgentRuntime(journal, None, {})
+
     async def handler(context, arguments):
-        if "deadline" not in arguments:
-            return await _acknowledge(None, transport)
-        events = await journal.snapshot(context.session_id)
-        event = next(e for e in reversed(events) if isinstance(e.payload, StepCommitted)
-                     and any(c.command_id == context.command_id for c in e.payload.step.commands))
-        return await _acknowledge(event, transport)
+        try:
+            question = model.model_validate(arguments)
+        except ValidationError as exc:
+            errors = [f"{'.'.join(map(str, item['loc']))}: {item['msg']}" for item in exc.errors(include_url=False)]
+            return {"ok": False, "code": "VALIDATION_ERROR", "error": "；".join(errors),
+                    "hint": "修正问题和选项后重新提问。"}
+        event = await runtime.receive_domain_fact(
+            context.session_id, QUESTION_SENT, question.model_dump(exclude_none=True),
+            source=ASK_USER, delivery_id=context.command_id,
+        )
+        return await _complete_delivery(event, transport, sink)
     return ToolBinding(handler)
 
 
-async def recover_clarification_attempts(journal, session_id, transport):
+async def recover_clarification_attempts(journal, session_id, transport, sink):
     events = await journal.snapshot(session_id)
-    questions = {c.command_id: e for e in events if isinstance(e.payload, StepCommitted)
-                 and clarification_options(e.payload.decision_metadata) is not None
-                 for c in e.payload.step.commands if c.effect.name == ASK_USER}
+    questions = questions_by_id(events)
     if not questions:
         return
     for item in replay(session_id, events).state.commands:
         if item.phase is not CommandPhase.UNKNOWN or item.command.command_id not in questions:
             continue
         (attempt,) = item.attempts
-        result = await _acknowledge(questions[item.command.command_id], transport)
+        result = await _complete_delivery(questions[item.command.command_id], transport, sink)
         await journal.record_attempt_fact(EventDraft(
             event_id=f"clarification-recovered:{item.command.command_id}", session_id=session_id,
             payload=CommandOutcomeReceived(item.command.command_id, attempt.attempt_id,
@@ -185,10 +159,11 @@ class ClarificationView:
     deadline: DeadlineView | None = None
 
     @classmethod
-    def from_event(cls, event, options, answer, reached):
-        step = event.payload.step
-        deadline = deadline_for(step)
+    def from_event(cls, event: Event, answer: str | None, reached: bool):
+        question_id = event.delivery.delivery_id
+        options = tuple(event.payload.data["options"])
+        deadline = event.payload.data.get("deadline")
         if deadline is None:
-            return cls(step.step_id, options, answer)
+            return cls(question_id, options, answer)
         due_at = event.occurred_at + timedelta(seconds=deadline["after_seconds"])
-        return cls(step.step_id, options, answer, DeadlineView(due_at, deadline["plan"], reached))
+        return cls(question_id, options, answer, DeadlineView(due_at, deadline["plan"], reached))
