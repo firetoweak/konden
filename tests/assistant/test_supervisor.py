@@ -61,6 +61,8 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
             questions_by_id,
         )
         from konden.assistant.conversations import AssistantQueries
+        from konden.assistant.personal_memory import UPDATE_PERSONAL_MEMORY
+        from konden.assistant.shared_memory import UPDATE_SHARED_MEMORY
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
         from konden.runtime import DomainFactCommitted
 
@@ -83,8 +85,12 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         class Model(ProcessLlm):
             async def chat(client, messages, model, **kwargs):
+                usage = LLMUsage(input_tokens=10, output_tokens=5)
+                tool_names = {tool["function"]["name"] for tool in kwargs["tools"]}
+                if tool_names == {UPDATE_PERSONAL_MEMORY, UPDATE_SHARED_MEMORY}:
+                    return LLMCallResult(LLMResponse(), usage)
                 requests.append(messages)
-                return LLMCallResult(next(replies), LLMUsage(input_tokens=10, output_tokens=5))
+                return LLMCallResult(next(replies), usage)
 
         sid = (await self.host.create_agent(name="周报助手")).session_id
         await self.host.wait_quiescent(sid)

@@ -296,9 +296,11 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
     async def test_one_origin_bounds_new_chains_and_the_replies_it_drives(self):
         async def decide(session_id, *decisions):
             runtime = AgentRuntime(self.journal(session_id), ScriptedDecisionMaker(decisions),
-                                   {SEND_MESSAGE: ToolBinding(AsyncMock())})
+                                   {SEND_MESSAGE: ToolBinding(AsyncMock(return_value=None))})
             for _ in decisions:
                 step = (await runtime.advance(session_id)).step
+            while runtime.dispatcher.active_count:
+                await asyncio.sleep(0)
             return step.commands
 
         def tasks(_):
