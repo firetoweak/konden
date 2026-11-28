@@ -29,7 +29,11 @@ function SelectedModelRow({ model, favorite, isDefault, saving, onChange, onRemo
   return <div role="listitem" aria-label={label} className="selected-model-row">
     <div className="catalog-model">
       <Group gap={8} wrap="nowrap"><Text fw={550} size="sm">{model.name}</Text>{isDefault ? <span className="default-model-label">默认</span> : null}</Group>
-      <Text className="model-id" size="xs" c="dimmed">{providerName(model.provider)}</Text>
+      <Text className="model-id" size="xs" c="dimmed">
+        {providerName(model.provider)} · {model.contextTokens === null
+          ? "上下文容量未知"
+          : `上下文容量：${model.contextTokens.toLocaleString()} tokens`}
+      </Text>
     </div>
     <div className="catalog-effort selected-model-effort">
       {model.efforts.length ? <Select label="推理强度" aria-label={`${label} 默认推理强度`}
@@ -60,7 +64,6 @@ function SelectedModelRow({ model, favorite, isDefault, saving, onChange, onRemo
         <NumberInput label="上下文整理阈值" description="输入达到此 token 数时整理上下文。" value={favorite.compactTokens}
           min={1} allowNegative={false} allowDecimal={false} disabled={saving}
           onChange={(value) => onChange({ compactTokens: typeof value === "number" ? value : 0 })} />
-        <Text size="xs" c="dimmed">{model.contextTokens === null ? "供应商未提供上下文容量" : `上下文容量：${model.contextTokens.toLocaleString()} tokens`}</Text>
       </div>
     </Collapse>
   </div>;
