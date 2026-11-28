@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from functools import partial
 import json
 from pathlib import Path
@@ -53,31 +53,33 @@ async def until(predicate, timeout=30):
 
 
 class SupervisorTest(unittest.IsolatedAsyncioTestCase):
-    async def test_clarification_deadlines_survive_restart_and_only_wake_unanswered_questions(self):
+    async def test_mixed_clarification_batch_and_deadlines_across_restart(self):
         from konden.assistant.clarification import (
             ANSWER_SOURCE,
             DEADLINE_REACHED,
+            SCHEDULE_PREFIX,
             questions_by_id,
         )
+        from konden.assistant.conversations import AssistantQueries
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
         from konden.runtime import DomainFactCommitted
 
-        def ask(question, plan):
+        def ask(question, plan, *other_calls):
             return LLMResponse(calls=(ToolCall("ask", "ask_user", json.dumps({
-                "question": question, "deadline": {"after_seconds": 60, "plan": plan},
-            }, ensure_ascii=False)),))
+                "question": question, "options": ["放正文", "放附录"],
+                "deadline": {"after_seconds": 60, "plan": plan},
+            }, ensure_ascii=False)), *other_calls, ToolCall("rest", "rest", "{}")))
 
         def rest():
             return LLMResponse(calls=(ToolCall("rest", "rest", "{}"),))
 
         requests = []
-        replies = iter([ask("图表放哪里？", "放附录"),
-                        LLMResponse(calls=(ToolCall("report", "send_message", '{"recipient":"user","text":"已完成正文"}'),)),
-                        rest(),
-                        ask("周报用哪种格式？", "使用 Markdown"), rest(),
-                        rest(), rest(),
-                        rest(),
-                        rest()])
+        replies = iter([
+            ask("图表放哪里？", "放附录", ToolCall(
+                "report", "send_message", '{"recipient":"user","text":"已完成正文"}')),
+            ask("周报用哪种格式？", "使用 Markdown"),
+            rest(), rest(), rest(), rest(),
+        ])
 
         class Model(ProcessLlm):
             async def chat(client, messages, model, **kwargs):
@@ -91,11 +93,19 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         for text in ("定图表", "定格式"):
             await self.host.accept_input(sid, text, delivery_id=text)
             await self.host.wait_quiescent(sid)
+            self.assertIsNone(self.host.current_failure(sid))
+        self.assertEqual(len(requests), 2)
         self.assertIn((sid, "已完成正文"), self.output)
         self.assertIsNone(self.host.next_scheduled_check(sid))
         events = await self.store.journal(sid).snapshot(sid)
         first_id, second_id = questions_by_id(events)
+        view = await AssistantQueries(self.store, self.host).conversation(sid)
+        card = next(item for item in view.items if item.text == "图表放哪里？")
+        self.assertEqual(card.clarification.options, ("放正文", "放附录"))
+        self.assertEqual(card.output_id, first_id)
+        self.assertIn(first_id, self.output_ids)
         first = self.host.automation.schedules.next_pending(sid)
+        self.assertEqual(first.schedule_id, SCHEDULE_PREFIX + first_id)
         await self.host.accept_input(sid, "放正文", delivery_id=first_id, source=ANSWER_SOURCE)
         await self.host.wait_quiescent(sid)
         await self.host.accept_input(sid, "偏好邮件能直接阅读的格式", delivery_id="chat-note")
@@ -120,6 +130,23 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([e.payload.data["question_id"] for e in events if isinstance(e.payload, DomainFactCommitted)
                           and e.payload.fact_type == DEADLINE_REACHED], [second_id])
         self.assertTrue(any(m["role"] == "user" and m["content"].endswith("用纯文本") for m in requests[-1]))
+
+    async def test_clock_retires_due_reminder_for_old_step_question(self):
+        from konden.assistant.clarification import SCHEDULE_PREFIX
+        from konden.runtime import StepCommitted
+
+        sid = (await self.host.create_agent(name="旧卡片")).session_id
+        await self.host.wait_quiescent(sid)
+        journal = self.store.journal(sid)
+        events = await journal.snapshot(sid)
+        step_id = next(event.payload.step.step_id for event in events if isinstance(event.payload, StepCommitted))
+        self.host.automation.register(SCHEDULE_PREFIX + step_id, sid, 1, "旧卡片的打算",
+                                      started_at=datetime.now(UTC) - timedelta(seconds=2))
+        async with asyncio.TaskGroup() as group:
+            self.host.start_automation(group)
+            await until(lambda: self.host.automation.schedules.next_pending(sid) is None)
+            await self.host.close()
+        self.assertEqual(await journal.snapshot(sid), events)
 
     async def test_bot_writes_external_files_and_uses_external_command_cwd_by_default(self):
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall

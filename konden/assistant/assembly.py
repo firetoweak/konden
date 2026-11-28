@@ -325,7 +325,8 @@ async def build_assistant_assembly(
         session_transport,
     )
     bindings = {
-        **({ASK_USER: clarification_binding(journal, session_transport)} if agent is not None else {}),
+        **({ASK_USER: clarification_binding(journal, question_model, session_transport, sink)}
+           if agent is not None else {}),
         **(rest_binding() if agent is not None else {}),
         **bind_executor_tools(
             builtin_tools,
@@ -382,8 +383,7 @@ async def build_assistant_assembly(
         context_usage_sink=context_usage_sink,
         subagents=subagents,
         compact=compact_context,
-        exclusive_tool_names=exclusive_tools | {ASK_USER},
-        question_model=question_model,
+        exclusive_tool_names=exclusive_tools,
         explicit_messages=agent is not None,
         loop_guard=LoopGuard(),
         preview=preview,

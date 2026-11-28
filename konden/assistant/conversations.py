@@ -17,8 +17,8 @@ from konden.assistant.attachments import AttachmentGateway, AttachmentStore
 from konden.assistant.clarification import (
     ANSWER_SOURCE,
     DEADLINE_REACHED,
+    QUESTION_SENT,
     ClarificationView,
-    clarification_options,
 )
 from konden.assistant.compact.core import latest_input_tokens
 from konden.assistant.control import pending_approval_view, project_control_message
@@ -609,6 +609,13 @@ def project_conversation(
             identity = event.delivery.delivery_id
             items.append(StepItem("step", identity, identity, payload.data["text"], (), event.occurred_at))
             continue
+        if isinstance(payload, DomainFactCommitted) and payload.fact_type == QUESTION_SENT:
+            identity = event.delivery.delivery_id
+            items.append(StepItem(
+                "step", identity, identity, payload.data["question"], (), event.occurred_at,
+                clarification=ClarificationView.from_event(event, answers.get(identity), identity in reached),
+            ))
+            continue
         if isinstance(payload, DomainFactCommitted) and payload.fact_type == EXTERNAL_MESSAGE:
             message = parse_external(payload)
             if message.sender == "user":
@@ -653,8 +660,7 @@ def project_conversation(
         if not isinstance(payload, StepCommitted):
             continue
         step = by_event[event.event_id]
-        options = clarification_options(step.decision_metadata)
-        text = step.step.decision.content.strip() if agent is None or options is not None else ""
+        text = step.step.decision.content.strip() if agent is None else ""
         for notice in communication_notices.get(event.event_id, ()):
             text = "\n\n".join(filter(None, (text,
                 f"与 {notice.recipient} 的交流已达上限，需要你判断是否继续。")))
@@ -692,7 +698,6 @@ def project_conversation(
                 )
             )
         if text or tools or thinking:
-            question_id = step.step.step_id
             items.append(
                 StepItem(
                     "step",
@@ -702,8 +707,6 @@ def project_conversation(
                     tuple(tools),
                     event.occurred_at,
                     thinking,
-                    clarification=None if options is None else ClarificationView.from_event(
-                        event, options, answers.get(question_id), question_id in reached),
                 )
             )
         items.extend(messages)

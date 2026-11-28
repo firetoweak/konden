@@ -9,10 +9,10 @@ from konden.assistant.assembly import build_assistant_assembly
 from konden.assistant.clarification import (
     ANSWER_SOURCE,
     ASK_USER,
-    CLARIFICATION_OPTIONS,
+    QUESTION_SENT,
     TimedQuestion,
     clarification_binding,
-    clarification_reply,
+    questions_by_id,
     recover_clarification_attempts,
 )
 from konden.assistant.conversations import project_conversation
@@ -29,7 +29,6 @@ from konden.runtime import (
     ModelDecision,
     SqliteJournal,
 )
-from konden.runtime.step import RecordedDecision
 from tests.assistant.test_runner import ScriptedDecisionMaker
 from tests.fixtures.workspaces import workspace_record
 from tests.session_scheduler import SettlingScheduler
@@ -107,8 +106,7 @@ async def recover_registered_timer(root):
     journal = SqliteJournal(root / "journal.sqlite")
     clock = OneShotSchedules(root / "clock.sqlite")
     args = {"question": "图表放哪里？", "deadline": {"after_seconds": 30, "plan": "先放附录"}}
-    decision, options = clarification_reply(ModelDecision(command_requests=(InvokeTool(ASK_USER, tuple(args.items())),)), TimedQuestion)
-    recorded = RecordedDecision(decision, decision_metadata={CLARIFICATION_OPTIONS: options})
+    decision = ModelDecision(command_requests=(InvokeTool(ASK_USER, tuple(args.items())),))
     registrations = []
 
     async def register(_operation, session_id, request):
@@ -121,7 +119,8 @@ async def recover_registered_timer(root):
         await register(*request)
         raise RuntimeError("lost receipt")
 
-    runtime = AgentRuntime(journal, ScriptedDecisionMaker((lambda _: recorded,)), {ASK_USER: clarification_binding(journal, interrupted)})
+    runtime = AgentRuntime(journal, ScriptedDecisionMaker((lambda _: decision,)),
+                           {ASK_USER: clarification_binding(journal, TimedQuestion, interrupted, None)})
     scheduler = SettlingScheduler(runtime, sid)
     await runtime.create_session(sid)
     await runtime.receive_user_message(sid, "整理周报", delivery_id="start")
@@ -131,10 +130,14 @@ async def recover_registered_timer(root):
             await scheduler.join()
     finally:
         await scheduler.close()
-    await recover_clarification_attempts(journal, sid, register)
-    await recover_clarification_attempts(journal, sid, register)
+    await recover_clarification_attempts(journal, sid, register, None)
+    await recover_clarification_attempts(journal, sid, register, None)
     assert len(registrations) == 2 and registrations[0] == registrations[1]
     _, started, due = registrations[0]
     assert due == started + timedelta(seconds=30)
-    outcomes = [e.payload.outcome for e in await journal.snapshot(sid) if isinstance(e.payload, CommandOutcomeReceived)]
-    assert [outcome.value["code"] for outcome in outcomes] == ["QUESTION_SENT"]
+    events = await journal.snapshot(sid)
+    (question_id,) = questions_by_id(events)
+    (outcome,) = (e.payload for e in events if isinstance(e.payload, CommandOutcomeReceived))
+    assert outcome.outcome.value["code"] == "QUESTION_SENT"
+    assert question_id == outcome.command_id
+    assert sum(getattr(e.payload, "fact_type", None) == QUESTION_SENT for e in events) == 1

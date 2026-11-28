@@ -41,6 +41,8 @@ from konden.assistant.clarification import (
     DEADLINE_REACHED,
     SCHEDULE_PREFIX,
     has_answer,
+    is_retired_question_id,
+    questions_by_id,
 )
 from konden.assistant.compact.host import CompactHost
 from konden.assistant.control import (
@@ -686,16 +688,20 @@ class HostSupervisor:
         try:
             if schedule.schedule_id.startswith(SCHEDULE_PREFIX):
                 question_id = schedule.schedule_id.removeprefix(SCHEDULE_PREFIX)
+                # The clock retires outstanding reminders for cards from before the upgrade.
+                if is_retired_question_id(question_id):
+                    return
                 # Serialize with Web answers, including an answer committed just before a Host crash.
                 async with self.turn_locks.setdefault(schedule.session_id, asyncio.Lock()):
                     events = await self.store.journal(schedule.session_id).snapshot(schedule.session_id)
+                    question = questions_by_id(events)[question_id]
                     if not has_answer(events, question_id):
                         await self.request("fact", schedule.session_id, {
                             "fact_type": DEADLINE_REACHED,
                             "data": {"question_id": question_id, "plan": schedule.purpose,
                                      "planned_at": schedule.due_at.isoformat(), "fired_at": fired_at.isoformat()},
                             "delivery_id": schedule.schedule_id, "source": AUTOMATION_SOURCE,
-                            "requests_decision": True, "causation_id": question_id,
+                            "requests_decision": True, "causation_id": question.event_id,
                         })
                 return
             await self.request(

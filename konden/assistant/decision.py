@@ -9,11 +9,6 @@ from time import perf_counter
 from typing import Protocol
 
 from konden.assistant.artifacts import ArtifactGateway
-from konden.assistant.clarification import (
-    CLARIFICATION_OPTIONS,
-    Question,
-    clarification_reply,
-)
 from konden.assistant.cli import CliToolAdapter
 from konden.assistant.compact.core import (
     FIND_HISTORY,
@@ -243,11 +238,9 @@ class JournalBackedLlmDecisionMaker:
         loop_guard: LoopGuard,
         preview: PreviewEmitter,
         exclusive_tool_names: Set[str] = frozenset(),
-        question_model: type[Question] = Question,
         explicit_messages: bool = False,
     ) -> None:
         self._exclusive_tool_names = exclusive_tool_names
-        self._question_model = question_model
         self._explicit_messages = explicit_messages
         self._journal = journal
         self._llm = llm
@@ -512,7 +505,6 @@ class JournalBackedLlmDecisionMaker:
                 usage.input_tokens,
                 self._compact_threshold_tokens,
             )
-        clarification_options = None
         if self._compact is not None and self._compact.is_reader:
             calls = result.response.calls
             if calls:
@@ -534,16 +526,13 @@ class JournalBackedLlmDecisionMaker:
                     ),
                 )
         else:
-            decision, clarification_options = clarification_reply(
-                self._decision_from_response(
-                    frame,
-                    result.response,
-                    allowed_tool_names,
-                    control_names,
-                ),
-                self._question_model,
+            decision = self._decision_from_response(
+                frame,
+                result.response,
+                allowed_tool_names,
+                control_names,
             )
-            if not self._explicit_messages or clarification_options is not None:
+            if not self._explicit_messages:
                 decision = ensure_deliver(decision, output_id)
             if show_preview and not decision.content.strip():
                 await self._preview.abort(frame.state.session_id)
@@ -585,8 +574,6 @@ class JournalBackedLlmDecisionMaker:
             json.dumps(manifest, ensure_ascii=False, sort_keys=True)
         )
         metadata = {MODEL_USAGE: {"window": window, **manifest["usage"]}}
-        if clarification_options is not None:
-            metadata[CLARIFICATION_OPTIONS] = clarification_options
         control_request = self._control.take_staged_metadata(frame)
         if control_request is not None:
             metadata[CONTROL_REQUEST_METADATA] = control_request
