@@ -34,7 +34,7 @@ from tests.fixtures.workspaces import workspace_record
 from tests.session_scheduler import SettlingScheduler
 
 
-def test_answer_stays_with_question_and_cannot_grant_pending_authorization(tmp_path):
+def test_answer_stays_with_question_across_an_intervening_message(tmp_path):
     asyncio.run(clarification_round_trip(tmp_path))
 
 
@@ -53,7 +53,7 @@ async def clarification_round_trip(root):
         LLMResponse(content="私有工作笔记", calls=(ToolCall("ask", "ask_user", '{"question":"保留附录吗？","options":["yes","no"]}'),)),
         LLMResponse(content="私有工作笔记", calls=(ToolCall("report", "send_message", '{"recipient":"user","text":"周报正文已经整理好了。"}'),)),
         LLMResponse(calls=(ToolCall("done", "rest", "{}"),)),
-        LLMResponse(calls=(ToolCall("write", "write_file", '{"path":"note.txt","content":"unapproved"}'),)),
+        LLMResponse(calls=(ToolCall("intervening", "rest", "{}"),)),
         LLMResponse(calls=(ToolCall("answered", "rest", "{}"),)),
     )]
     emitted = []
@@ -79,8 +79,7 @@ async def clarification_round_trip(root):
         assert emitted == ["保留附录吗？", "周报正文已经整理好了。"]
         assert [i.text for i in asked.items if i.kind == "step" and i.text] == emitted
         await sessions.accept_input(sid, "另外写一个文件", delivery_id="write")
-        pending = (await conversation()).session.pending_authorization_ids
-        assert pending
+        await conversation()
         with pytest.raises(InputConflict):
             await sessions.accept_input(sid, "yes", delivery_id="unknown", source=ANSWER_SOURCE)
         for _ in range(2):
@@ -88,7 +87,6 @@ async def clarification_round_trip(root):
         with pytest.raises(InputConflict):
             await sessions.accept_input(sid, "no", delivery_id=card.question_id, source=ANSWER_SOURCE)
         answered = await conversation()
-        assert answered.session.pending_authorization_ids == pending
         assert [item.text for item in answered.items if item.kind == "user"].count("yes") == 1
         assert [item.clarification.answer for item in answered.items if getattr(item, "clarification", None)] == ["yes"]
         assert any(msg["role"] == "user" and "保留附录吗？" in msg["content"] and msg["content"].endswith("yes")

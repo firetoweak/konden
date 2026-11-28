@@ -6,7 +6,6 @@ import { useGetAgentsQuery, useGetGroupsQuery, useGetInboxQuery } from "../../ap
 import { useAppSelector } from "../../app/hooks";
 import { ColorSchemeSwitcher } from "../../app/ColorSchemeSwitcher";
 import { BotRoster } from "./BotRoster";
-import { AutoAuthorize } from "./AutoAuthorize";
 import { SettingsMenu, type SettingsSection } from "../settings/SettingsMenu";
 import { ExternalRoster } from "../external/ExternalRoster";
 import { CapabilitiesIcon } from "../capabilities/CapabilitiesIcon";
@@ -78,7 +77,6 @@ export function AgentSidebar({ onNavigate, onCreateAgent, onOpenSettings, compac
           {connectionId === null ? <IconPlugConnectedX aria-hidden="true" size={16} /> : <IconPlugConnected aria-hidden="true" size={16} />}
         </span>
       </Tooltip>
-      <AutoAuthorize compact={compact} />
     </Group>{connectionId === null && !compact ? <Text size="xs" c="dimmed" px={8}>正在连接…</Text> : null}</AppShell.Section>
   </Stack>;
 }

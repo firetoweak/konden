@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
@@ -11,9 +11,6 @@ from konden.runtime.json_values import thaw_value
 
 Arguments: TypeAlias = tuple[tuple[str, object], ...]
 
-# 授权判定钩子：True 表示需要确认；拒绝参数冻结为不执行工具的结果。
-# 不得产生副作用；文件工具可只读检查目标权限，签发后冻结判定结果。
-AuthorizationPolicy: TypeAlias = Callable[[Mapping[str, object]], bool | Arguments]
 MAX_JSON_VALUE_BYTES = 128 * 1024
 MAX_JSON_VALUE_DEPTH = 32
 
@@ -36,7 +33,7 @@ def _require_nonnegative_int(value: object, name: str) -> None:
 
 
 # 工具参数无法使用或目标权限拒绝时，Command 仍要入账，但参数里只有这份拒绝。
-# 它不是工具 schema 的字段：Dispatcher 不调用工具，授权也不看它。
+# Dispatcher 将这个输入错误交回模型，不调用工具。
 ARGUMENT_REJECTION_KEY = "argument_rejection"
 _ARGUMENT_REJECTION_FIELDS = frozenset({"raw", "code", "error", "hint"})
 
@@ -182,24 +179,17 @@ CommandEffect: TypeAlias = InvokeTool
 class Command:
     """Committed side-effect.
 
-    `requires_authorization` and `decision_on_outcome` are assembly
-    information captured at issue time. They are not an approval policy
-    and not inferred from the tool name. `requires_authorization` may
-    come from a static spec flag or from evaluating an AuthorizationPolicy
-    against the issued arguments; once captured it is a fixed fact.
+    The tool binding fixes whether the outcome can trigger another decision.
     """
 
     command_id: str
     effect: CommandEffect
-    requires_authorization: bool = False
     decision_on_outcome: bool = True
 
     def __post_init__(self) -> None:
         _require_str(self.command_id, "command id")
         if type(self.effect) is not InvokeTool:
             raise TypeError("command effect is invalid")
-        if type(self.requires_authorization) is not bool:
-            raise TypeError("requires_authorization must be bool")
         if type(self.decision_on_outcome) is not bool:
             raise TypeError("decision_on_outcome must be bool")
 
@@ -285,12 +275,7 @@ class CommandOutcome:
 
 
 class CommandPhase(str, Enum):
-    """Execution lifecycle only.
-
-    Authorization is an orthogonal dispatch gate. PENDING means the
-    command is issued and not yet terminal; it does not mean Dispatcher
-    may claim it.
-    """
+    """Lifecycle from issuance to a known outcome."""
 
     PENDING = "pending"
     UNKNOWN = "unknown"
@@ -330,8 +315,6 @@ class CommandState:
     attempts: tuple[AttemptState, ...] = ()
     outcome: CommandOutcome | None = None
     canonical_outcome_event_id: str | None = None
-    dispatch_eligible_by_event_id: str | None = None
-    authorization_rejected_by_event_id: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.command) is not Command:
@@ -351,14 +334,6 @@ class CommandState:
         _require_optional_str(
             self.canonical_outcome_event_id,
             "canonical outcome event id",
-        )
-        _require_optional_str(
-            self.dispatch_eligible_by_event_id,
-            "dispatch eligible event id",
-        )
-        _require_optional_str(
-            self.authorization_rejected_by_event_id,
-            "authorization rejected event id",
         )
 
 @dataclass(frozen=True, slots=True)

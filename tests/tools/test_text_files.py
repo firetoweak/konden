@@ -88,7 +88,6 @@ def test_full_access_still_respects_a_file_made_read_only_before_approval(tmp_pa
         spec = next(item for item in specs if item.name == tool)
         arguments = {"path": str(path), "content": "new", "overwrite": True} if tool == "write_file" else {
             "path": str(path), "old_block": "TARGET", "new_block": "new"}
-        assert spec.requires_authorization(arguments) is True
         original_open = Path.open
 
         def privileged_open(target, mode="r", *args, **kwargs):

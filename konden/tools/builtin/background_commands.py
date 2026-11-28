@@ -33,9 +33,9 @@ def create_command_specs(commands: CommandControl) -> list[ToolSpec]:
         ToolSpec(name="read_command", description=(
             "读取本会话命令的当前状态和有限长度的输出，不等待退出。续读用 next_offset，has_more 表示还有输出。"
             "后台命令结束会主动通知，不要循环查询。running 不表示服务已就绪。"
-        ), parameters=PydanticParameters(ReadCommandInput), handler=read, requires_authorization=False),
+        ), parameters=PydanticParameters(ReadCommandInput), handler=read),
         ToolSpec(name="stop_command", description="终止指定命令及其子进程；已产生的副作用不会撤销。后台命令终止后也会通知。",
-                 parameters=PydanticParameters(CommandInput), handler=stop, requires_authorization=False),
+                 parameters=PydanticParameters(CommandInput), handler=stop),
         ToolSpec(name="list_commands", description="列出本会话后台命令的当前状态，包括已结束的记录。",
-                 parameters=PydanticParameters(EmptyInput), handler=list_commands, requires_authorization=False),
+                 parameters=PydanticParameters(EmptyInput), handler=list_commands),
     ]

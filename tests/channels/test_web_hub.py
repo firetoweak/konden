@@ -140,26 +140,3 @@ class WebEventHubTest(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.hub.unsubscribe(queue)
-
-    async def test_authorization_required_carries_command_arguments(self):
-        queue = self.hub.subscribe()
-
-        await self.hub.authorization_required(
-            "session-a",
-            "cmd-1",
-            "write_file",
-            {"path": "a.md"},
-        )
-        event = await queue.get()
-
-        self.assertEqual(event.name, "authorization_required")
-        self.assertEqual(
-            event.data,
-            {
-                "session_id": "session-a",
-                "command_id": "cmd-1",
-                "name": "write_file",
-                "arguments": {"path": "a.md"},
-            },
-        )
-        self.hub.unsubscribe(queue)

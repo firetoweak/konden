@@ -12,7 +12,7 @@
 
 ## How to get to it (user POV)
 
-- 确认 `自动放行写文件等工具` 已开启，请模型用 `execute_command`、`wait_seconds=30` 执行 `sleep 20 && echo LATE > late.txt`；Windows 用 `Start-Sleep -Seconds 20; Set-Content late.txt LATE`。在这 20 秒前台等待期间操作，避免转后台后才点停止。
+- 请模型用 `execute_command`、`wait_seconds=30` 执行 `sleep 20 && echo LATE > late.txt`；Windows 用 `Start-Sleep -Seconds 20; Set-Content late.txt LATE`。在这 20 秒前台等待期间操作，避免转后台后才点停止。
 - 模型失败：把 `connections.json` 中当前供应商的 key 临时改错后发一条消息。
 
 ## Driving it with the browser

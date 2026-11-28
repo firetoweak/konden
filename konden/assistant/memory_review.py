@@ -110,7 +110,7 @@ def _material(events, after):
 
 class MemoryReview:
     def __init__(self, *, runtime, session_id, bot_name, llm, model, reasoning_effort,
-                 memory, bindings, gateway, authorized, interval=REVIEW_INTERVAL):
+                 memory, bindings, gateway, interval=REVIEW_INTERVAL):
         self.runtime = runtime
         self.session_id = session_id
         self.bot_name = bot_name
@@ -120,7 +120,6 @@ class MemoryReview:
         self.memory = memory
         self.bindings = {name: bindings[name] for name in (UPDATE_SHARED_MEMORY, UPDATE_PERSONAL_MEMORY)}
         self.artifacts = gateway.for_session(session_id)
-        self.authorized = authorized
         self.interval = interval
 
     async def _record(self, review_id, phase, **data):
@@ -195,9 +194,6 @@ class MemoryReview:
                                tool_results=results, **data)
 
         try:
-            if not self.authorized():
-                await finish("disabled")
-                return
             options = {} if effort is None else {"reasoning_effort": effort}
             response = await self.llm.chat(messages, model, tools=_SCHEMAS, **options)
             result_ref = self.artifacts.save(json.dumps(encode_llm_result(response), ensure_ascii=False))
@@ -216,11 +212,6 @@ class MemoryReview:
                 operation = f"memory-review:{review_id}:{index}"
                 await self._record(review_id, f"call:{index}", operation_id=operation,
                                    tool=call.name, arguments=arguments)
-                # No await between this check and the official memory handler's
-                # synchronous version-checked write. Revocation wins the race.
-                if not self.authorized():
-                    await finish("disabled")
-                    return
                 result = await self.bindings[call.name].handler(
                     AttemptContext(self.session_id, operation, operation, 1), arguments,
                 )

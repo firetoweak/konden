@@ -43,7 +43,6 @@ class DirectWorkspaceTest(unittest.IsolatedAsyncioTestCase):
             try:
                 context = AttemptContext("agent", "write", "attempt-write", 1)
                 write = assembly.bindings["write_file"]
-                self.assertIs(write.requires_authorization({"path": "note.txt"}), True)
                 result = await write.handler(context, {"path": "note.txt", "content": "direct"})
                 self.assertTrue(result["ok"])
                 self.assertEqual((workspace / "note.txt").read_text(), "direct")
@@ -52,7 +51,6 @@ class DirectWorkspaceTest(unittest.IsolatedAsyncioTestCase):
                 result = await write.handler(context, {"path": str(root / "outside.txt"), "content": "outside"})
                 self.assertFalse(result["ok"])
                 self.assertFalse((root / "outside.txt").exists())
-                self.assertIs(assembly.bindings["execute_command"].requires_authorization, True)
                 await assembly.sessions.create("agent")
                 await assembly.sessions.receive_user_message("agent", "hello", delivery_id="input")
                 await assembly.scheduler.join()

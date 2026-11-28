@@ -17,7 +17,7 @@ type Props = {
 };
 
 export type TraceStatusFilter = "all" | "failed" | "unknown";
-export const statusLabel = { passed: "已返回", failed: "失败", unknown: "结果未知", pending: "待派发", rejected: "已拒绝", not_applicable: "不适用" };
+export const statusLabel = { passed: "已返回", failed: "失败", unknown: "结果未知", pending: "待派发", not_applicable: "不适用" };
 
 export function toolMatches(entry: TraceEntry, tool: string, status: TraceStatusFilter) {
   return entry.kind !== "tool" || ((!tool || entry.title === tool) && (status === "all" || entry.status === status));

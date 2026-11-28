@@ -8,7 +8,7 @@
 - **数据模型**（`work_plan.py`，pydantic `strict`、`extra="forbid"`）：`plan` 为 `{objective: 非空字符串, steps: [{text: 非空, status: "pending"|"in_progress"|"completed"}]（至少 1 项）, note: 非空字符串|null}` 或 `null`。事项**没有 id**，只按数组位置排列。前端 `workPlanSchema` 与之一致。
 - **每次提交完整新版本**：工具描述原文（`work_plan.py` `UPDATE_PLAN_SPEC`）「为非简单、多阶段或长时间任务记录完整工作计划；简单任务无需调用。计划只保留简短目标、关键事项和必要说明，不写工作日志。每次提交完整新版本。note 写调整或阻塞说明，没有说明时显式传 null。目标变化时更新或替换计划；plan=null 表示结束当前计划，历史仍保留。」所以「增删改排序」都只是提交一份新数组，服务端不做差分。
 - **工具结果**：`{"ok": true, "code": "PLAN_UPDATED", "data": {"plan": ...}}`。参数不合法时由 `ToolsExecutor` 返回校验错误，不产生计划。
-- **计划的唯一事实来源**：`_plan_updates` 只取「已提交步骤中的 `update_plan` 命令」且 outcome `SUCCEEDED` 且 `ok: true` 的结果，按到达顺序；**最后一条即当前计划**（`project_work_plan`）。待授权、失败、被拒绝、未完成的调用不算。
+- **计划的唯一事实来源**：`_plan_updates` 只取「已提交步骤中的 `update_plan` 命令」且 outcome `SUCCEEDED` 且 `ok: true` 的结果，按到达顺序；**最后一条即当前计划**（`project_work_plan`）。失败和未完成的调用不算。
 - **没有状态迁移规则**：源码不校验 `pending→in_progress→completed` 的顺序，允许多个 `in_progress`，允许 `completed→pending` 倒退，允许直接提交全 `completed`。
 - **用户没有计划操作入口**：`更新计划` / `结束当前计划` 只是步骤标题（`stepHeading.ts`、`ExecutionProcess.tsx`：`tool.arguments.plan === null ? "结束当前计划" : "更新计划"`），不是按钮。面板唯一的交互是展开/收起（`aria-label` 为 `当前计划` 或 `已完成计划`）。
 - **界面放置**：`Conversation.tsx` 中 `activePlan` 只在当前计划存在且**未全部完成**时显示在输入框上方；全部完成的计划由 `completedPlanForTurn` 挂在产生它的那一轮下方，按钮可访问名称为 `已完成计划`。
@@ -36,7 +36,7 @@
 - **创建**：
   - (a) `work_plan.objective` 为 `验证计划`，`steps` 3 项，第 1 项 `in_progress`；`work_plan_updates` 长度 1，`step_id` 指向含该调用的步骤。
   - (b) 步骤标题 `更新计划`；输入框上方出现可访问名称为 `当前计划` 的按钮，显示目标 `验证计划`、`模型标记`、三个步骤节点与 `0/3`，第一项节点为进行中的圆点。之后的决策步骤里，当前窗口内最近一块 `<work_plan>` 是 `<work_plan>\n你当前的工作计划：\n{该版本 JSON}\n</work_plan>`。
-  - (c) 不写工作区文件；不需要授权（不出现 `待授权`）。
+  - (c) 不写工作区文件。
   - (d) 空计划：让模型传 `steps: []` → 工具返回校验错误，`work_plan` 不变（仍为上一版或 `null`）。`objective: ""`、`status: "done"`、多余字段（如 `id`）、`note` 省略（未显式传 `null`）→ 同样校验失败、计划不变。
 - **状态标记**：
   - (a) 每次更新后 `work_plan` 的状态与模型最后一次成功调用一致；`work_plan_updates` 递增。
@@ -57,7 +57,7 @@
 - **子 Agent 的计划**：让父委派一个子 Agent 并要求子也用 `update_plan`。(a) 子会话 `GET /api/sessions/<子 id>` 有自己的 `work_plan`；父的 `work_plan` 不变。(b) 子计划不出现在父的 `当前计划`；点子 Agent 调用卡打开的 `子 Agent` 页（`ContentPage` 内的 `SubagentPanel`）不渲染计划，子计划只能经子会话的 `GET` 读到。(c) 子被收回/交回后父计划不受影响。
 - **完成与归档**：模型把所有项标 `completed`。(a) `work_plan` 全为 `completed`。(b) 输入框上方面板消失；该轮下方出现可访问名称为 `已完成计划` 的按钮，显示勾选图标、目标、`模型标记` 与 `m/m`，节点全部勾选，不带 `执行已停止`。(c) 当前窗口内最近一块 `<work_plan>` 是这份全部完成的版本（全部完成的计划不会自动清除，直到模型提交 `null` 或新计划）。(d) 同一轮内先完成计划 A、再建并完成计划 B → 该轮下方只显示最后一份完成的计划（`completedPlanForTurn` 取最后一次），A 不再显示——记为观察项。
 
-- **最新要求与成果核验**：建“生成指定内容文件”的计划，随后由用户修改目标；模型更新计划并完成后，实际读取成果对照最新要求。即使事项全部勾选，文件不符也不能判任务通过；缺证据时继续验证或写明未验证范围。计划和记忆都不能扩大 [工具授权](tool-authorization.md)。
+- **最新要求与成果核验**：建“生成指定内容文件”的计划，随后由用户修改目标；模型更新计划并完成后，实际读取成果对照最新要求。即使事项全部勾选，文件不符也不能判任务通过；缺证据时继续验证或写明未验证范围。计划和记忆都不能扩大用户限定的任务范围。
 
 ## Gotchas
 

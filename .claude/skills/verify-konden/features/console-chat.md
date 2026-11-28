@@ -12,7 +12,7 @@
 - `fresh`：启动时丢弃上次运行留下的 `runtime_sessions/` 与 `state/`，保留 `config.json`、`connections.json` 与扩展登记；`--home` 已承载长期 Bot 工作目录或项目工作树时拒绝启动并提示换独立目录，包括未关联项目的 Bot，不清理其文件与会话。
 - `single-instance`：同一数据目录已有入口在运行时，第二个启动报错退出并写明占用者。
 - `send-while-running`：运行中普通输入及时接纳，不隐式打断当前任务；需要停止时使用明确停止操作。
-- `approve`：待授权或待确认时输入 `yes`/`y` 批准、`no`/`n` 拒绝（见 extensions、tool-authorization）。
+- `approve`：有控制提案待确认时输入 `yes`/`y` 批准、`no`/`n` 拒绝（见 extensions）。
 - `paste-image`：Ctrl+V（被拦截时 Alt+V）粘贴图片，删掉 `[Image #n]` 取消附件。
 - `ext-commands`：`/mcp`、`/skill`（见 extensions）。
 - `status-and-preview`：底栏显示当前 Session ID、最近输入用量、compact 阈值/次数/阶段与子 Agent 活动；普通回复支持流式预览，中止未完成的预览时显示 `[输出已中止]`。
@@ -38,7 +38,7 @@
 - **Bot 数据保护**：只用本轮隔离 Bot 的数据副本，分别覆盖未关联项目与关联项目的情况；用 `--home` 指向副本启动 TUI，应拒绝启动并提示换目录。启动前后核对 Bot 文件及会话哈希不变；不能只测仍被 Web 占用的数据目录。
 - **退出**：Ctrl+D（或 Ctrl+C）退出，打印 `已退出。`。(c) 无残留子进程。
 
-- **运行中输入与授权**：前台长命令运行时编辑并提交新消息；编辑行不被后台输出破坏，新消息及时处理，原命令不中断、不重跑，正式结果与预览不重复。控制确认优先于工具授权；明确 yes／no 处理当时全部待授权调用，其他文本仍为普通消息，不能被当作批准。当前启动提示声称输入会打断，与现行接纳规则及实际 `submit_input(interrupt=false)` 冲突，应记录提示问题。
+- **运行中输入**：前台长命令运行时编辑并提交新消息；编辑行不被后台输出破坏，新消息及时处理，原命令不中断、不重跑，正式结果与预览不重复。有控制提案待确认时，只有明确的 yes／no 回答用于处理提案，其他文本仍为普通消息。当前启动提示声称输入会打断，与现行接纳规则及实际 `submit_input(interrupt=false)` 冲突，应记录提示问题。
 
 ## Gotchas
 
@@ -46,7 +46,7 @@
 
 - 需要真 TTY（prompt_toolkit）；不能用管道喂输入。Linux 用 tmux；Windows 必须在真实控制台（Windows Terminal / ConPTY）里跑。
 - 与 Web 不同，终端缺省会用启动目录登记工作区，且每次启动都是全新会话，没有办法接回旧会话。
-- 终端会话的文件工具与命令直接作用于工作区真实目录，没有回退。启动会清空旧授权选择，工具自动放行默认开启；关闭自动放行时，写文件与命令才需 yes/no 授权，控制确认始终单独回答。子 Agent 共享父目录，可写文件和执行命令，授权归父；没有 `compare_subagent`/`merge_subagent`。
+- 终端会话的文件工具与命令直接作用于工作区真实目录，没有回退。普通文件和命令工具直接执行，控制提案由人单独确认。子 Agent 共享父目录，可写文件和执行命令；没有 `compare_subagent`/`merge_subagent`。
 - 历史验证：2026-10-12（main@1a4790a）跳过，需真 TTY。2026-10-18 按源码改写启动文案与 Windows 入口，未 live 复跑。
 
 - 2026-10-20 维护实测（`origin/main@32860f6`，Windows Chrome/ConPTY，隔离 home）：真实 Windows ConPTY 启动、/mcp list、/new、新会话 TUI_PING_OK 与 Ctrl+D 正常退出通过；证据为终端文本，无 Web 截图。底栏、粘贴、并发占用与重启清理未覆盖。

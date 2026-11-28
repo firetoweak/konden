@@ -9,24 +9,18 @@ import unittest
 
 from konden.runtime import (
     AgentRuntime,
-    CommandAuthorized,
-    CommandPhase,
-    CommandRejected,
     DeliveryIdentity,
-    DispatchAttemptStarted,
     DomainFactCommitted,
     EventDraft,
     InvokeTool,
     ModelDecision,
     RuntimeStatus,
     SqliteJournal,
-    StepCommitted,
     ToolBinding,
     UserMessageReceived,
     diagnose_artifacts,
     replay,
 )
-from konden.runtime.model import AuthorizationPolicy
 from tests.assistant.test_runner import ScriptedDecisionMaker, SequentialIds
 from tests.fixtures.memory_journal import MemoryJournal
 
@@ -34,14 +28,8 @@ NOW = datetime(2026, 8, 21, 14, 0, tzinfo=UTC)
 
 
 class RecordingTool:
-    def __init__(
-        self,
-        name: str,
-        *,
-        requires_authorization: bool | AuthorizationPolicy = False,
-    ) -> None:
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.requires_authorization = requires_authorization
         self.started = asyncio.Event()
         self.release = asyncio.Event()
         self.executions: list[Mapping[str, object]] = []
@@ -50,7 +38,6 @@ class RecordingTool:
         return {
             self.name: ToolBinding(
                 self._handler,
-                requires_authorization=self.requires_authorization,
             )
         }
 
@@ -114,82 +101,6 @@ class AgentRuntimeBoundarySliceTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNotNone(committed.step)
                 self.assertEqual(model.frames[0].observed_journal_position, current[-1].sequence)
 
-    async def test_unauthorized_command_is_not_claimed_until_granted(self):
-        tool = RecordingTool("transfer", requires_authorization=True)
-        runtime = runtime_for(tool, _requesting("transfer"))
-
-        await runtime.receive_user_message(self.SESSION_ID, "send money", delivery_id="ask-1")
-        advance = await runtime.advance(self.SESSION_ID)
-        step = advance.step
-        command_id = step.commands[0].command_id
-        state = await runtime.state(self.SESSION_ID)
-
-        self.assertTrue(step.commands[0].requires_authorization)
-        self.assertEqual(advance.status, RuntimeStatus.WAITING)
-        self.assertIsNone(state.command(command_id).dispatch_eligible_by_event_id)
-        self.assertEqual(state.status, RuntimeStatus.WAITING)
-        self.assertEqual(state.waiting_for, (f"authorization:{command_id}",))
-        self.assertFalse(tool.started.is_set())
-
-        denied = await runtime.dispatcher.start_pending(self.SESSION_ID)
-        self.assertEqual(denied.started_command_ids, ())
-        bypass = await runtime.dispatcher._journal.start_attempt(
-            EventDraft(
-                event_id="forged-attempt",
-                session_id=self.SESSION_ID,
-                payload=DispatchAttemptStarted(
-                    "forged-attempt",
-                    command_id,
-                    1,
-                    "forged-claim",
-                    "attacker",
-                ),
-                occurred_at=NOW,
-                causation_id=None,
-            )
-        )
-        self.assertIsNone(bypass)
-
-        granted = await runtime.grant_command(self.SESSION_ID, command_id)
-        self.assertIsInstance(granted.payload, CommandAuthorized)
-        await asyncio.wait_for(tool.started.wait(), timeout=1)
-        dispatched = (await runtime.state(self.SESSION_ID)).command(command_id)
-        self.assertEqual(dispatched.phase, CommandPhase.UNKNOWN)
-        self.assertEqual(len(dispatched.attempts), 1)
-        tool.release.set()
-        await _drain(runtime)
-
-    async def test_rejected_command_cannot_be_granted_or_dispatched(self):
-        tool = RecordingTool("publish", requires_authorization=True)
-        model = _requesting("publish", "request publish", "publish rejected")
-        runtime = runtime_for(tool, model)
-        await runtime.receive_user_message(self.SESSION_ID, "publish this", delivery_id="ask-1")
-        advance = await runtime.advance(self.SESSION_ID)
-        step = advance.step
-        command_id = step.commands[0].command_id
-
-        events = await runtime.snapshot(self.SESSION_ID)
-        issued_event_id = next(
-            event.event_id
-            for event in events
-            if getattr(event.payload, "step", None) == step
-        )
-        rejected = await runtime.reject_command(self.SESSION_ID, command_id)
-        self.assertIsInstance(rejected.payload, CommandRejected)
-        self.assertEqual(rejected.causation_id, issued_event_id)
-        self.assertIsNone(await runtime.grant_command(self.SESSION_ID, command_id))
-        self.assertFalse(tool.started.is_set())
-
-        state = await runtime.state(self.SESSION_ID)
-        self.assertEqual(state.status, RuntimeStatus.RUNNABLE)
-        self.assertEqual(state.next_trigger_event_id, rejected.event_id)
-        self.assertNotIn(command_id, state.waiting_command_ids)
-
-        follow_up = (await runtime.advance(self.SESSION_ID)).step
-        self.assertEqual(follow_up.trigger_event_id, rejected.event_id)
-        self.assertIsInstance(model.frames[1].trigger_event.payload, CommandRejected)
-        self.assertFalse(tool.started.is_set())
-
     async def test_decision_content_is_not_delivered_user_message(self):
         tool = RecordingTool("deliver")
         runtime = runtime_for(tool, ScriptedDecisionMaker((
@@ -240,78 +151,6 @@ class AgentRuntimeBoundarySliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(inspected_empty.missing, (digest,))
         self.assertFalse(inspected_empty.complete)
         self.assertTrue(diagnose_artifacts(events, available_refs=(digest,)).complete)
-
-    async def test_sqlite_grant_is_single_winner_and_survives_restart(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        path = Path(temporary.name) / "boundary.db"
-        first = SqliteJournal(path)
-        tool = RecordingTool("sensitive", requires_authorization=True)
-        runtime = runtime_for(tool, _requesting("sensitive"), journal=first)
-        await runtime.receive_user_message(self.SESSION_ID, "do it", delivery_id="ask-1")
-        step = (await runtime.advance(self.SESSION_ID)).step
-        command_id = step.commands[0].command_id
-        issued = (await first.snapshot(self.SESSION_ID))[-1]
-
-        def grant(event_id):
-            return EventDraft(
-                event_id=event_id,
-                session_id=self.SESSION_ID,
-                payload=CommandAuthorized(command_id),
-                occurred_at=NOW,
-            )
-
-        winners = await asyncio.gather(
-            SqliteJournal(path).grant_command(grant("grant-a")),
-            SqliteJournal(path).grant_command(grant("grant-b")),
-        )
-        self.assertEqual(sum(event is not None for event in winners), 1)
-        self.assertEqual(
-            next(event.causation_id for event in winners if event is not None),
-            issued.event_id,
-        )
-
-        reopened = SqliteJournal(path)
-        events = await reopened.snapshot(self.SESSION_ID)
-        rebuilt = replay(self.SESSION_ID, events)
-        self.assertIsNotNone(
-            rebuilt.state.command(command_id).dispatch_eligible_by_event_id
-        )
-        self.assertIsNone(await reopened.grant_command(grant("grant-c")))
-
-    async def test_authorization_reject_contract_matches_across_journals(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        journals = (
-            ("memory", MemoryJournal()),
-            ("sqlite", SqliteJournal(Path(temporary.name) / "reject.db")),
-        )
-
-        for name, journal in journals:
-            with self.subTest(journal=name):
-                tool = RecordingTool("sensitive", requires_authorization=True)
-                runtime = runtime_for(tool, _requesting("sensitive"), journal=journal)
-                await runtime.receive_user_message(
-                    self.SESSION_ID, "do it", delivery_id=f"ask-{name}"
-                )
-                step = (await runtime.advance(self.SESSION_ID)).step
-                command_id = step.commands[0].command_id
-                issued_event_id = next(
-                    event.event_id
-                    for event in await runtime.snapshot(self.SESSION_ID)
-                    if isinstance(event.payload, StepCommitted)
-                )
-
-                rejected = await runtime.reject_command(self.SESSION_ID, command_id)
-
-                self.assertEqual(rejected.causation_id, issued_event_id)
-                self.assertIsNone(
-                    await runtime.reject_command(self.SESSION_ID, command_id)
-                )
-                with self.assertRaises(KeyError):
-                    await runtime.grant_command(self.SESSION_ID, "missing")
-                with self.assertRaises(KeyError):
-                    await runtime.reject_command(self.SESSION_ID, "missing")
 
     async def test_domain_fact_requires_delivery_across_journals(self):
         temporary = tempfile.TemporaryDirectory()

@@ -156,19 +156,6 @@ def _tool_result_json(payload: Mapping[str, object]) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-def _rejection_text(tool_name: str) -> str:
-    """把拒绝投影成工具协议消息，明确是「用户拒绝」而非「工具失败」。"""
-    return _tool_result_json(
-        {
-            "ok": False,
-            "code": "COMMAND_REJECTED",
-            "data": None,
-            "error": f"用户拒绝了这次工具调用（{tool_name}）。",
-            "hint": "被拒绝的操作就是最终结果。请如实报告，不要换其他工具重试。",
-        }
-    )
-
-
 def _outstanding_text(state: CommandState, tool_name: str) -> str:
     """未终局的 Command 也要有工具协议表示，否则这一帧的 tool_calls 配不平。
 
@@ -183,10 +170,6 @@ def _outstanding_text(state: CommandState, tool_name: str) -> str:
         error = f"这次调用已经开始但没有结果，原因未知。它可能仍在运行，也可能已部分执行（{tool_name}）。"
         hint = ("你可以不等这个结果就回应用户的新消息。不要重复提交调用，也不要假定它已成功。"
                 "在基于这项未完成的工作采取行动或重试之前，先检查相关文件、外部状态和正在运行的操作。")
-    elif state.dispatch_eligible_by_event_id is None:
-        code = "AWAITING_AUTHORIZATION"
-        error = f"这次调用正在等待用户授权（{tool_name}）。"
-        hint = "该操作尚未执行。"
     else:
         code = "NOT_STARTED"
         error = f"这次调用已提交但尚未开始（{tool_name}）。"
@@ -485,9 +468,7 @@ def _project_step(step: StepState, sequences: Mapping[str, int]) -> list[_Projec
                             observed_position=step.step.observed_journal_position))
     for state, effect in shown:
         command_id = state.command.command_id
-        if state.authorization_rejected_by_event_id is not None:
-            content = _rejection_text(effect.name)
-        elif state.outcome is not None:
+        if state.outcome is not None:
             content = outcome_text(state.outcome)
         else:
             content = _outstanding_text(state, effect.name)

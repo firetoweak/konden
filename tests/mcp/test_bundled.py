@@ -109,7 +109,7 @@ class BundledBrowserTest(unittest.IsolatedAsyncioTestCase):
                 restored = provider.restore_spec(
                     toolset_id=f"mcp:{server_id}", revision=provider.descriptors()[0].revision,
                     name=discovered.spec.name, description=discovered.spec.description,
-                    parameters=discovered.spec.parameters.schema(), requires_authorization=False,
+                    parameters=discovered.spec.parameters.schema(),
                     provider_data=discovered.provider_data,
                 )
                 manager.list_tools.assert_not_awaited()

@@ -26,27 +26,7 @@ const controlApprovalSchema = z
   })
   .strict();
 
-const pendingAuthorizationSchema = z
-  .object({
-    command_id: z.string().min(1),
-    name: z.string().min(1),
-    arguments: z.record(z.string(), z.unknown()),
-  })
-  .strict();
-
-export type PendingAuthorization = z.infer<typeof pendingAuthorizationSchema>;
-
 export const inboxItemSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("authorization"),
-    command_session_id: z.string().min(1),
-    session_id: z.string().min(1),
-    workspace_id: z.string().min(1).nullable(),
-    label: z.string().min(1),
-    command_id: z.string().min(1),
-    name: z.string().min(1),
-    arguments: z.record(z.string(), z.unknown()),
-  }).strict(),
   z.object({
     kind: z.literal("control"),
     session_id: z.string().min(1),
@@ -81,13 +61,10 @@ const sessionViewSchema = z
   .object({
     status: z.string().min(1),
     waiting_for: z.array(z.string().min(1)),
-    pending_authorization_ids: z.array(z.string().min(1)),
-    pending_authorization_commands: z.array(pendingAuthorizationSchema),
     should_wake: z.boolean(),
     has_open_subagents: z.boolean(),
     control_approval: controlApprovalSchema.nullable(),
     control_message: z.string().nullable(),
-    auto_authorize: z.boolean(),
     last_error: z.string().nullable(),
   })
   .strict();
@@ -106,7 +83,7 @@ export const agentRosterEntrySchema = z
     projects: agentProjectSchema.array(),
     name: z.string().min(1),
     activity: z.enum(["running", "idle"]),
-    status: z.enum(["working", "authorization", "waiting", "idle"]),
+    status: z.enum(["working", "control", "waiting", "idle"]),
   })
   .strict();
 
@@ -306,8 +283,6 @@ export const toolStatusSchema = z.enum([
   "succeeded",
   "failed",
   "unknown",
-  "awaiting_authorization",
-  "rejected",
 ]);
 
 const toolItemSchema = z
@@ -493,15 +468,6 @@ export const toolProgressEventSchema = z
   })
   .strict();
 
-export const authorizationRequiredEventSchema = z
-  .object({
-    session_id: z.string().min(1),
-    command_id: z.string().min(1),
-    name: z.string().min(1),
-    arguments: z.record(z.string(), z.unknown()),
-  })
-  .strict();
-
 export const modelProfileSchema = z.object({
   model: z.string().min(1),
   compact_threshold_tokens: z.number().int().positive(),
@@ -515,8 +481,6 @@ export const modelConfigSchema = z.object({
   }).strict(),
 }).strict();
 
-export const autoAuthorizeSchema = z.object({ enabled: z.boolean() }).strict();
-export const autoAuthorizeChangedEventSchema = z.object({}).strict();
 
 export const modelSettingsSchema = z.object({
   config: modelConfigSchema,

@@ -7,7 +7,7 @@
 ## Sub-features
 
 - `connect`：首个事件 `connected` 带 `connection_id`；紧接着服务端补发一份当前运行态快照（运行中会话的 `session_activity`=`running`、运行中工具的 `tool_progress`=`running`、进行中的 `preview.started`/`preview.delta` 与 `thinking.started`/`thinking.delta`）；空闲时约每 15 秒有 keep-alive 注释，应用输出 `: keep-alive`，框架也可能输出 `: ping`，不把注释当业务事件。
-- `stream`：`preview.started/delta/aborted`、`thinking.started/delta/finished/aborted`、`output_final`、`tool_progress`、`authorization_required`、`session_activity`、`conversation_status`、`context_usage`、`schedule_changed`、`session_failed`、`group_changed`、`auto_authorize_changed`（正文为空对象，页面收到后重新读取全局开关）。
+- `stream`：`preview.started/delta/aborted`、`thinking.started/delta/finished/aborted`、`output_final`、`tool_progress`、`session_activity`、`conversation_status`、`context_usage`、`schedule_changed`、`session_failed`、`group_changed`。
 - `reconnect`：断线期间侧栏底部显示 `正在连接…`，输入框禁用且占位文字为 `正在连接…`；恢复后连接图标（`role="status"`）的可访问名称为 `已连接`，不常显文字。
 - `response-order`：同一会话的 GET 与操作响应交错时，正式投影保留较新的事实版本；旧连接或旧会话的选择确认不改变当前绑定。最终快照与同一输出的有序 SSE 交错，不产生重复回复或回退正文。
 - `multi-tab`：多个标签页同时连接，都能看到同一会话的更新。
@@ -21,7 +21,7 @@
 
 - **连接**：`curl -N $KONDEN_VERIFY_URL/api/events`。(b) 首事件为 `event: connected`，含 `connection_id`；空闲至少 16 秒，记录约 15 秒到达的 SSE 注释（`: keep-alive` 或 `: ping`），不固定只认一种。(a) 有会话正在运行时新连上的 curl 在 `connected` 之后立刻收到该会话的 `session_activity`（`running`）及进行中的 `preview.*`/`tool_progress` 快照。(c) 快照只描述当下，不重放历史的 `output_final`。(d) 见下方失效连接。
 - **思考与显式交付**：在长期 Bot 私聊请求它用 `send_message` 给 `user` 发一条确定的正文。(a) `output_final` 与 `GET /api/sessions/<id>` 中的已送达消息一致。(b) 模型有流式思考时核对 `thinking.*`，普通工作正文保留在执行过程。(c) 回合中刷新时进行中的思考可由快照接续，实时和 GET 同一输出只展示一次，其他会话的未读也仅增加一次。正文预览的重连场景只在支持该预览的入口检查。
-- **多标签页**：A 页发消息，B 页同会话无刷新出现同样回复；侧栏状态同步。在一页切换全局自动放行，另一页无需刷新更新开关值。
+- **多标签页**：A 页发消息，B 页同会话无刷新出现同样回复；侧栏状态同步。
   - (d) 写接口传断开前的旧 `connection_id` → 409，`detail` 为 `Web 连接已失效，请重新连接页面。`，不应 500。JSON 写接口传空 `connection_id` 会先被请求模型（`min_length=1`）拦下返回 422；另一条 409 文案 `Web 连接无效，请重新连接页面。` 只在未经该校验的入口出现（如 `POST .../attachments` 的 multipart 表单字段 `connection_id` 为空），可用它探测。
 - **断线重连**：停掉服务（或断开网络）后，(b) 侧栏底部变 `正在连接…`，输入框禁用、占位 `正在连接…`；恢复后连接图标的可访问名称变为 `已连接`，输入框可用，(a) 页面内容与 `GET /api/sessions/<id>` 一致。
 - **响应交错的页面验收**：在真实输出中刷新页面，切到另一位 Bot 或群后再返回。(a) 最终正文与 `GET` 一致，同一输出只显示一次。(b) 另一位 Bot 与群不出现原 Bot 的正文。(c) 各自草稿保留，切换不取消原执行。(d) 未在浏览器注入延迟时，不把普通切换记成故障窗口已实测；可控故障顺序使用下表的自动化入口。

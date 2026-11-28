@@ -38,9 +38,9 @@ it.each([0, 1, 2, 3, 4])("重连后最终快照插在第 %i 个流事件前，�
     work_plan_updates: [], context_input_tokens: null,
     deleted: false, agent_name: null,
     session: {
-      status: "runnable", waiting_for: [], pending_authorization_ids: [], pending_authorization_commands: [],
+      status: "runnable", waiting_for: [],
       should_wake: true, has_open_subagents: false, control_approval: null, control_message: null,
-      auto_authorize: false, last_error: null,
+ last_error: null,
     },
     items: [{ kind: "user", message_id: "user", text: "你好", images: [], files: [], occurred_at: "2026-10-23T00:00:00Z" }],
   };
@@ -142,7 +142,6 @@ it("状态立即更新，连续通知合并刷新，重连立即补齐所有待�
   dispatch.mockClear();
   emit("context_usage", { session_id: "session-2", used: 1200, compact_threshold_tokens: 200000 });
   listeners.get("group_changed")!(new MessageEvent("group_changed", { data: JSON.stringify({ group_id: "group-1" }) }));
-  listeners.get("auto_authorize_changed")!(new MessageEvent("auto_authorize_changed", { data: "{}" }));
   listeners.get("avatars_changed")!(new MessageEvent("avatars_changed", { data: "{}" }));
   listeners.get("external_sessions_changed")!(new MessageEvent("external_sessions_changed", { data: "{}" }));
   expect(dispatch).not.toHaveBeenCalled();
@@ -152,7 +151,7 @@ it("状态立即更新，连续通知合并刷新，重连立即补齐所有待�
     type: kondenApi.util.invalidateTags.type,
     payload: expect.arrayContaining([
       { type: "Conversation", id: "session-1" }, { type: "Conversation", id: "session-2" },
-      "Agents", "Inbox", "Groups", "AutoAuthorize", "Conversation", "Avatars", "ExternalSessions",
+      "Agents", "Inbox", "Groups", "Conversation", "Avatars", "ExternalSessions",
     ]),
   }));
   dispatch.mockClear();
@@ -161,7 +160,7 @@ it("状态立即更新，连续通知合并刷新，重连立即补齐所有待�
   expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
     type: kondenApi.util.invalidateTags.type,
     payload: expect.arrayContaining([
-      "Conversation", "Agents", "Groups", "Inbox", "AutoAuthorize", "Avatars", "ExternalSessions", "ExternalConnections",
+      "Conversation", "Agents", "Groups", "Inbox", "Avatars", "ExternalSessions", "ExternalConnections",
       { type: "Routines", id: "session-1" },
     ]),
   }));

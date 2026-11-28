@@ -47,9 +47,9 @@ function snapshot(id: string, revision = 1): ConversationView {
     work_plan_updates: [], context_input_tokens: null,
     deleted: false, agent_name: null,
     session: {
-      status: "waiting", waiting_for: ["external_fact"], pending_authorization_ids: [],
-      pending_authorization_commands: [], should_wake: false, has_open_subagents: false,
-      control_approval: null, control_message: null, auto_authorize: false, last_error: null,
+      status: "waiting", waiting_for: ["external_fact"],
+ should_wake: false, has_open_subagents: false,
+      control_approval: null, control_message: null, last_error: null,
     },
     items: [{
       kind: "user", message_id: `user-${id}`, text: `来自 ${id} 的消息`,
@@ -368,39 +368,6 @@ it.each(["success", "failure"])("切换群后，旧群请求%s不覆盖新群的
   expect(screen.queryByText("这个群不存在或已无法读取。")).not.toBeInTheDocument();
 });
 
-
-it("父 Bot 展示子命令授权，批准绑定具体子调用并保留父对话", async () => {
-  const store = createStore();
-  stores.push(store);
-  store.dispatch(connected("connection"));
-  const parent = snapshot("Ada");
-  const child = "Ada/sub-delegate";
-  let pending = true;
-  const decisions: { path: string; body: unknown }[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
-    const path = new URL(request.url).pathname;
-    if (path.endsWith("/authorize")) {
-      decisions.push({ path, body: await request.json() });
-      pending = false;
-      return Response.json(parent);
-    }
-    if (path.endsWith("/inbox")) return Response.json(pending ? [{ kind: "authorization", session_id: "Ada",
-      command_session_id: child, workspace_id: null, label: "子 Agent · 执行验证", command_id: "child-command",
-      name: "execute_command", arguments: { command: "python verify.py" } }] : []);
-    return Response.json(path.endsWith("/agents") || path.endsWith("/workspaces") ? [] : parent);
-  }));
-  render(<Provider store={store}><MantineProvider env="test"><MemoryRouter initialEntries={["/sessions/Ada"]}>
-    <Routes><Route path="/sessions/:sessionId" element={<Conversation agentName="Ada" />} /></Routes>
-  </MemoryRouter></MantineProvider></Provider>);
-  expect(await screen.findByText("子 Agent · 执行验证 · 1 项")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "查看 execute_command 的参数" }));
-  expect(await screen.findByText(/python verify.py/, { selector: ".pre-wrap" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "允许 execute_command" }));
-  await waitFor(() => expect(decisions).toEqual([{ path: "/api/sessions/Ada/commands/child-command/authorize",
-    body: { connection_id: "connection", approved: true, command_session_id: child } }]));
-  await waitFor(() => expect(screen.queryByRole("button", { name: "允许 execute_command" })).not.toBeInTheDocument());
-  expect(screen.getByText("来自 Ada 的消息")).toBeInTheDocument();
-});
 
 it("慢请求下立即显示发送中与思考中，确认后更新为同一条消息不重复", async () => {
   const store = createStore();

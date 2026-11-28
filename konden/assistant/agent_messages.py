@@ -146,7 +146,7 @@ MESSAGE_SCHEMAS = [
             "同事挂上的项目在其工作目录的 projects 下，以项目名为子目录。"
             "可以用文件工具只读查看同事工作目录，包括项目里尚未落地的改动，不能在其中写入。"
             "每位同事还带 status 与 since。status 是当前状态：working 正在工作；"
-            "awaiting_authorization 有操作在等人授权，授权前不会继续；"
+            "awaiting_confirmation 有控制提案在等人确认；"
             "idle 当前没在工作。"
             "since 是它最近一次活动的时间（本地时区，到分钟），非 working 状态大致从这时开始；"
             "是否卡住、要不要改派由你判断。"

@@ -137,14 +137,15 @@ def test_model_trace_shows_content_and_complete_tool_calls(tmp_path, recorded):
             refs = (artifact.artifact_id,)
 
         async def read_file(_context, _arguments):
-            raise AssertionError("Trace lookup must not execute the tool")
+            return {"ok": True}
 
         decision = ModelDecision("核对当前配置。", (InvokeTool("read_file", (("path", "approved.json"),)),))
         runtime = AgentRuntime(store.journal(session_id), ScriptedDecisionMaker((
             lambda _: RecordedDecision(decision, refs),
-        )), {"read_file": ToolBinding(read_file, requires_authorization=True)}, SequentialIds())
+        )), {"read_file": ToolBinding(read_file)}, SequentialIds())
         await runtime.receive_user_message(session_id, "检查配置", delivery_id="message")
         await runtime.advance(session_id)
+        await runtime.dispatcher.close()
         trace = ExecutionTraceQueries(store)
         index = await trace.index(session_id, [])
         node = next(entry for entry in index["entries"] if entry["kind"] == "model")

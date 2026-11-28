@@ -33,7 +33,7 @@ from konden.assistant.external_messages import (
 from konden.assistant.file_attachments import FileAttachment, is_file_attachment_id
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.rest import REST
-from konden.assistant.runner import SessionNotFoundError, pending_authorization_ids
+from konden.assistant.runner import SessionNotFoundError
 from konden.assistant.sessions import SessionView, session_view
 from konden.assistant.subagent.subagent import (
     RETURN_FACT,
@@ -66,11 +66,9 @@ ToolStatus = Literal[
     "succeeded",
     "failed",
     "unknown",
-    "awaiting_authorization",
-    "rejected",
 ]
 SessionActivity = Literal["running", "idle"]
-AgentStatus = Literal["working", "authorization", "waiting", "idle"]
+AgentStatus = Literal["working", "control", "waiting", "idle"]
 UNKNOWN_TOOL_ERROR = "执行已开始，但未取得最终结果，原因未知，可能已部分执行"
 
 
@@ -88,18 +86,6 @@ class AgentRosterEntry:
     name: str
     activity: SessionActivity
     status: AgentStatus
-
-
-@dataclass(frozen=True, slots=True)
-class AuthorizationInboxItem:
-    kind: Literal["authorization"]
-    session_id: str
-    workspace_id: str | None
-    label: str
-    command_id: str
-    name: str
-    arguments: dict[str, object]
-    command_session_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +122,7 @@ class AbsenceInboxItem:
     summary: str
 
 
-InboxItem = AuthorizationInboxItem | ControlInboxItem | LimitInboxItem | AbsenceInboxItem
+InboxItem = ControlInboxItem | LimitInboxItem | AbsenceInboxItem
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,22 +248,6 @@ class AssistantQueries:
             await self._conversation(child_id, child_events, child_state),
         )
 
-    async def _child_authorizations(self, parent_id, events):
-        items = []
-        pending = project_pending(events)
-        for intent in project_delegate_intents(events):
-            if intent.child_session_id not in pending or not self._store.path(intent.child_session_id).is_file():
-                continue
-            child_events, child_state = await self._store.projected(intent.child_session_id)
-            if any(isinstance(event.payload, DomainFactCommitted) and event.payload.fact_type == RETURN_FACT for event in child_events):
-                continue
-            view = session_view(child_state, auto_authorize=self._sessions.auto_authorize())
-            items.extend(replace(item, session_id=parent_id) for item in project_inbox_items(
-                session_id=intent.child_session_id, workspace_id=None, label=f"子 Agent · {intent.task}",
-                authorizations=view.pending_authorization_commands, control=None,
-            ))
-        return tuple(items)
-
     async def list_agents(self) -> tuple[AgentRosterEntry, ...]:
         entries: list[AgentRosterEntry] = []
         for record in await self._sessions.agents.list():
@@ -289,10 +259,7 @@ class AssistantQueries:
                 name=record.name,
                 activity=self._sessions.activity(record.session_id),
                 last_error=self._sessions.current_failure(record.session_id),
-                auto_authorize=self._sessions.auto_authorize(),
             )
-            if entry.status != "working" and await self._child_authorizations(record.session_id, events):
-                entry = replace(entry, status="authorization")
             entries.append(entry)
         return tuple(entries)
 
@@ -301,37 +268,30 @@ class AssistantQueries:
         agent = project_agent(events)
         if agent is None:
             raise SessionNotFoundError(session_id)
-        entry = project_agent_roster_entry(
+        return project_agent_roster_entry(
             session_id,
             events,
             state,
             name=agent.name,
             activity=self._sessions.activity(session_id),
             last_error=self._sessions.current_failure(session_id),
-            auto_authorize=self._sessions.auto_authorize(),
         )
-        if entry.status != "working" and await self._child_authorizations(session_id, events):
-            entry = replace(entry, status="authorization")
-        return entry
 
     async def list_inbox(self) -> tuple[InboxItem, ...]:
         items: list[InboxItem] = []
         watches = {item.session_id: item for item in self._sessions.absence_watches()}
         for record in await self._sessions.agents.list():
             session_id = record.session_id
-            events, state = await self._store.projected(session_id)
+            events = await self._store.journal(session_id).snapshot(session_id)
             agent = project_agent(events)
             if agent is None or agent.deleted:
                 continue
-            view = session_view(state, control_approval=pending_approval_view(events),
-                                auto_authorize=self._sessions.auto_authorize())
-            if view.pending_authorization_commands or view.control_approval is not None:
-                items.extend(project_inbox_items(
-                    session_id=session_id, workspace_id=None, label=agent.name,
-                    authorizations=view.pending_authorization_commands,
-                    control=view.control_approval,
+            control = pending_approval_view(events)
+            if control is not None:
+                items.append(ControlInboxItem(
+                    "control", session_id, None, agent.name,
+                    control.request_id, control.summary, control.risk,
                 ))
-            items.extend(await self._child_authorizations(session_id, events))
             items.extend(project_limit_items(
                 session_id=session_id, workspace_id=None, label=agent.name, events=events,
             ))
@@ -383,7 +343,6 @@ class AssistantQueries:
                 has_open_subagents=still_open,
                 control_approval=pending_approval_view(events),
                 control_message=project_control_message(events),
-                auto_authorize=self._sessions.auto_authorize(),
                 last_error=self._sessions.current_failure(session_id),
             )
         else:
@@ -437,16 +396,15 @@ class AssistantQueries:
 def project_agent_status(
     *,
     activity: SessionActivity,
-    pending_authorization: bool,
     control_approval: bool,
     waiting_for: tuple[str, ...],
     last_error: str | None,
 ) -> AgentStatus:
-    """名册状态只归约 Worker、授权和等待这些已经存在的事实。"""
+    """名册状态只归约 Worker、控制提案和等待这些已经存在的事实。"""
     if activity == "running":
         return "working"
-    if pending_authorization or control_approval:
-        return "authorization"
+    if control_approval:
+        return "control"
     if last_error is not None or waiting_for == ("external_fact",):
         return "waiting"
     return "idle"
@@ -460,7 +418,6 @@ def project_agent_roster_entry(
     name: str,
     activity: SessionActivity,
     last_error: str | None,
-    auto_authorize: bool,
 ) -> AgentRosterEntry:
     agent = project_agent(events)
     return AgentRosterEntry(
@@ -470,36 +427,11 @@ def project_agent_roster_entry(
         activity=activity,
         status=project_agent_status(
             activity=activity,
-            pending_authorization=not auto_authorize and bool(pending_authorization_ids(state)),
             control_approval=pending_approval_view(events) is not None,
             waiting_for=state.waiting_for,
             last_error=last_error,
         ),
     )
-
-
-def project_inbox_items(
-    *,
-    session_id: str,
-    workspace_id: str | None,
-    label: str,
-    authorizations,
-    control,
-) -> tuple[InboxItem, ...]:
-    """收件箱只搬出已经待人决定的命令授权和控制提案。"""
-    items: list[InboxItem] = [
-        AuthorizationInboxItem(
-            "authorization", session_id, workspace_id, label,
-            item.command_id, item.name, dict(item.arguments), session_id,
-        )
-        for item in authorizations
-    ]
-    if control is not None:
-        items.append(ControlInboxItem(
-            "control", session_id, workspace_id, label,
-            control.request_id, control.summary, control.risk,
-        ))
-    return tuple(items)
 
 
 def project_limit_items(*, session_id: str, workspace_id: str | None, label: str, events) -> tuple[LimitInboxItem, ...]:
@@ -523,9 +455,7 @@ def project_limit_items(*, session_id: str, workspace_id: str | None, label: str
 
 
 def _inbox_sort_key(item: InboxItem) -> tuple:
-    if item.kind == "authorization":
-        identity = item.command_id
-    elif item.kind == "control":
+    if item.kind == "control":
         identity = item.request_id
     elif item.kind == "limit":
         identity = item.event_id
@@ -674,7 +604,7 @@ def project_conversation(
             if effect.name == SEND_FILE:
                 if not _file_sent(command_state):
                     # A rejected or unfinished call reached nobody; it stays a tool record.
-                    status, error = _tool_status(command_state, auto_authorize=session.auto_authorize)
+                    status, error = _tool_status(command_state)
                     tools.append(ToolItem(command_state.command.command_id, effect.name, status, error,
                                           effect.argument_dict()))
                     continue
@@ -687,7 +617,7 @@ def project_conversation(
                 delivery = _a2a_delivery(command_state, attachments, payload.step.step_id, event.occurred_at)
                 if delivery is not None:
                     messages.append(delivery)
-            status, error = _tool_status(command_state, auto_authorize=session.auto_authorize)
+            status, error = _tool_status(command_state)
             tools.append(
                 ToolItem(
                     command_state.command.command_id,
@@ -754,12 +684,8 @@ def _file_sent(state: CommandState) -> bool:
             and thaw_value(outcome.value).get("code") == "FILE_SENT")
 
 
-def _tool_status(
-    state: CommandState,
-    *,
-    auto_authorize: bool,
-) -> tuple[ToolStatus, str | None]:
-    """自动放行中的调用展示为排队；running 由 Channel 按 command_id 叠加。"""
+def _tool_status(state: CommandState) -> tuple[ToolStatus, str | None]:
+    """running 由 Channel 按 command_id 叠加。"""
 
     outcome = state.outcome
     if outcome is not None:
@@ -769,10 +695,6 @@ def _tool_status(
                 return ("unknown", indeterminate)
             return ("succeeded", None)
         return ("failed", outcome.error_message)
-    if state.authorization_rejected_by_event_id is not None:
-        return ("rejected", None)
     if state.phase is CommandPhase.UNKNOWN:
         return ("unknown", UNKNOWN_TOOL_ERROR)
-    if state.dispatch_eligible_by_event_id is None and not auto_authorize:
-        return ("awaiting_authorization", None)
     return ("queued", None)

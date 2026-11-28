@@ -98,14 +98,14 @@ class SubagentObservationTest(unittest.IsolatedAsyncioTestCase):
                 return "派出"
             parent = AgentRuntime(SqliteJournal(store.require("parent")), ScriptedDecisionMaker((
                 lambda _: ModelDecision(command_requests=(InvokeTool(DELEGATE, (("task", "调查问题"),)),)),
-            )), {DELEGATE: ToolBinding(delegate, requires_authorization=True)})
+            )), {DELEGATE: ToolBinding(delegate)})
             await parent.receive_user_message("parent", "调查", delivery_id="user")
             advance = await parent.advance("parent")
             command_id = advance.step.commands[0].command_id
             child_id = child_session_id("parent", command_id)
             # 查询端口没有 select / wake / request，观察必须只读。
             host = SimpleNamespace(
-                activity=lambda _: "idle", auto_authorize=lambda: False,
+                activity=lambda _: "idle",
                 current_failure=lambda _: None,
                 conversation_status=lambda _: SimpleNamespace(compact_count=0, compact_phase=None),
                 next_scheduled_check=lambda _: None,

@@ -8,11 +8,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { kondenApi } from "../src/api/kondenApi";
 import type { ConversationView } from "../src/api/contracts";
 import { Conversation } from "../src/features/conversation/Conversation";
-import runtimeReducer, { connected, disconnected } from "../src/realtime/runtimeSlice";
+import runtimeReducer, { connected } from "../src/realtime/runtimeSlice";
 import type { ComponentProps } from "react";
 import type { ConversationTimeline } from "../src/features/conversation/ConversationTimeline";
 
-// Rendering Markdown and editing drafts are outside the authorization contract.
+// Rendering Markdown and editing drafts are outside the recovery contract.
 vi.mock("../src/features/conversation/MarkdownMessage", () => ({
   MarkdownMessage: ({ content }: { content: string }) => <span>{content}</span>,
 }));
@@ -45,73 +45,6 @@ function prepareBrowser() {
   });
 }
 
-it("submits a recovered pending command with the new connection without an authorization SSE event", async () => {
-  prepareBrowser();
-  const commandId = "command-write";
-  const view: ConversationView = {
-    session_id: "session", workspace_id: "workspace", revision: 4,
-    compact_count: 0, compact_phase: null, waiting_until: null, work_plan: null, work_plan_updates: [], context_input_tokens: null,
-    deleted: false, agent_name: null,
-    session: {
-      status: "waiting", waiting_for: [`authorization:${commandId}`],
-      pending_authorization_ids: [commandId],
-      pending_authorization_commands: [{ command_id: commandId, name: "write_file", arguments: { path: "probe.md" } }],
-      should_wake: false, has_open_subagents: false, control_approval: null,
-      control_message: null, auto_authorize: false, last_error: null,
-    },
-    items: [
-      { kind: "user", message_id: "user", text: "write probe", occurred_at: "2026-09-22T00:00:00Z", images: [], files: [] },
-      { kind: "step", step_id: "step", output_id: "user", text: null, thinking: null,
-        occurred_at: "2026-09-22T00:00:01Z", tools: [{ command_id: commandId,
-          name: "write_file", status: "awaiting_authorization", error: null, arguments: { path: "probe.md" } }] },
-    ],
-  };
-  const submissions: unknown[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
-    const path = new URL(request.url).pathname;
-    if (path.endsWith("/authorize")) {
-      submissions.push(await request.json());
-      view.revision += 1;
-      view.session.pending_authorization_ids = [];
-      view.session.pending_authorization_commands = [];
-      view.session.waiting_for = ["external_fact"];
-      const step = view.items[1];
-      if (step.kind === "step") step.tools[0].status = "rejected";
-    }
-    return Response.json(view);
-  }));
-  const store = configureStore({
-    reducer: { runtime: runtimeReducer, [kondenApi.reducerPath]: kondenApi.reducer },
-    middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(kondenApi.middleware),
-  });
-  store.dispatch(connected("old-connection"));
-  render(
-    <Provider store={store}><MantineProvider>
-      <MemoryRouter initialEntries={["/sessions/session"]}>
-        <Routes><Route path="/sessions/:sessionId" element={<Conversation />} /></Routes>
-      </MemoryRouter>
-    </MantineProvider></Provider>,
-  );
-  const process = await screen.findByRole("button", { name: /执行过程/ });
-  expect(process).toHaveAttribute("aria-expanded", "false");
-  fireEvent.click(process);
-  await screen.findByRole("button", { name: "拒绝" });
-  await waitFor(() => expect(store.getState().runtime.ownerSessionId).toBe("session"));
-  act(() => { store.dispatch(disconnected()); });
-  expect(screen.getByRole("button", { name: "拒绝" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "允许" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
-  expect(submissions).toEqual([]);
-  expect(view.session.pending_authorization_ids).toEqual([commandId]);
-  act(() => { store.dispatch(connected("new-connection")); });
-  await waitFor(() => expect(store.getState().runtime.ownerSessionId).toBe("session"));
-  fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
-  await waitFor(() => expect(submissions).toEqual([{ connection_id: "new-connection", approved: false }]));
-  await waitFor(() => expect(screen.queryByRole("button", { name: "拒绝" })).toBeNull());
-  cleanup();
-  store.dispatch(kondenApi.util.resetApiState());
-});
-
 it("recovers a model failure from the conversation after refresh and retries without submitting a message", async () => {
   prepareBrowser();
   const view: ConversationView = {
@@ -119,9 +52,9 @@ it("recovers a model failure from the conversation after refresh and retries wit
     compact_count: 0, compact_phase: null, waiting_until: null, work_plan: null, work_plan_updates: [], context_input_tokens: null,
     deleted: false, agent_name: null,
     session: {
-      status: "runnable", waiting_for: [], pending_authorization_ids: [], pending_authorization_commands: [],
+      status: "runnable", waiting_for: [],
       should_wake: true, has_open_subagents: false, control_approval: null, control_message: null,
-      auto_authorize: false, last_error: "供应商暂时不可用，请稍后再试。",
+ last_error: "供应商暂时不可用，请稍后再试。",
     },
     items: [{ kind: "user", message_id: "user", text: "原始请求", occurred_at: "2026-10-12T00:00:00Z", images: [], files: [] }],
   };
@@ -179,9 +112,9 @@ it("关闭操作结果只影响当前提示，同文案的新结果仍可关闭"
     compact_count: 0, compact_phase: null, waiting_until: null, work_plan: null, work_plan_updates: [], context_input_tokens: null,
     deleted: false, agent_name: null,
     session: {
-      status: "waiting", waiting_for: ["external_fact"], pending_authorization_ids: [], pending_authorization_commands: [],
+      status: "waiting", waiting_for: ["external_fact"],
       should_wake: false, has_open_subagents: false, control_approval: null, control_message: message,
-      auto_authorize: false, last_error: null,
+ last_error: null,
     },
     items: [{ kind: "user", message_id: "user", text: "安装 Skill", occurred_at: "2026-10-12T00:00:00Z", images: [], files: [] }],
   };

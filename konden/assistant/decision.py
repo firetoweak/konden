@@ -55,7 +55,6 @@ from konden.runtime import (
 )
 from konden.runtime.dispatcher import AttemptContext
 from konden.runtime.model import (
-    AuthorizationPolicy,
     argument_rejection,
     rejected_tool_arguments,
 )
@@ -74,7 +73,6 @@ class ToolRunner(Protocol):
         arguments: Mapping[str, object],
     ) -> object: ...
 
-    def requires_authorization(self, name: str) -> bool | AuthorizationPolicy: ...
 
 
 def _invoke_requests(
@@ -163,7 +161,6 @@ def bind_executor_tools(
     for name in runner.names():
         bindings[name] = ToolBinding(
             _executor_handler(runner, name, gateway, settings),
-            requires_authorization=runner.requires_authorization(name),
         )
     return bindings
 
@@ -190,7 +187,6 @@ def with_command_interrupts(
     return ToolBinding(
         handler,
         decision_on_outcome=binding.decision_on_outcome,
-        requires_authorization=binding.requires_authorization,
     )
 
 

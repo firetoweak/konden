@@ -149,7 +149,6 @@ async def build_assistant_assembly(
     context_usage_sink: Callable[[str, int, int], None] | None = None,
     subagent_activity_sink: Callable[[str, bool], None] | None = None,
     tool_progress_sink=None,
-    authorization_required_sink=None,
     preview_sink=None,
     thinking_sink=None,
     subagent_output_sink=None,
@@ -432,14 +431,11 @@ async def build_assistant_assembly(
 
     scheduler.before_advance = before_advance
 
-    scheduler.auto_authorize = sessions.is_auto_authorized
-    scheduler.authorization_required = authorization_required_sink
     if memory is not None and task is None and not compact_context.is_reader:
         review = MemoryReview(
             runtime=runtime, session_id=session_id, bot_name=agent.name, llm=config.llm,
             model=lambda: decision.model, reasoning_effort=lambda: decision.reasoning_effort,
             memory=memory, bindings=memory_tools, gateway=gateway,
-            authorized=lambda: sessions.is_auto_authorized(session_id),
         )
         await review.initialize()
         scheduler.background_work = review.run_if_due
@@ -486,6 +482,5 @@ def _with_tool_progress(bindings, sink):
         projected[name] = ToolBinding(
             handler,
             decision_on_outcome=binding.decision_on_outcome,
-            requires_authorization=binding.requires_authorization,
         )
     return projected

@@ -228,7 +228,7 @@ class QuiescentDespiteUnreportedChildTest(unittest.IsolatedAsyncioTestCase):
                             InvokeTool(DELEGATE, (("task", "调查问题"),)),
                         )),
                     )),
-                    {DELEGATE: ToolBinding(delegate, requires_authorization=True)},
+                    {DELEGATE: ToolBinding(delegate)},
                 )
                 await runtime.receive_user_message("parent", "调查", delivery_id="user")
                 advance = await runtime.advance("parent")

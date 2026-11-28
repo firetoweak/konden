@@ -11,7 +11,6 @@ from konden.assistant.workspaces import bound_directory
 from konden.runtime import (
     AttemptOrphaned,
     CommandOutcomeReceived,
-    CommandRejected,
     DomainFactCommitted,
     replay,
 )
@@ -415,7 +414,7 @@ def message_origin(events, command_id: str) -> str:
     triggers = {item.committed_event_id: item.step.trigger_event_id for item in state.steps}
     by_id = {event.event_id: event for event in events}
     trigger = by_id[triggers[issued[command_id]]]
-    while isinstance(trigger.payload, (CommandOutcomeReceived, CommandRejected, AttemptOrphaned)):
+    while isinstance(trigger.payload, (CommandOutcomeReceived, AttemptOrphaned)):
         trigger = by_id[triggers[issued[trigger.payload.command_id]]]
     payload = trigger.payload
     if isinstance(payload, DomainFactCommitted) and payload.fact_type == PRIVATE_MESSAGE:

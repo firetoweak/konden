@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 from uuid import uuid4
@@ -9,9 +9,7 @@ from uuid import uuid4
 from konden.runtime.events import Event, EventDraft, StepCommitted
 from konden.runtime.journal.api import Journal, StepLease
 from konden.runtime.model import (
-    AuthorizationPolicy,
     Command,
-    InvokeTool,
     ModelDecision,
     Step,
     argument_rejection,
@@ -58,16 +56,12 @@ class StepRunner:
         projector: StateProjector,
         decision_maker: DecisionMaker,
         id_factory: IdFactory = random_id,
-        requires_authorization: Mapping[str, bool | AuthorizationPolicy] | None = None,
         decision_on_outcome: Mapping[str, bool] | None = None,
         ends_step: set[str] | None = None,
     ) -> None:
         self._journal = journal
         self._projector = projector
         self._decision_maker = decision_maker
-        self._requires_authorization = dict(
-            {} if requires_authorization is None else requires_authorization
-        )
         self._decision_on_outcome = dict(
             {} if decision_on_outcome is None else decision_on_outcome
         )
@@ -79,11 +73,9 @@ class StepRunner:
         name: str,
         *,
         decision_on_outcome: bool,
-        requires_authorization: bool | AuthorizationPolicy = False,
         ends_step: bool = False,
     ) -> None:
         self._decision_on_outcome[name] = decision_on_outcome
-        self._requires_authorization[name] = requires_authorization
         if ends_step:
             self._ends_step.add(name)
         else:
@@ -110,28 +102,13 @@ class StepRunner:
         )
         for request in decision.command_requests:
             command_id = self._id_factory("command")
-            if argument_rejection(request) is not None:
-                # 参数没有形成，没有可授权的副作用；结果必须回到模型。
-                requires_authorization = False
-                decision_on_outcome = True
-            else:
-                policy = self._requires_authorization[request.name]
-                verdict = (
-                    policy(request.argument_dict()) if callable(policy) else policy
-                )
-                decision_on_outcome = self._decision_on_outcome[request.name] and not ends_step
-                if type(verdict) is bool:
-                    requires_authorization = verdict
-                else:
-                    request = InvokeTool(request.name, verdict)
-                    if argument_rejection(request) is None:
-                        raise ValueError("authorization policy must return bool or rejected arguments")
-                    requires_authorization = False
-                    decision_on_outcome = True
+            decision_on_outcome = (
+                argument_rejection(request) is not None
+                or (self._decision_on_outcome[request.name] and not ends_step)
+            )
             command = Command(
                 command_id=command_id,
                 effect=request,
-                requires_authorization=requires_authorization,
                 decision_on_outcome=decision_on_outcome,
             )
             commands.append(command)
@@ -142,7 +119,7 @@ class StepRunner:
             decision_cursor=frame.decision_cursor,
             basis_state_version=frame.basis_state_version,
             observed_journal_position=frame.observed_journal_position,
-            decision=replace(decision, command_requests=tuple(command.effect for command in commands)),
+            decision=decision,
             commands=command_tuple,
         )
         return await self._journal.commit_step(

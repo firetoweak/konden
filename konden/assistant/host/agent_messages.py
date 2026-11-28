@@ -24,7 +24,7 @@ from konden.runtime import DomainFactCommitted, SqliteJournal
 
 # The Web roster tells "waiting for the person" apart from idle; to a colleague both
 # mean the same thing: not working now, and a message reaches it.
-COLLEAGUE_STATUS = {"working": "working", "authorization": "awaiting_authorization",
+COLLEAGUE_STATUS = {"working": "working", "control": "awaiting_confirmation",
                     "waiting": "idle", "idle": "idle"}
 
 
@@ -104,7 +104,7 @@ class AgentMessages:
             agent.session_id, events, state, name=agent.name,
             activity=self.host.activity(agent.session_id),
             last_error=self.host.current_failure(agent.session_id),
-            auto_authorize=self.host.auto_authorize()).status]
+        ).status]
         return {"name": agent.name, "directory": str(agent.directory),
                 "projects": [item.name for item in agent.projects],
                 "status": status, "since": events[-1].occurred_at.astimezone().isoformat(timespec="minutes")}

@@ -74,7 +74,7 @@
 }
 .trace-mark.model { --mark-color: var(--trace-model); }
 .trace-mark.compact { --mark-color: var(--trace-compact); }
-.trace-mark.failed, .trace-mark.rejected { --mark-color: var(--trace-failed); }
+.trace-mark.failed { --mark-color: var(--trace-failed); }
 .trace-mark.unknown, .trace-mark.pending, .trace-mark.not_applicable { --mark-color: var(--trace-unknown); }
 .trace-mark::before { content: ""; height: min(8px, 79%); width: 100%; background: var(--mark-color); }
 .trace-mark.model::before { height: 11px; background: linear-gradient(to top, var(--trace-miss) var(--miss), var(--mark-color) var(--miss)); }
@@ -156,7 +156,7 @@
   --status-color: var(--trace-tool); padding: 0 4px; border-radius: 3px; color: var(--status-color);
   background: color-mix(in srgb, var(--status-color) 16%, transparent); font-size: 11px; white-space: nowrap;
 }
-.trace-status-chip.failed, .trace-status-chip.rejected { --status-color: var(--trace-failed); }
+.trace-status-chip.failed { --status-color: var(--trace-failed); }
 .trace-status-chip.unknown, .trace-status-chip.pending, .trace-status-chip.not_applicable { --status-color: var(--trace-unknown); }
 .trace-detail-pane { padding-left: 5px; }
 .trace-detail-pane .trace-pane-heading { justify-content: space-between; }

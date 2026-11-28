@@ -253,12 +253,6 @@ const runtimeSlice = createSlice({
         status: "running",
       };
     },
-    authorizationRequired(state, action: PayloadAction<{ sessionId: string }>) {
-      const { sessionId } = action.payload;
-      if (state.viewingSessionId !== sessionId) {
-        runtimeOf(state, sessionId).unread += 1;
-      }
-    },
     conversationStatus(
       state,
       action: PayloadAction<{
@@ -394,7 +388,6 @@ export const {
   thinkingClosed,
   outputFinal,
   toolProgress,
-  authorizationRequired,
   conversationStatus,
   outgoingQueued,
   outgoingConfirmed,

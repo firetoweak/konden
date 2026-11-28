@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-import json
 from pathlib import Path
 
 from konden.assistant.tool_results import runtime_tool_result
@@ -18,7 +17,6 @@ from konden.filesystem.workspace import (
     WorkspaceScope,
     WorkspaceViewSnapshot,
 )
-from konden.runtime.model import AuthorizationPolicy, rejected_tool_arguments
 from konden.tools.builtin import (
     CommandInterrupts,
     command_result,
@@ -56,25 +54,6 @@ class BuiltinToolRunner:
         if len(names) != len(set(names)):
             raise ValueError("builtin tool schemas 包含重复 name")
         return tuple(names)
-
-    def requires_authorization(self, name: str) -> bool | AuthorizationPolicy:
-        spec = self._executor.registry.get(name)
-        if spec is None:
-            raise KeyError(name)
-        policy = spec.requires_authorization
-        if not callable(policy):
-            return policy
-
-        def verdict(arguments):
-            result = policy(arguments)
-            if type(result) is bool:
-                return result
-            return rejected_tool_arguments(
-                json.dumps(dict(arguments), ensure_ascii=False),
-                code=result["code"], error=result["error"], hint=result["hint"],
-            )
-        return verdict
-
 
 def bind_files(
     workspace: WorkspaceRecord | FileWorkspace,

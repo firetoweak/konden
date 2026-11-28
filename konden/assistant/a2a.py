@@ -74,15 +74,14 @@ class A2AToolset:
                        "通过 A2A 把用户交办的任务交给 Codex。可沿用已关联的会话，也可为本次任务开启新会话。"
                        "报告、附件和用于打开原生 Codex 会话的链接会显示在当前对话。"
                        "若结果未确认，先告诉用户，避免重复派单。",
-                       CodexWork.model_json_schema(), partial(self._call, A2A_DELEGATE),
-                       requires_authorization=True),
+                       CodexWork.model_json_schema(), partial(self._call, A2A_DELEGATE)),
         )
 
     def restore(self, toolset_id, revision, tools):
         if revision != A2A_TOOLSET.revision:
             return ()
         return tuple(LoadedTool(tool.name, tool.description, dict(tool.parameters), partial(self._call, tool.name),
-                                tool.requires_authorization, tool.provider_data) for tool in tools)
+                                tool.provider_data) for tool in tools)
 
     async def _call(self, operation, arguments):
         if operation == A2A_DELEGATE:

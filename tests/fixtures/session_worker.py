@@ -225,10 +225,10 @@ def failing_request_config(workspace: Path):
     async def assembly(*args, **kwargs):
         result = await build(*args, **kwargs)
 
-        async def fail(session_id, **kwargs):
+        async def fail(session_id, request_id, **kwargs):
             raise RuntimeError("application request failed")
 
-        result.sessions.resolve_authorizations = fail
+        result.sessions.resolve_control = fail
         return result
 
     worker.build_assistant_assembly = assembly
