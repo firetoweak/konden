@@ -56,6 +56,8 @@ class ChatGPTAuthorization:
 
     async def start(self, begin: Callable[[str], ChatGPTSignIn], port: int) -> dict[str, str]:
         self._expire()
+        if isinstance(self._attempt, _Pending) and not self._attempt.exchanging:
+            return {"authorization_id": self._attempt.id}
         if self._starting or isinstance(self._attempt, _Pending):
             raise HTTPException(409, "已有一次 ChatGPT 授权正在进行，请先完成该次授权。")
         self._starting = True

@@ -50,7 +50,8 @@ def test_local_authorization_commits_before_reporting_connected(browser, monkeyp
     client, body, auth_path = browser
     path, query = _begin(client, body)
     assert client.get(path).json() == {"state": "waiting"}
-    assert client.post(_ENDPOINT, json=body, headers={"Origin": _ORIGIN}).status_code == 409
+    reopened_path, reopened_query = _begin(client, body)
+    assert (reopened_path, reopened_query) == (path, query)
     callback = {"state": query["state"][0], "client_id": "oaiapp_test", "code": "test-authorization-code"}
     assert client.get("/auth/callback", params={**callback, "state": "wrong"}).status_code == 400
     assert client.get(path).json() == {"state": "waiting"}
