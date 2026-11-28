@@ -53,7 +53,6 @@ force-sort-within-sections = true
 "konden/tools/executor.py" = ["BLE001"]
 # 等待被取消的子任务时须完整传播异常组，suppress 会从组内移除匹配的子异常。
 "konden/assistant/compact/host.py" = ["SIM105"]
-"konden/channels/tui/console.py" = ["SIM105"]
 "konden/channels/web/app.py" = ["B008"]      # File(...) 是 FastAPI 的依赖声明
 "konden/execution/processes.py" = ["B008"]   # CaptureLimit 是不可变默认值
 # UP042 会改变已有枚举的 str() 和 f-string 输出。这些模块保留带类型名的表示。

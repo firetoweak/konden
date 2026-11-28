@@ -25,13 +25,8 @@ if TYPE_CHECKING:
     from mcp import Client
     from mcp.types import (
         CallToolResult,
-        GetPromptResult,
         InputRequiredResult,
-        ListPromptsResult,
-        ListResourcesResult,
-        ListResourceTemplatesResult,
         ListToolsResult,
-        ReadResourceResult,
         Tool,
     )
 
@@ -188,37 +183,6 @@ class McpSession(Protocol):
     ) -> CallToolResult | InputRequiredResult:
         ...
 
-    async def list_resources(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourcesResult:
-        ...
-
-    async def list_resource_templates(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourceTemplatesResult:
-        ...
-
-    async def read_resource(self, uri: str) -> ReadResourceResult:
-        ...
-
-    async def list_prompts(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListPromptsResult:
-        ...
-
-    async def get_prompt(
-        self,
-        name: str,
-        arguments: dict[str, str] | None = None,
-    ) -> GetPromptResult:
-        ...
-
 
 @dataclass(frozen=True)
 class _SdkClientFacade:
@@ -247,46 +211,6 @@ class _SdkClientFacade:
             arguments,
             allow_input_required=True,
         )
-
-    async def list_resources(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourcesResult:
-        return await self.client.list_resources(
-            cursor=cursor,
-            cache_mode="bypass",
-        )
-
-    async def list_resource_templates(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourceTemplatesResult:
-        return await self.client.list_resource_templates(
-            cursor=cursor,
-            cache_mode="bypass",
-        )
-
-    async def read_resource(self, uri: str) -> ReadResourceResult:
-        return await self.client.read_resource(uri, cache_mode="bypass")
-
-    async def list_prompts(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListPromptsResult:
-        return await self.client.list_prompts(
-            cursor=cursor,
-            cache_mode="bypass",
-        )
-
-    async def get_prompt(
-        self,
-        name: str,
-        arguments: dict[str, str] | None = None,
-    ) -> GetPromptResult:
-        return await self.client.get_prompt(name, arguments)
 
 
 SessionFactory = Callable[
@@ -368,40 +292,6 @@ class _OwnedSdkSession:
         arguments: dict[str, Any] | None = None,
     ) -> CallToolResult | InputRequiredResult:
         return await self._owner.call("call_tool", name, arguments)
-
-    async def list_resources(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourcesResult:
-        return await self._owner.call("list_resources", cursor=cursor)
-
-    async def list_resource_templates(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourceTemplatesResult:
-        return await self._owner.call(
-            "list_resource_templates",
-            cursor=cursor,
-        )
-
-    async def read_resource(self, uri: str) -> ReadResourceResult:
-        return await self._owner.call("read_resource", uri)
-
-    async def list_prompts(
-        self,
-        *,
-        cursor: str | None = None,
-    ) -> ListPromptsResult:
-        return await self._owner.call("list_prompts", cursor=cursor)
-
-    async def get_prompt(
-        self,
-        name: str,
-        arguments: dict[str, str] | None = None,
-    ) -> GetPromptResult:
-        return await self._owner.call("get_prompt", name, arguments)
 
 
 class _SdkConnectionOwner:
@@ -782,65 +672,6 @@ class McpClientManager:
             raise McpToolNotStartedError(str(exc)) from exc
         try:
             return await connection.session.call_tool(tool_name, arguments)
-        finally:
-            await self._release_connection(connection)
-
-    async def list_resources(
-        self,
-        record: McpServerRecord,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourcesResult:
-        connection = await self._ensure_connection(record)
-        try:
-            return await connection.session.list_resources(cursor=cursor)
-        finally:
-            await self._release_connection(connection)
-
-    async def list_resource_templates(
-        self,
-        record: McpServerRecord,
-        *,
-        cursor: str | None = None,
-    ) -> ListResourceTemplatesResult:
-        connection = await self._ensure_connection(record)
-        try:
-            return await connection.session.list_resource_templates(cursor=cursor)
-        finally:
-            await self._release_connection(connection)
-
-    async def read_resource(
-        self,
-        record: McpServerRecord,
-        uri: str,
-    ) -> ReadResourceResult:
-        connection = await self._ensure_connection(record)
-        try:
-            return await connection.session.read_resource(uri)
-        finally:
-            await self._release_connection(connection)
-
-    async def list_prompts(
-        self,
-        record: McpServerRecord,
-        *,
-        cursor: str | None = None,
-    ) -> ListPromptsResult:
-        connection = await self._ensure_connection(record)
-        try:
-            return await connection.session.list_prompts(cursor=cursor)
-        finally:
-            await self._release_connection(connection)
-
-    async def get_prompt(
-        self,
-        record: McpServerRecord,
-        name: str,
-        arguments: dict[str, str] | None = None,
-    ) -> GetPromptResult:
-        connection = await self._ensure_connection(record)
-        try:
-            return await connection.session.get_prompt(name, arguments)
         finally:
             await self._release_connection(connection)
 

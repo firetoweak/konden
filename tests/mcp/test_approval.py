@@ -15,7 +15,6 @@ from konden.mcp.approval import (
     create_mcp_remove_proposal_spec,
     create_mcp_update_proposal_spec,
 )
-from konden.mcp.console import McpConsoleAdapter
 from konden.mcp.errors import McpRecoveryPreconditionError
 from konden.mcp.models import McpServerRuntimeState, RuntimeAvailability
 from konden.tools.control import ControlApprovalProposal
@@ -329,25 +328,6 @@ class McpRecoveryApprovalTest(unittest.IsolatedAsyncioTestCase):
             result.data["runtime"]["last_error_summary"],
             "connection failed",
         )
-
-
-class McpRecoveryConsoleTest(unittest.IsolatedAsyncioTestCase):
-    async def test_retry_reuses_atomic_test_and_enable_use_case(self):
-        runtime = McpServerRuntimeState(status=RuntimeAvailability.AVAILABLE)
-        service = SimpleNamespace(
-            test_and_enable=AsyncMock(return_value=SimpleNamespace(
-                succeeded=True,
-                runtime=runtime,
-                record=SimpleNamespace(id="demo", revision=5),
-            )),
-        )
-        console = McpConsoleAdapter(service)
-
-        reply = await console.execute_if_handled("/mcp retry demo")
-
-        service.test_and_enable.assert_awaited_once_with("demo")
-        self.assertIn("测试并启用成功", reply)
-        self.assertIn("能力目录", reply)
 
 
 class McpRemoveApprovalTest(unittest.IsolatedAsyncioTestCase):

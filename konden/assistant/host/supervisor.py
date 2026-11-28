@@ -176,7 +176,6 @@ class HostSupervisor:
         command_environment=None,
         models=None,
         context_usage_sink=None,
-        subagent_activity_sink=None,
         conversation_status_sink=None,
         tool_progress_sink=None,
         preview_sink=None,
@@ -199,7 +198,6 @@ class HostSupervisor:
         )
         self.models = models
         self.context_usage_sink = context_usage_sink
-        self.subagent_activity_sink = subagent_activity_sink
         self.conversation_status_sink = conversation_status_sink
         self.tool_progress_sink = tool_progress_sink
         self.preview_sink = preview_sink
@@ -754,14 +752,6 @@ class HostSupervisor:
                     emitted = self.context_usage_sink(*values)
                     if isawaitable(emitted):
                         await emitted
-            elif kind == "activity":
-                if (
-                    self.subagent_activity_sink is not None
-                    and self.compact.store.reader_job(session_id) is None
-                ):
-                    self.subagent_activity_sink(
-                        *values
-                    )
             elif kind == "tool":
                 _, phase, command_id, name, _ = values
                 if phase == "start":
@@ -1222,13 +1212,6 @@ class HostSupervisor:
         emitted = self.session_failed_sink(session_id, message)
         if isawaitable(emitted):
             await emitted
-
-    async def create(self, session_id, workspace_id):
-        async with self.locks.setdefault(session_id, asyncio.Lock()):
-            self.workspaces.get(workspace_id)
-            await self.store.create(session_id, workspace_id=workspace_id)
-            if self.models is not None:
-                self.models.initialize_session(session_id)
 
     async def create_agent(
         self, *, name: str, workspace_id: str | None = None, path: str | None = None,

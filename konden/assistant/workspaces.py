@@ -1,4 +1,4 @@
-"""Session file roots: a Bot's own directory or a TUI's registered workspace."""
+"""Resolve Session file roots from committed directory or workspace bindings."""
 
 from __future__ import annotations
 

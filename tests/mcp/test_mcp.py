@@ -13,13 +13,7 @@ from unittest.mock import AsyncMock, patch
 
 from mcp.types import (
     CallToolResult,
-    ListPromptsResult,
-    ListResourcesResult,
-    ListResourceTemplatesResult,
     ListToolsResult,
-    Prompt,
-    Resource,
-    ResourceTemplate,
     TextContent,
     Tool,
 )
@@ -92,20 +86,6 @@ class FakeMcpSession:
             isError=False,
         )
 
-    async def list_resources(self, *, cursor=None):
-        return ListResourcesResult(resources=[])
-
-    async def list_resource_templates(self, *, cursor=None):
-        return ListResourceTemplatesResult(resourceTemplates=[])
-
-    async def read_resource(self, uri):
-        raise NotImplementedError
-
-    async def list_prompts(self, *, cursor=None):
-        return ListPromptsResult(prompts=[])
-
-    async def get_prompt(self, name, arguments=None):
-        raise NotImplementedError
 
 
 def _tool(
@@ -896,35 +876,6 @@ class McpProviderTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ToolsetLoadError) as ctx:
             await self.service.toolset_provider.tool_specs("mcp:bad_output")
         self.assertEqual(ctx.exception.code, "MCP_INVALID_TOOL_SCHEMA")
-
-    async def test_content_service_uses_v2_resource_and_prompt_fields(self):
-        session = FakeMcpSession()
-        session.list_resources = AsyncMock(return_value=ListResourcesResult(
-            resources=[Resource(name="guide", uri="file:///guide.md", mimeType="text/markdown")],
-            nextCursor="resource-next",
-        ))
-        session.list_resource_templates = AsyncMock(return_value=ListResourceTemplatesResult(
-            resourceTemplates=[ResourceTemplate(name="user", uriTemplate="user://{id}", mimeType="application/json")],
-        ))
-        session.list_prompts = AsyncMock(return_value=ListPromptsResult(
-            prompts=[Prompt(name="review", description="review code")],
-        ))
-        self.sessions["content"] = session
-        await self.service.upsert_server(
-            server_id="content",
-            display_name="Content",
-            transport="stdio",
-            transport_config={"command": "python"},
-            enabled=True,
-        )
-
-        resources = await self.service.content.list_resources("content")
-        templates = await self.service.content.list_resource_templates("content")
-        prompts = await self.service.content.list_prompts("content")
-        self.assertEqual(resources["next_cursor"], "resource-next")
-        self.assertEqual(resources["resources"][0]["mimeType"], "text/markdown")
-        self.assertEqual(templates["resource_templates"][0]["uriTemplate"], "user://{id}")
-        self.assertEqual(prompts["prompts"][0]["name"], "review")
 
     async def test_connection_is_closed_when_post_connect_metadata_fails(self):
         closed = False

@@ -3,13 +3,12 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock
 
 from konden.assistant.context.projection import ModelContextSettings
 from konden.assistant.delivery import DELIVER_TOOL_NAME, deliver_binding
 from konden.assistant.management import ManagementSurface
 from konden.assistant.runner import SessionNotFoundError
-from konden.assistant.sessions import AssistantSessions, SessionView
+from konden.assistant.sessions import AssistantSessions
 from konden.assistant.subagent.subagent import CLOSED_FACT, DELEGATE, child_session_id
 from konden.assistant.toolsets import (
     LOAD_TOOLSET,
@@ -254,37 +253,6 @@ class AssistantSessionResumeTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(scheduler.woken, [])
         finally:
             await scheduler.close()
-
-class AcceptInputTest(unittest.IsolatedAsyncioTestCase):
-    async def test_yes_confirms_pending_control_proposal(self):
-        sessions = object.__new__(AssistantSessions)
-        pending = SessionView(
-            status="waiting",
-            waiting_for=(),
-            should_wake=False,
-            control_approval=SimpleNamespace(request_id="request-1"),
-        )
-        resolved = SessionView(
-            status="waiting",
-            waiting_for=("external_fact",),
-            should_wake=False,
-            control_message="控制操作完成",
-        )
-        sessions.view = AsyncMock(side_effect=(pending, resolved))
-        sessions.resolve_control = AsyncMock(return_value="控制操作完成")
-        sessions.receive_user_message = AsyncMock()
-
-        result = await sessions.accept_input(
-            "session-1",
-            "yes",
-            delivery_id="input-1",
-        )
-
-        sessions.resolve_control.assert_awaited_once_with(
-            "session-1", "request-1", approved=True
-        )
-        sessions.receive_user_message.assert_not_awaited()
-        self.assertEqual(result.control_message, "控制操作完成")
 
 async def _explode(_context, _arguments):
     raise RuntimeError("boom")

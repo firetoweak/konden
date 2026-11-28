@@ -7,8 +7,7 @@ Journal 与判定。父子关系只存在于 Assistant 侧，用因果事实表�
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -287,9 +286,6 @@ async def record_interrupted_return(journal: Journal, session_id: str) -> None:
             failure="子 Agent 执行中断，存在未取得结果的操作。需要时重新 delegate。",
         ),
     )
-
-
-SubAgentActivitySink = Callable[[str, bool], None]
 
 
 CHILD_BUILTIN_TOOL_NAMES = frozenset(
@@ -577,17 +573,11 @@ def project_reclaimed(events: Sequence[Event]) -> frozenset[str]:
 class SubAgentHost:
     """委派、父子交流、回收，以及子 Session 的策略边界。"""
 
-    def __init__(
-        self,
-        activity_sink: SubAgentActivitySink | None = None,
-    ) -> None:
+    def __init__(self) -> None:
         self._runtime: AgentRuntime | None = None
         self._transport = None
         self._parents: dict[str, str] = {}
         self._returned: set[str] = set()
-        # 仅供显示刷新；执行判断始终从 Journal 投影。
-        self._visible_pending: dict[str, set[str]] = {}
-        self._activity_sink = activity_sink
 
     def attach(self, runtime: AgentRuntime, transport) -> None:
         self._runtime = runtime
@@ -598,25 +588,6 @@ class SubAgentHost:
 
     def has_returned(self, session_id: str) -> bool:
         return session_id in self._returned
-
-    def _publish_activity(self, parent_session_id: str) -> None:
-        """异步刷新显示；不进入委派与回收的执行闭环。"""
-
-        if self._activity_sink is not None:
-            asyncio.get_running_loop().call_soon(self._emit_activity, parent_session_id)
-
-    def _emit_activity(self, parent_session_id: str) -> None:
-        assert self._activity_sink is not None
-        self._activity_sink(
-            parent_session_id,
-            bool(self._visible_pending.get(parent_session_id)),
-        )
-
-    async def refresh_activity(self, session_id: str) -> None:
-        events = await self._require_runtime().snapshot(session_id)
-        if project_parent(events) is None:
-            self._visible_pending[session_id] = set(project_pending(events))
-            self._publish_activity(session_id)
 
     def tool_names(self, session_id: str) -> frozenset[str] | None:
         """本 Session 允许出现的工具名；None 表示不设限。"""
@@ -736,8 +707,6 @@ class SubAgentHost:
             pending.append(intent.child_session_id)
             if command.phase is CommandPhase.TERMINAL:
                 await self._transport("resume", intent.child_session_id, {})
-        self._visible_pending[session_id] = set(pending)
-        self._publish_activity(session_id)
         return tuple(pending)
 
     async def on_failed(self, session_id: str, message: str) -> None:
@@ -931,10 +900,6 @@ class SubAgentHost:
         result = await self._transport("create_child", intent.child_session_id, task_fact_arguments(intent))
         if not result["ok"]:
             return result
-        self._visible_pending.setdefault(context.session_id, set()).add(
-            intent.child_session_id
-        )
-        self._publish_activity(context.session_id)
         return _delegated_result(intent.child_session_id)
 
     def _require_runtime(self) -> AgentRuntime:

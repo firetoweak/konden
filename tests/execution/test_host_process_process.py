@@ -181,7 +181,7 @@ def test_human_input_is_answered_while_the_started_command_keeps_running(tmp_pat
         host = HostSupervisor(store, partial(config_for, root), home,
                               lambda session, _output, text: output.append((session, text)), llm=Llm())
         try:
-            await host.create("a", workspace.workspace_id)
+            await host.store.create("a", workspace_id=workspace.workspace_id)
             await host.accept_input("a", "start long work", delivery_id="start")
 
             async def started():
@@ -254,7 +254,7 @@ def test_host_port_survives_worker_retirement(tmp_path, completion):
         host = HostSupervisor(store, partial(config_for, root), home,
                               lambda *args: output.append(args), llm=Llm())
         try:
-            await host.create("a", workspace.workspace_id)
+            await host.store.create("a", workspace_id=workspace.workspace_id)
             await host.accept_input("a", "finish", delivery_id="one")
             async def retired():
                 return bool(output) and not host.workers
@@ -319,7 +319,7 @@ def test_host_server_observes_file_edits(tmp_path, launcher):
         host = HostSupervisor(store, partial(config_for, root), home, lambda *args: None, llm=ProcessLlm(root))
         assembly = None
         try:
-            await host.create("a", workspace.workspace_id)
+            await host.store.create("a", workspace_id=workspace.workspace_id)
             assembly = await build_assistant_assembly(
                 config_for(root), lambda *args: None, SqliteJournal(store.require("a")), session_id="a",
                 workspace=workspace, home=home, session_transport=host._route,

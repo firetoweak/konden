@@ -146,7 +146,6 @@ async def build_assistant_assembly(
     workspace: WorkspaceRecord | FileWorkspace,
     command_environment: Mapping[str, str] | None = None,
     context_usage_sink: Callable[[str, int, int], None] | None = None,
-    subagent_activity_sink: Callable[[str, bool], None] | None = None,
     tool_progress_sink=None,
     preview_sink=None,
     thinking_sink=None,
@@ -250,7 +249,7 @@ async def build_assistant_assembly(
     skill_tools = SkillToolAdapter(skills, gateway, settings,
                                   project_root=workspace.task_root)
     cli_tools = CliToolAdapter(cli, gateway, settings)
-    subagents = SubAgentHost(subagent_activity_sink)
+    subagents = SubAgentHost()
     if task is not None:
         subagents._parents[session_id] = task.parent_session_id
     preview = PreviewEmitter(preview_sink if agent is None else None, thinking_sink)

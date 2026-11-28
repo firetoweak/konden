@@ -5,7 +5,7 @@ description: "Drive konden Web the way a user does — workspace, Agent roster a
 
 # Verify konden
 
-Drive the Web app a person actually uses. `web_chat.py` serves it against an empty home; that path is part of the map. Chat and tool calls also need a configured model. Web sessions are persistent Bots under `$KONDEN_HOME/state/bots/`; a linked code project needs a Git repository with a first commit and lives under `projects/<name>/`. Integration worktrees live under `$KONDEN_HOME/state/coding_bot/`. Subagents share their parent's files and can run commands — verify shared execution and explicit reclamation. The terminal entry point is `features/console-chat.md`.
+Drive the Web app a person actually uses. `web_chat.py` serves it against an empty home; that path is part of the map. Chat and tool calls also need a configured model. Web sessions are persistent Bots under `$KONDEN_HOME/state/bots/`; a linked code project needs a Git repository with a first commit and lives under `projects/<name>/`. Integration worktrees live under `$KONDEN_HOME/state/coding_bot/`. Subagents share their parent's files and can run commands — verify shared execution and explicit reclamation.
 
 ## Acceptance basis
 
@@ -39,11 +39,9 @@ Start from `features/README.md`, then the feature file, and drive the entry poin
 
 `curl` is only read-only confirmation written beside an action; posting to the API does not prove the page. A green `pytest`, `-m process`, or live-model run is not Web proof.
 
-Terminal drives: a fresh `tui-home` per run holding only the model settings you copy in, a real interactive terminal, and never two CLIs on one home. Web Doctor does not health-check it — verify the prompt, a model reply and exit in that terminal.
-
 ## Evidence
 
-`run.py evidence --run-dir <dir> --feature <id>` creates the directory; cleanup never deletes it. Per driven entry point save `snapshot.txt` (accessibility snapshot with the resulting state on screen), `page.png` (that same state, `新建 Bot` visible on desktop, `打开 Agent 名册` on mobile), `state.json` (the read-only HTTP body the feature file names), and `note.txt` (feature id, entry point, `passed` or `skipped` plus the Doctor field that blocked it). Terminal drives save `terminal.txt` — startup, input, reply, exit — and never a browser screenshot.
+`run.py evidence --run-dir <dir> --feature <id>` creates the directory; cleanup never deletes it. Per driven entry point save `snapshot.txt` (accessibility snapshot with the resulting state on screen), `page.png` (that same state, `新建 Bot` visible on desktop, `打开 Agent 名册` on mobile), `state.json` (the read-only HTTP body the feature file names), and `note.txt` (feature id, entry point, `passed` or `skipped` plus the Doctor field that blocked it).
 
 A skipped live-model step is neither a pass nor a pass via pytest. Name the result: sidebar control plus `GET /api/workspaces`; transcript plus `GET /api/sessions/<id>`; for a coding round, the files in the Agent's worktree.
 

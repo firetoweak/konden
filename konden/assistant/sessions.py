@@ -267,17 +267,7 @@ class AssistantSessions:
         if source == ANSWER_SOURCE:
             if delivery_id not in questions_by_id(await self._runtime.snapshot(session_id)):
                 raise InputConflict("当前会话没有这个澄清问题。")
-            await self.receive_user_message(session_id, content, delivery_id=delivery_id, source=source)
-            return await self.view(session_id)
-        view = await self.view(session_id)
-        answer = content.strip().lower()
-        if view.control_approval is not None and answer in {"yes", "y", "no", "n"}:
-            await self.resolve_control(
-                session_id,
-                view.control_approval.request_id,
-                approved=answer in {"yes", "y"},
-            )
-            return await self.view(session_id)
+            artifact_refs = ()
         await self.receive_user_message(
             session_id,
             content,

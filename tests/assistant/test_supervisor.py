@@ -228,7 +228,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         self.host.llm = LoadLastCli(self.root)
         sid = "large-cli-catalog"
-        await self.host.create(sid, self.workspace.workspace_id)
+        await self.host.store.create(sid, workspace_id=self.workspace.workspace_id)
         await self.host.select("cli-page", sid)
         await self.host.accept_input(sid, "inspect the last CLI", delivery_id="inspect")
         await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
@@ -303,7 +303,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
     async def test_failed_reader_still_reports_and_exits(self):
         from konden.assistant.host.ipc import WorkerFailed
 
-        await self.host.create("parent", self.workspace.workspace_id)
+        await self.host.store.create("parent", workspace_id=self.workspace.workspace_id)
         await self.persist_child()
         self.host.config_factory = partial(failing_request_config, self.root)
         with self.assertRaises(WorkerFailed):
@@ -317,7 +317,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         from konden.runtime import UserMessageReceived
 
         sid = "input-replay"
-        await self.host.create(sid, self.workspace.workspace_id)
+        await self.host.store.create(sid, workspace_id=self.workspace.workspace_id)
         await self.host.select("web:replay", sid)
         await self.host.accept_input(sid, "original", delivery_id="input-1", source="web")
         await asyncio.wait_for(self.host.wait_quiescent(sid), 30)
@@ -348,7 +348,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         from tests.fixtures.session_worker import delegate_startup_failure_config
 
         self.host.config_factory = partial(delegate_startup_failure_config, self.root)
-        await self.host.create("parent", self.workspace.workspace_id)
+        await self.host.store.create("parent", workspace_id=self.workspace.workspace_id)
         await self.host.receive_user_message(
             "parent", "DELEGATE_CHILDREN", delivery_id="input"
         )
@@ -366,7 +366,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
     async def assert_startup_failure(self, stage):
         from konden.assistant.host.ipc import WorkerFailed
 
-        await self.host.create("parent", self.workspace.workspace_id)
+        await self.host.store.create("parent", workspace_id=self.workspace.workspace_id)
         await self.persist_child()
         self.host.config_factory = partial(failing_startup_config, self.root, stage)
         with self.assertRaises(WorkerFailed):
@@ -429,7 +429,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
     async def test_close_rejects_worker_start_waiting_for_journal(self):
         from unittest.mock import patch
 
-        await self.host.create("one", self.workspace.workspace_id)
+        await self.host.store.create("one", workspace_id=self.workspace.workspace_id)
         entered, release = asyncio.Event(), asyncio.Event()
         snapshot = SqliteJournal.snapshot
 
@@ -490,7 +490,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
                 self.host.llm = llm = FailAfterRead(self.root)
                 session_id = f"failed-model-{index}"
-                await self.host.create(session_id, self.workspace.workspace_id)
+                await self.host.store.create(session_id, workspace_id=self.workspace.workspace_id)
                 await self.host.accept_input(session_id, "read", delivery_id=f"input-{index}")
                 await until(lambda: self.host.current_failure(session_id) is not None)
                 await until(lambda: not self.host.workers and not self.host.watchers)
@@ -544,7 +544,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.host.llm = StreamingChildLlm(self.root)
         self.host.subagent_output_sink = lambda *values: observed.append(values)
         self.host.thinking_sink = lambda *values: thoughts.append(values)
-        await self.host.create(PARENT, self.workspace.workspace_id)
+        await self.host.store.create(PARENT, workspace_id=self.workspace.workspace_id)
         await self.persist_child()
         await self.host.resume(CHILD)
         await until(lambda: (observed and (PARENT, "done") in self.output)
@@ -567,7 +567,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         from tests.fixtures.session_worker import blocking_tool_config
 
         self.host.config_factory = partial(blocking_tool_config, self.root)
-        await self.host.create("one", self.workspace.workspace_id)
+        await self.host.store.create("one", workspace_id=self.workspace.workspace_id)
         await self.host.receive_user_message(
             "one", "BLOCK_TOOL", delivery_id="input"
         )
@@ -592,7 +592,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         self.host.config_factory = partial(cancellable_config, self.root)
         self.host.llm = CancellableProcessLlm(self.root)
-        await self.host.create("one", self.workspace.workspace_id)
+        await self.host.store.create("one", workspace_id=self.workspace.workspace_id)
         await self.host.select("web", "one")
         await self.host.accept_input(
             "one",
@@ -612,7 +612,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
     async def test_cancel_parent_reclaims_all_children_and_later_input_can_continue(self):
         from konden.assistant.subagent.subagent import project_pending, project_returned
 
-        await self.host.create(PARENT, self.workspace.workspace_id)
+        await self.host.store.create(PARENT, workspace_id=self.workspace.workspace_id)
         await self.host.select("web", PARENT)
         await self.host.accept_input(PARENT, "DELEGATE_CHILDREN", delivery_id="delegate")
         await until(lambda: len(list(self.root.glob("blocked-*"))) == 2)
@@ -662,7 +662,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         self.host.llm = client = RedirectLlm(self.root)
         sid = "interrupt-input"
-        await self.host.create(sid, self.workspace.workspace_id)
+        await self.host.store.create(sid, workspace_id=self.workspace.workspace_id)
         await self.host.select("web:interrupt", sid)
         await self.host.accept_input(sid, "旧指令", delivery_id="old", source="web")
         await asyncio.wait_for(started.wait(), 30)
@@ -709,7 +709,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
                 return LLMCallResult(response, LLMUsage(input_tokens=10, output_tokens=5))
 
         self.host.llm = client = SelectiveLlm(self.root)
-        await self.host.create(PARENT, self.workspace.workspace_id)
+        await self.host.store.create(PARENT, workspace_id=self.workspace.workspace_id)
         await self.host.select("web", PARENT)
         await self.host.accept_input(PARENT, "DELEGATE_CHILDREN", delivery_id="delegate")
         await until(lambda: len(list(self.root.glob("blocked-*"))) == 2)
@@ -793,7 +793,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
                 return LLMCallResult(response, LLMUsage(input_tokens=10, output_tokens=5))
 
         self.host.llm = client = InstructionLlm(self.root)
-        await self.host.create(PARENT, self.workspace.workspace_id)
+        await self.host.store.create(PARENT, workspace_id=self.workspace.workspace_id)
         await self.host.select("web", PARENT)
         await self.host.accept_input(PARENT, "开始调查", delivery_id="delegate")
         await asyncio.wait_for(old_started.wait(), 30)
@@ -910,7 +910,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
                 return LLMCallResult(response, LLMUsage(input_tokens=10, output_tokens=5))
 
         self.host.llm = client = InteractiveLlm(self.root)
-        await self.host.create(PARENT, self.workspace.workspace_id)
+        await self.host.store.create(PARENT, workspace_id=self.workspace.workspace_id)
         await self.host.select("web", PARENT)
         await self.host.accept_input(PARENT, "委派调查", delivery_id="delegate")
         await asyncio.wait_for(started.wait(), 30)
@@ -977,7 +977,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.failures.empty())
 
     async def test_unselected_busy_worker_stops_only_after_work_finishes(self):
-        await self.host.create("one", self.workspace.workspace_id)
+        await self.host.store.create("one", workspace_id=self.workspace.workspace_id)
         await self.host.select("cli", "one")
         await self.host.receive_user_message(
             "one", "BLOCK_PROCESS", delivery_id="input"
@@ -998,9 +998,9 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         from konden.runtime import UserMessageReceived
         from konden.runtime.events import DeliveryIdentity, EventDraft
 
-        await self.host.create("old", self.workspace.workspace_id)
+        await self.host.store.create("old", workspace_id=self.workspace.workspace_id)
         await self.host.select("cli", "old")
-        await self.host.create("broken", self.workspace.workspace_id)
+        await self.host.store.create("broken", workspace_id=self.workspace.workspace_id)
         await SqliteJournal(self.store.require("broken")).accept_delivery(
             EventDraft(
                 event_id="broken-input",
@@ -1021,17 +1021,17 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("broken", self.host.workers)
 
     async def test_blocking_worker_and_crash_do_not_stop_another(self):
-        await self.host.create("blocked", self.workspace.workspace_id)
+        await self.host.store.create("blocked", workspace_id=self.workspace.workspace_id)
         await self.host.receive_user_message(
             "blocked", "BLOCK_PROCESS", delivery_id="a"
         )
         await until(lambda: list(self.root.glob("blocked-*")))
-        await self.host.create("crash", self.workspace.workspace_id)
+        await self.host.store.create("crash", workspace_id=self.workspace.workspace_id)
         await self.host.receive_user_message("crash", "CRASH_PROCESS", delivery_id="b")
         failure = await asyncio.wait_for(self.host.wait_failure(), 30)
         self.assertEqual(failure.failure.exception_type, "builtins.RuntimeError")
         self.assertIn("intentional worker crash", failure.failure.traceback)
-        await self.host.create("healthy", self.workspace.workspace_id)
+        await self.host.store.create("healthy", workspace_id=self.workspace.workspace_id)
         await self.host.receive_user_message("healthy", "hello", delivery_id="c")
         await until(lambda: ("healthy", "done") in self.output)
         self.assertIn("blocked", self.host.workers)
@@ -1039,8 +1039,8 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         await until(lambda: ("blocked", "done") in self.output)
 
     async def test_startup_recovers_idle_parents_children_without_selecting_parent(self):
-        await self.host.create("unrelated", self.workspace.workspace_id)
-        await self.host.create("parent", self.workspace.workspace_id)
+        await self.host.store.create("unrelated", workspace_id=self.workspace.workspace_id)
+        await self.host.store.create("parent", workspace_id=self.workspace.workspace_id)
         await self.host.receive_user_message(
             "parent", "DELEGATE_CHILDREN", delivery_id="input"
         )
@@ -1082,7 +1082,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         self.host.config_factory = partial(interrupted_read_config, self.root)
         (self.root / "release").touch()
-        await self.host.create("parent", self.workspace.workspace_id)
+        await self.host.store.create("parent", workspace_id=self.workspace.workspace_id)
         await self.host._route(
             "create_child",
             CHILD,
@@ -1132,7 +1132,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         from konden.assistant.subagent.subagent import CLOSED_FACT
         from konden.runtime import DomainFactCommitted
 
-        await self.host.create("parent", self.workspace.workspace_id)
+        await self.host.store.create("parent", workspace_id=self.workspace.workspace_id)
         await self.host._route(
             "create_child",
             CHILD,
@@ -1156,7 +1156,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         from konden.assistant.subagent.subagent import CLOSED_FACT, RETURN_FACT
         from konden.runtime import DomainFactCommitted
 
-        await self.host.create("parent", self.workspace.workspace_id)
+        await self.host.store.create("parent", workspace_id=self.workspace.workspace_id)
         await self.host._route(
             "create_child",
             CHILD,
