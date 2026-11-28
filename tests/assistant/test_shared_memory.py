@@ -88,7 +88,6 @@ class SharedMemoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(read["data"], {
             "version": 2, "content": "共享资源先协调。", "updated_by": "Ada",
         })
-        self.assertTrue(self.tools[UPDATE_SHARED_MEMORY].requires_authorization)
 
     async def test_observations_are_passive_append_only_and_never_own_current_memory(self):
         home = KondenHome(Path(self.directory.name))
@@ -138,7 +137,6 @@ class SharedMemoryTest(unittest.IsolatedAsyncioTestCase):
         for name in (READ_PERSONAL_MEMORY, UPDATE_PERSONAL_MEMORY):
             result = await tools[name].handler(context, {"bot": "Lin", "version": 1, "content": "改别人的约束"})
             self.assertEqual(result["code"], "INVALID_ARGUMENT")
-        self.assertTrue(tools[UPDATE_PERSONAL_MEMORY].requires_authorization)
 
     async def test_consecutive_decisions_keep_prefix_through_memory_updates_and_clear(self):
         home = KondenHome(Path(self.directory.name))
@@ -156,6 +154,8 @@ class SharedMemoryTest(unittest.IsolatedAsyncioTestCase):
 
         class Llm:
             async def chat(self, messages, model, **kwargs):
+                if not any(tool["function"]["name"] == REST for tool in kwargs["tools"]):
+                    return LLMCallResult(LLMResponse(), LLMUsage(input_tokens=1, output_tokens=1))
                 # Each presented body must already have an exact committed observation.
                 events = await journal.snapshot("ada")
                 for message in messages:

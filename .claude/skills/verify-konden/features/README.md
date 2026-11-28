@@ -24,7 +24,7 @@
 |---|---|---|
 | 已登记设计例外 | [通用工具 handler](tool-coding-round.md#gotchas) 在架构测试中明确登记，允许转为可见 `TOOL_HANDLER_ERROR` | 按该显式例外验收，不误报为 Worker 故障；不得扩展到其他内部异常。 |
 | 产品提示冲突 | [终端输入](console-chat.md)：启动提示说会打断，接纳规则和当前实现均不隐式打断 | 按普通输入不打断验收，提示另记问题。 |
-| 依据冲突 | [运行指南](../../../../docs/运行指南.md#运行环境)仍提“只读子 Agent”，[当前 SubAgent](../../../../docs/架构/运行/SubAgent.md#能力与授权)与委派入口没有此模式 | 当前父子按实际可达的读写能力验收；受限目录过滤与不存在的只读子模式分开，不凭此报浏览器回归。 |
+| 依据冲突 | [运行指南](../../../../docs/运行指南.md#运行环境)仍提“只读子 Agent”，[当前 SubAgent](../../../../docs/架构/运行/SubAgent.md#执行能力)与委派入口没有此模式 | 当前父子按实际可达的读写能力验收；受限目录过滤与不存在的只读子模式分开，不凭此报浏览器回归。 |
 | 依据冲突 | [Web](../../../../docs/架构/入口/Web.md#对话与操作)仍定义回复耗时，地图和界面已只显示提交时间 | 时间来源继续核对；是否恢复耗时未作需求决定。 |
 | 依据冲突 | [模型配置指南](../../../../docs/模型配置.md)称首次准备自动进入终端向导，[运行指南](../../../../docs/运行指南.md#准备选项)规定默认网页、显式选项才进向导 | 分别记录实际默认流程与显式向导范围，不误报默认不进向导为产品失败。 |
 
@@ -52,7 +52,6 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | 可选代码项目登记 | `$KONDEN_HOME/workspaces.json` |
 | 会话运行数据（journal、附件） | `$KONDEN_HOME/runtime_sessions/<sha256(session_id)>/journal.sqlite` |
 | 每会话模型选择 | `$KONDEN_HOME/runtime_sessions/models.json` |
-| 自动放行开关（重启后保留） | `$KONDEN_HOME/runtime_sessions/authorization.json` |
 | 定时任务 | `$KONDEN_HOME/state/automation.sqlite` |
 | 例行任务 | `$KONDEN_HOME/state/routines.sqlite` |
 | Bot 个人目录 | `$KONDEN_HOME/state/bots/<sha256(session_id) 前 20 位>/` |
@@ -95,13 +94,12 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | external-conversations | [external-conversations.md](./external-conversations.md) | 原生聊天独立身份、通用双向消息与 Web 对话 | 连接命名后取消无新增配置，私聊验证 Bot 可加载内置独立验证 Skill。外部登记、报告回传与修复复验未重跑。 |
 | land-and-sync | [land-and-sync.md](./land-and-sync.md) | `land_branch`、`sync_branch`、提交与草稿边界 | 实际落地已提交样本，集成 Git 历史包含原提交，草稿只留在 Bot 工作树，人的 HEAD 不变。同步、冲突与未知结果未重验。 |
 | composer-attachments | [composer-attachments.md](./composer-attachments.md) | 附件挂入、发送、图片预览与下载 | 实跑草稿和已发 PNG 预览、放大与拖动，附件 GET 字节与原件一致。实体触屏与本机选择未重验。 |
-| tool-authorization | [tool-authorization.md](./tool-authorization.md) | 待处理条、批准/拒绝、默认自动放行与控制确认 | 关闭自动放行，页面允许 `write_file` 后指定文件才写入。子调用批准、拒绝与恢复组合未重验。 |
-| inbox | [inbox.md](./inbox.md) | Bot 旁提示 → 对应对话处理授权、控制、交流超限与无人查看询问 | 写文件的待授权事项出现在所属 Bot 的对话及 `GET /api/inbox`。交流超限与长时间无人查看未重验。 |
+| inbox | [inbox.md](./inbox.md) | Bot 旁提示 → 对应对话处理控制提案、交流超限与无人查看询问 | 控制提案的判据见能力管理；交流超限与无人查看见本条目。 |
 | group-chat | [group-chat.md](./group-chat.md) | 首页 `新建群聊`、群资料、常用切换、人发言与点名 | 首页创建临时组，设为常用后刷新保留，再改回临时。Bot 自行建组、七天淡出和群内回应未重验。 |
 | tool-coding-round | [tool-coding-round.md](./tool-coding-round.md) | 文件工具、前台/后台命令与退出结果 | Web 触发 `execute_command` 运行 `git --version`，计划回合也实际写入并读回样本。命令环境隔离、后台组合与非零退出未重验。 |
 | execution-trace | [execution-trace.md](./execution-trace.md) | Bot 执行轨迹、模型输入、工具结果和子轨迹 | 从 Bot 对话进入，用隔离实例回看已提交的长会话。 |
 | run-control | [run-control.md](./run-control.md) | 运行中继续发送、停止、失败再试与后台命令停止 | 父页面「停止」后两子均结束，停止按钮消失，已写入的文件保留。前台命令中断与后台组合未重验。 |
-| subagents | [subagents.md](./subagents.md) | 委派、追加指令、查看过程、共享文件、授权与回收 | 从父会话打开真实子过程，两位子写入共享目录后仍等待。追加指令、子授权与附件隔离未重验。 |
+| subagents | [subagents.md](./subagents.md) | 委派、追加指令、查看过程、共享文件与回收 | 从父会话打开真实子过程，两位子写入共享目录后仍等待。追加指令与附件隔离未重验。 |
 | work-plan | [work-plan.md](./work-plan.md) | 计划创建、状态标记、回收与完成归档 | 实际更新两步计划并展开已完成计划，样本写入与读回一致。变更目标、清除、压缩及子计划未重验。 |
 | work-plan-and-usage | [work-plan-and-usage.md](./work-plan-and-usage.md) | 消息时间、`上下文用量` 和 compact | 输入区显示 22.7K tokens，GET 对应 22654。真实 compact 与交接未重验。 |
 | model-settings | [model-settings.md](./model-settings.md) | `设置 → 模型配置`、连接测试、保存及会话选择 | 通过「已选模型」发起真实 DeepSeek 测试，前后配置一致。供应商目录失败、子模型和在途切换未重验。 |
@@ -109,7 +107,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | routines | [routines.md](./routines.md) | `Bot 资料 → 例行任务` 查看、暂停、恢复与删除 | 实际 `save_routine`，人从页面暂停后 GET 为 `paused_by_user`、无下次安排。无人查看与跨周期未重验。 |
 | reply-delivery | [reply-delivery.md](./reply-delivery.md) | 长期 Bot 显式私信与群发言、`send_file` 文件交付 | 实际 `send_message` 发给 `user` 可见，`send_file` 交付 PNG 并下载原图。源文件变更、重启和图文混排未重验。 |
 | extensions | [extensions.md](./extensions.md) | 侧栏 `能力` 清单、MCP / Skill / CLI 的管理与检测 | 空安装清单可发现内置 `independent-verification`。单独批准本地测试包安装，关闭操作结果后草稿和会话版本保留。PDF 与其他扩展未重验。 |
-| realtime-events | [realtime-events.md](./realtime-events.md) | `/api/events` SSE、连接状态、多标签页同步 | Doctor 首事件 connected，第二标签切换自动放行，本页无需刷新即同步。旧响应、Worker 退出与重连交错未重验。 |
+| realtime-events | [realtime-events.md](./realtime-events.md) | `/api/events` SSE、连接状态、多标签页同步 | 验证连接状态、会话更新及重连同步。 |
 | layout-appearance | [layout-appearance.md](./layout-appearance.md) | 三栏布局、资料栏、`外观`、侧栏宽度与窄屏名册 | 桌面键盘调宽、64px 头像栏搜索及刷新保留通过。390px 名册仍显示全名，选中后输入可达。减少动态效果与实体触屏未验。 |
 | console-chat | [console-chat.md](./console-chat.md) | 终端单会话入口 `console_chat.py`、`/new` | 独立 ConPTY 的 `/mcp list`、`/new`、真实回复和 Ctrl+D 退出通过。启动“输入会打断”提示仍与规则冲突，授权与粘贴未重验。 |
 | subagents-parallel | [subagents-parallel.md](./subagents-parallel.md) | 并行委派、共享文件、选择性回收与父会话控制 | 同一决策派出两子，两者有运行重叠，各写独立文件。选择性回收、后台结果归属及回收失败未重验。 |
@@ -154,7 +152,7 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | `POST .../attachments`（拖入上传）、`POST .../attachments/select`（后端本机选择）、`GET .../attachments/{attachment_id}` | composer-attachments |
 | `POST /api/sessions/{id}/inputs` | web-session-chat |
 | `PUT /api/sessions/{id}/clarifications/{question_id}/answer` | web-session-chat |
-| `POST .../commands/{command_id}/authorize`、`GET/POST /api/auto-authorize`、`POST .../control` | tool-authorization |
+| `POST .../control` | extensions、inbox |
 | `POST .../cancel`、`POST .../retry` | run-control、crash-recovery（故障后重试） |
 | `GET .../subagents`、`GET .../subagents/{command_id}` | subagents、subagents-parallel |
 | `/assets/*`、`/` 静态挂载与前端回落 | web-session-chat |
@@ -233,7 +231,7 @@ Harness 修正已在 Windows 上按 `../SKILL.md` 原文实跑 Launch → Doctor
 源码核对发现、待 live 确认或修复的产品缺口（记录在对应文件 `Gotchas`，判据保持正确预期）：
 
 - web-session-chat（历史缺口）：未知 API 被静态兜底吞掉、静态目录缺少路径约束；当前已改用标准 StaticFiles，2026-10-20 对照测试通过，尚待 Web live 复验。
-- tool-authorization：`/control` 决定冲突与无待确认请求没有异常处理器，返回 500 而非 409。
+- extensions：`/control` 决定冲突与无待确认请求没有异常处理器，返回 500 而非 409。
 - crash-recovery（已修复）：同一 `delivery_id` 改文本重放，2026-10-20 live 确认修复前为 500 + Worker 失败，修复后为 409、原事件不变且后续对话可用。历史 Worker 卡死在同日后续实测未复现，范围见条目。
 - workspace-management：空名称创建工作区可能 500（界面已拦）。
 - extensions：`/mcp help` 列出 `/mcp reload`，实际没有该子命令。另记一项待定：终端 `/mcp upsert` 不经过模型路径上的 Shell 解释器拦截，是否应拦截由产品决定。
@@ -245,7 +243,7 @@ Harness 修正已在 Windows 上按 `../SKILL.md` 原文实跑 Launch → Doctor
 
 | 结果 | 功能 |
 |---|---|
-| 通过 | web-session-chat、tool-authorization、session-file-changes、run-control、subagents、subagents-parallel（并行派发）、scheduling、model-settings、session-sidebar、realtime-events、work-plan、work-plan-and-usage |
+| 通过 | web-session-chat、session-file-changes、run-control、subagents、subagents-parallel（并行派发）、scheduling、model-settings、session-sidebar、realtime-events、work-plan、work-plan-and-usage |
 | 失败（产品缺口） | tool-coding-round（Windows 退出码折叠为 1）、crash-recovery（Worker 崩溃后会话永久卡死） |
 | 走不到 | workspace-management（重命名/移除）、layout-appearance（外观菜单）、composer-attachments、extensions、console-chat——中途浏览器面板隐藏后 `requestAnimationFrame`/`ResizeObserver` 不触发（实测 0 次），弹窗、菜单与虚拟时间线无法渲染；console-chat 需要交互终端 |
 

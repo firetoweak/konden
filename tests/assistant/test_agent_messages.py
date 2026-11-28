@@ -178,12 +178,6 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
                           for name in ("Elsewhere", "Lin", "Third")})
 
     async def test_colleague_status_follows_host_facts_without_internal_identifiers(self):
-        await self.host.set_auto_authorize(False)
-        runtime = AgentRuntime(self.journal("Lin"), ScriptedDecisionMaker((lambda _: ModelDecision(
-            command_requests=(InvokeTool("write_file", (("path", "a.txt"),)),)),)),
-            {"write_file": ToolBinding(AsyncMock(), requires_authorization=True)})
-        await runtime.advance("Lin")
-
         async def statuses():
             colleagues = (await self.transport(LIST_COLLEAGUES, "Ada", {}))["data"]["colleagues"]
             for entry in colleagues:
@@ -192,11 +186,7 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(entry["since"], last.occurred_at.astimezone().isoformat(timespec="minutes"))
             return {entry["name"]: entry["status"] for entry in colleagues}
 
-        self.assertEqual(await statuses(), {"Elsewhere": "idle", "Lin": "awaiting_authorization", "Third": "idle"})
-        self.assertEqual(len((await self.host._project_view("Lin")).pending_authorization_ids), 1)
-        await self.host.set_auto_authorize(True)
         self.assertEqual(await statuses(), {"Elsewhere": "idle", "Lin": "idle", "Third": "idle"})
-        self.assertEqual((await self.host._project_view("Lin")).pending_authorization_ids, ())
         with patch.object(self.host, "activity", lambda session_id: "running" if session_id == "Lin" else "idle"):
             self.assertEqual(await statuses(), {"Elsewhere": "idle", "Lin": "working", "Third": "idle"})
 
@@ -216,14 +206,18 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
             reference = result["data"]["message_id"]
         binding = message_bindings(self.transport, self.journal("Lin"))[SEND_MESSAGE]
         args = {"recipient": "Ada", "text": "继续", "reply_to": reference}
-        # The Command waits for authorization, so only this test runs the handler; a background
-        # dispatch would race it and still be writing Lin's Journal when the test ends.
         runtime = AgentRuntime(self.journal("Lin"), ScriptedDecisionMaker((lambda _: ModelDecision(
             command_requests=(InvokeTool(SEND_MESSAGE, tuple(args.items())),)),)),
-            {SEND_MESSAGE: ToolBinding(binding.handler, requires_authorization=True)})
+            {SEND_MESSAGE: binding})
         await runtime.receive_user_message("Lin", "继续", delivery_id="limit")
         advanced = await runtime.advance("Lin")
-        context = AttemptContext("Lin", advanced.step.commands[0].command_id, "attempt-limit", 1)
+        async with asyncio.timeout(3):
+            while runtime.dispatcher.active_count:
+                await asyncio.sleep(0)
+        command = (await runtime.state("Lin")).command(advanced.step.commands[0].command_id)
+        attempt, = command.attempts
+        self.assertEqual(command.outcome.value["code"], "HOP_LIMIT_REACHED")
+        context = AttemptContext("Lin", command.command.command_id, attempt.attempt_id, 1)
         for _ in range(2):
             result = await binding.handler(context, args)
             self.assertEqual(result["code"], "HOP_LIMIT_REACHED")
@@ -302,9 +296,11 @@ class AgentMessagesTest(unittest.IsolatedAsyncioTestCase):
     async def test_one_origin_bounds_new_chains_and_the_replies_it_drives(self):
         async def decide(session_id, *decisions):
             runtime = AgentRuntime(self.journal(session_id), ScriptedDecisionMaker(decisions),
-                                   {SEND_MESSAGE: ToolBinding(AsyncMock())})
+                                   {SEND_MESSAGE: ToolBinding(AsyncMock(return_value=None))})
             for _ in decisions:
                 step = (await runtime.advance(session_id)).step
+            while runtime.dispatcher.active_count:
+                await asyncio.sleep(0)
             return step.commands
 
         def tasks(_):

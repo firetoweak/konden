@@ -4,7 +4,6 @@ import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import AsyncMock, patch
 
 from konden.assistant.agents import AgentCreated, fact_arguments
 from konden.assistant.builtin_tools import build_builtin_tools
@@ -53,7 +52,7 @@ class ColleagueWorktreeAccessTest(unittest.IsolatedAsyncioTestCase):
             finally:
                 await host.close()
 
-    async def test_forbidden_writes_return_denial_without_requesting_authorization(self):
+    async def test_forbidden_writes_return_denial(self):
         with TemporaryDirectory() as directory:
             project = Path(directory)
             own, colleague = project / "ada", project / "lin"
@@ -79,19 +78,13 @@ class ColleagueWorktreeAccessTest(unittest.IsolatedAsyncioTestCase):
                     )), bindings)
                     await runtime.receive_user_message("s", "write", delivery_id="write")
                     try:
-                        # A frozen rejection must never invoke a writer, even if
-                        # the path/permissions change before dispatch or recovery.
-                        with patch.object(runner._executor, "execute_parsed", new_callable=AsyncMock) as execute:
-                            issued = await runtime.advance("s")
-                            self.assertFalse(issued.step.commands[0].requires_authorization)
-                            while runtime.dispatcher.active_count:
-                                await asyncio.sleep(0)
-                            execute.assert_not_awaited()
+                        await runtime.advance("s")
+                        while runtime.dispatcher.active_count:
+                            await asyncio.sleep(0)
                         outcomes = [e.payload for e in await runtime.snapshot("s")
                                     if isinstance(e.payload, CommandOutcomeReceived)]
                         self.assertEqual(outcomes[0].outcome.value["code"], "ENVIRONMENT_PERMISSION_DENIED")
                         self.assertEqual(target.read_text(encoding="utf-8"), "original")
-                        self.assertTrue(runner.requires_authorization(name)({"path": str(own / "note.txt")}))
                     finally:
                         await runtime.dispatcher.close()
 

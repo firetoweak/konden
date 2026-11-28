@@ -123,6 +123,6 @@ def normalize_for_match(text: str) -> str:
 
 
 def _require_writable(path: Path) -> None:
-    # Even a privileged process must respect a file made read-only while awaiting approval.
+    # Respect the file's read-only mode even when the process can replace it.
     if not path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
         raise PermissionError(errno.EACCES, "文件已设为只读，无法写入", str(path))

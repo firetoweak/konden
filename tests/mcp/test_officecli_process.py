@@ -57,7 +57,6 @@ def test_officecli_edits_previews_and_restores_without_installation(tmp_path):
                     toolset_id=toolset_id, revision=descriptor.revision,
                     name=loaded.spec.name, description=loaded.spec.description,
                     parameters=loaded.spec.parameters.schema(),
-                    requires_authorization=loaded.spec.requires_authorization,
                     provider_data=loaded.provider_data,
                 )
                 missing = await restored.handler({"command": ["get", "不存在.docx", "/body"]})

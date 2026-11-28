@@ -207,49 +207,6 @@ class AssistantSessionResumeTest(unittest.IsolatedAsyncioTestCase):
         finally:
             await scheduler.close()
 
-    async def test_resume_wakes_pending_authorization_without_dispatching(self):
-        started = []
-
-        async def transfer(_context, _arguments):
-            started.append(1)
-            return "sent"
-
-        runtime = AgentRuntime(
-            MemoryJournal(),
-            ScriptedDecisionMaker(
-                (
-                    lambda _frame: ModelDecision(
-                        command_requests=(InvokeTool("transfer"),),
-                    ),
-                )
-            ),
-            {"transfer": ToolBinding(transfer, requires_authorization=True)},
-            SequentialIds(),
-        )
-        await runtime.create_session(self.SESSION_ID)
-        await runtime.receive_user_message(
-            self.SESSION_ID,
-            "send money",
-            delivery_id="ask-1",
-        )
-        await runtime.advance(self.SESSION_ID)
-        state = await runtime.state(self.SESSION_ID)
-        self.assertEqual(state.commands[0].phase, CommandPhase.PENDING)
-        self.assertEqual(state.status, RuntimeStatus.WAITING)
-
-        scheduler = RecordingScheduler(runtime, self.SESSION_ID)
-        sessions, _surface = self._sessions(runtime, scheduler)
-        try:
-            view = await sessions.resume(self.SESSION_ID)
-            self.assertTrue(view.should_wake)
-            self.assertEqual(scheduler.woken, [self.SESSION_ID])
-            await scheduler.join()
-            restored = await runtime.state(self.SESSION_ID)
-            self.assertEqual(restored.commands[0].phase, CommandPhase.PENDING)
-            self.assertEqual(started, [])
-        finally:
-            await scheduler.close()
-
     async def test_resume_does_not_wake_unknown_attempt(self):
         runtime = AgentRuntime(
             MemoryJournal(),
@@ -299,25 +256,22 @@ class AssistantSessionResumeTest(unittest.IsolatedAsyncioTestCase):
             await scheduler.close()
 
 class AcceptInputTest(unittest.IsolatedAsyncioTestCase):
-    async def test_control_confirmation_precedes_command_authorization(self):
+    async def test_yes_confirms_pending_control_proposal(self):
         sessions = object.__new__(AssistantSessions)
         pending = SessionView(
             status="waiting",
             waiting_for=(),
-            pending_authorization_ids=("command-1",),
             should_wake=False,
             control_approval=SimpleNamespace(request_id="request-1"),
         )
         resolved = SessionView(
             status="waiting",
             waiting_for=("external_fact",),
-            pending_authorization_ids=("command-1",),
             should_wake=False,
             control_message="控制操作完成",
         )
         sessions.view = AsyncMock(side_effect=(pending, resolved))
         sessions.resolve_control = AsyncMock(return_value="控制操作完成")
-        sessions.resolve_authorizations = AsyncMock()
         sessions.receive_user_message = AsyncMock()
 
         result = await sessions.accept_input(
@@ -329,7 +283,6 @@ class AcceptInputTest(unittest.IsolatedAsyncioTestCase):
         sessions.resolve_control.assert_awaited_once_with(
             "session-1", "request-1", approved=True
         )
-        sessions.resolve_authorizations.assert_not_awaited()
         sessions.receive_user_message.assert_not_awaited()
         self.assertEqual(result.control_message, "控制操作完成")
 

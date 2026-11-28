@@ -4,10 +4,9 @@ from hashlib import sha256
 import json
 
 from konden.runtime.events import (
+    EVENT_SCHEMA_VERSION,
     AttemptOrphaned,
-    CommandAuthorized,
     CommandOutcomeReceived,
-    CommandRejected,
     DecisionCancelled,
     DispatchAttemptStarted,
     DomainFactCommitted,
@@ -34,15 +33,12 @@ from konden.runtime.model import (
     StepState,
 )
 
-EVENT_SCHEMA_VERSION = 6
 DELIVERY_FINGERPRINT_VERSION = 3
-STATE_CODEC_VERSION = 7
-STATE_PROJECTION_VERSION = "canonical-state-v8"
+STATE_CODEC_VERSION = 8
+STATE_PROJECTION_VERSION = "canonical-state-v9"
 
 _USER_MESSAGE = "user.message.received"
 _STEP_COMMITTED = "step.committed"
-_COMMAND_AUTHORIZED = "command.authorized"
-_COMMAND_REJECTED = "command.rejected"
 _ATTEMPT_STARTED = "command.attempt.started"
 _OUTCOME_RECEIVED = "command.outcome.received"
 _ATTEMPT_ORPHANED = "command.attempt.orphaned"
@@ -101,7 +97,6 @@ def _command_to_data(command: Command) -> dict[str, object]:
     return {
         "command_id": command.command_id,
         "effect": _effect_to_data(command.effect),
-        "requires_authorization": command.requires_authorization,
         "decision_on_outcome": command.decision_on_outcome,
     }
 
@@ -110,7 +105,6 @@ def _command_from_data(data: dict[str, object]) -> Command:
     return Command(
         command_id=data["command_id"],
         effect=_effect_from_data(data["effect"]),
-        requires_authorization=data["requires_authorization"],
         decision_on_outcome=data["decision_on_outcome"],
     )
 
@@ -192,12 +186,6 @@ def encode_payload(payload: EventPayload) -> tuple[str, str]:
     elif isinstance(payload, StepCommitted):
         kind = _STEP_COMMITTED
         data = {"step": _step_to_data(payload.step), "decision_metadata": thaw_value(payload.decision_metadata)}
-    elif isinstance(payload, CommandAuthorized):
-        kind = _COMMAND_AUTHORIZED
-        data = {"command_id": payload.command_id}
-    elif isinstance(payload, CommandRejected):
-        kind = _COMMAND_REJECTED
-        data = {"command_id": payload.command_id}
     elif isinstance(payload, DispatchAttemptStarted):
         kind = _ATTEMPT_STARTED
         data = {
@@ -250,10 +238,6 @@ def decode_payload(
         return UserMessageReceived(data["content"])
     if kind == _STEP_COMMITTED:
         return StepCommitted(_step_from_data(data["step"]), data["decision_metadata"])
-    if kind == _COMMAND_AUTHORIZED:
-        return CommandAuthorized(data["command_id"])
-    if kind == _COMMAND_REJECTED:
-        return CommandRejected(data["command_id"])
     if kind == _ATTEMPT_STARTED:
         return DispatchAttemptStarted(**data)
     if kind == _OUTCOME_RECEIVED:
@@ -326,10 +310,6 @@ def _command_state_to_data(state: CommandState) -> dict[str, object]:
             _outcome_to_data(state.outcome) if state.outcome is not None else None
         ),
         "canonical_outcome_event_id": state.canonical_outcome_event_id,
-        "dispatch_eligible_by_event_id": state.dispatch_eligible_by_event_id,
-        "authorization_rejected_by_event_id": (
-            state.authorization_rejected_by_event_id
-        ),
     }
 
 
@@ -343,8 +323,6 @@ def _command_state_from_data(data: dict[str, object]) -> CommandState:
             _outcome_from_data(data["outcome"]) if data["outcome"] is not None else None
         ),
         canonical_outcome_event_id=data["canonical_outcome_event_id"],
-        dispatch_eligible_by_event_id=data["dispatch_eligible_by_event_id"],
-        authorization_rejected_by_event_id=data["authorization_rejected_by_event_id"],
     )
 
 

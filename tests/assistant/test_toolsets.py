@@ -33,9 +33,8 @@ async def _ping(arguments: Mapping[str, object]) -> object:
 
 
 class FakeEchoProvider:
-    def __init__(self, revision: int = 1, *, requires_authorization: bool = False) -> None:
+    def __init__(self, revision: int = 1) -> None:
         self.revision = revision
-        self.requires_authorization = requires_authorization
         self.load_calls = 0
         self.restore_calls = 0
 
@@ -59,7 +58,6 @@ class FakeEchoProvider:
                 description="echo text",
                 parameters={"type": "object", "properties": {"text": {"type": "string"}}},
                 execute=_ping,
-                requires_authorization=self.requires_authorization,
             ),
         )
 
@@ -78,7 +76,6 @@ class FakeEchoProvider:
                 description=tool.description,
                 parameters=dict(tool.parameters),
                 execute=_ping,
-                requires_authorization=tool.requires_authorization,
                 provider_data=tool.provider_data,
             )
             for tool in tools
@@ -285,17 +282,3 @@ class ToolsetProgressiveLoadTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(activations[0].revision, 1)
         self.assertEqual(_schema_names(surface.schemas(SESSION_ID)), {LOAD_TOOLSET, "demo_ping"})
-
-    async def test_dynamic_tool_freezes_host_authorization_requirement(self):
-        surface, runtime = _attached(
-            FakeEchoProvider(requires_authorization=True),
-            (lambda _f: ModelDecision(content="ping", command_requests=(InvokeTool("demo_ping"),)),),
-        )
-        self.assertTrue((await surface.load(SESSION_ID, "demo"))["ok"])
-        await runtime.receive_user_message(SESSION_ID, "ping", delivery_id="auth-1")
-
-        step = (await runtime.advance(SESSION_ID)).step
-        state = await runtime.state(SESSION_ID)
-
-        self.assertTrue(step.commands[0].requires_authorization)
-        self.assertEqual(state.waiting_for, (f"authorization:{step.commands[0].command_id}",))

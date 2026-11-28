@@ -32,7 +32,7 @@ AGENT_GIT_SCHEMAS: list[dict[str, object]] = [
                 "在你自己的分支上，从这个项目已落地的工作开始。可以同时挂多个项目。"
                 "用户提到项目名时先用 project 直接挂；没有这个名字时，结果会列出已登记的项目名。"
                 "只有用户给出路径、或项目确实还没登记时，才用 path 给出本地 Git 仓库根目录的绝对路径，"
-                "需要用户批准，批准后原地登记再挂上。project 和 path 只给一个。"
+                "会原地登记再挂上。project 和 path 只给一个。"
                 "成功时返回项目名和工作树目录，之后用这个项目名调用 land_branch、sync_branch、unlink_project 和 delegate。"
             ),
             "parameters": {
@@ -67,7 +67,7 @@ AGENT_GIT_SCHEMAS: list[dict[str, object]] = [
                 "未提交的修改不会带走，需要时先提交再落地。"
                 "能快进则快进，否则产生一个以你为作者的合并提交。"
                 "与集成分支冲突时集成分支不变，结果列出冲突文件，先用 sync_branch 同步并解决冲突再落地。"
-                "落地不需要用户批准，适合小步频繁落地。必须单独调用。"
+                "适合小步频繁落地。必须单独调用。"
             ),
             "parameters": _project_only("要落地的项目名。"),
         },
@@ -152,11 +152,6 @@ def _project_argument(name: str, arguments: Mapping[str, object]) -> str | dict[
     return project
 
 
-def _link_needs_approval(arguments: Mapping[str, object]) -> bool:
-    """Only a path the model chose registers a new project; naming a registered one does not."""
-    return arguments.get("path") is not None
-
-
 def agent_git_bindings(transport: SessionTransport) -> dict[str, ToolBinding]:
     async def land(context: AttemptContext, arguments: Mapping[str, object]) -> object:
         project = _project_argument(LAND, arguments)
@@ -187,6 +182,6 @@ def agent_git_bindings(transport: SessionTransport) -> dict[str, ToolBinding]:
 
     return {
         LAND: ToolBinding(land), SYNC: ToolBinding(sync),
-        LINK: ToolBinding(link, requires_authorization=_link_needs_approval),
+        LINK: ToolBinding(link),
         UNLINK: ToolBinding(unlink),
     }

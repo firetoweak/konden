@@ -1,11 +1,11 @@
 ---
 name: verify-konden
-description: "Drive konden Web the way a user does — workspace, Agent roster and chat, colleague tools, private messages, landing and sync, group chat, tool authorization, and Bot renaming — and capture proof. Use when changing Web, Bot names, model settings, or when a change needs a real-app check before it ships."
+description: "Drive konden Web the way a user does — workspace, Agent roster and chat, colleague tools, private messages, landing and sync, group chat, file and command execution, and Bot renaming — and capture proof. Use when changing Web, Bot names, model settings, or when a change needs a real-app check before it ships."
 ---
 
 # Verify konden
 
-Drive the Web app a person actually uses. `web_chat.py` serves it against an empty home; that path is part of the map. Chat and tool calls also need a configured model. Web sessions are persistent Bots under `$KONDEN_HOME/state/bots/`; a linked code project needs a Git repository with a first commit and lives under `projects/<name>/`. Integration worktrees live under `$KONDEN_HOME/state/coding_bot/`. Subagents share their parent's files and can run commands — verify their authorization and explicit reclamation. The terminal entry point is `features/console-chat.md`.
+Drive the Web app a person actually uses. `web_chat.py` serves it against an empty home; that path is part of the map. Chat and tool calls also need a configured model. Web sessions are persistent Bots under `$KONDEN_HOME/state/bots/`; a linked code project needs a Git repository with a first commit and lives under `projects/<name>/`. Integration worktrees live under `$KONDEN_HOME/state/coding_bot/`. Subagents share their parent's files and can run commands — verify shared execution and explicit reclamation. The terminal entry point is `features/console-chat.md`.
 
 ## Acceptance basis
 

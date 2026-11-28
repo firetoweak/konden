@@ -129,22 +129,6 @@ class StepCommitted:
 
 
 @dataclass(frozen=True, slots=True)
-class CommandAuthorized:
-    command_id: str
-
-    def __post_init__(self) -> None:
-        _require_str(self.command_id, "command id")
-
-
-@dataclass(frozen=True, slots=True)
-class CommandRejected:
-    command_id: str
-
-    def __post_init__(self) -> None:
-        _require_str(self.command_id, "command id")
-
-
-@dataclass(frozen=True, slots=True)
 class DispatchAttemptStarted:
     attempt_id: str
     command_id: str
@@ -225,8 +209,6 @@ class DomainFactCommitted:
 EventPayload: TypeAlias = (
     UserMessageReceived
     | StepCommitted
-    | CommandAuthorized
-    | CommandRejected
     | DispatchAttemptStarted
     | CommandOutcomeReceived
     | AttemptOrphaned
@@ -238,8 +220,6 @@ EventPayload: TypeAlias = (
 _EVENT_PAYLOAD_TYPES = (
     UserMessageReceived,
     StepCommitted,
-    CommandAuthorized,
-    CommandRejected,
     DispatchAttemptStarted,
     CommandOutcomeReceived,
     AttemptOrphaned,
@@ -247,6 +227,9 @@ _EVENT_PAYLOAD_TYPES = (
     StepContinuationCancelled,
     DomainFactCommitted,
 )
+
+
+EVENT_SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,7 +240,7 @@ class EventDraft:
     occurred_at: datetime
     causation_id: str | None = None
     correlation_id: str | None = None
-    schema_version: int = 6
+    schema_version: int = EVENT_SCHEMA_VERSION
     artifact_refs: tuple[str, ...] = ()
     delivery: DeliveryIdentity | None = None
 

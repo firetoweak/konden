@@ -2,7 +2,7 @@
 
 ## 实现与范围
 
-一个会话提交一组已获准的命令。`Dispatch` 追加尝试，`Observe` 表示执行者取得可核对的成功或失败证据，`Complete` 尝试把证据写入 Journal。接管与旧结果竞争，`MarkOrphan` 为旧执行者留下的尝试登记未知。事件种类与写入入口见 [Dispatcher](../../konden/runtime/dispatcher.py)、[SQLite Journal](../../konden/runtime/journal/sqlite.py) 和 [Worker 恢复入口](../../konden/assistant/host/worker.py)。
+一个会话提交一组命令。`Dispatch` 追加尝试，`Observe` 表示执行者取得可核对的成功或失败证据，`Complete` 尝试把证据写入 Journal。接管与旧结果竞争，`MarkOrphan` 为旧执行者留下的尝试登记未知。事件种类与写入入口见 [Dispatcher](../../konden/runtime/dispatcher.py)、[SQLite Journal](../../konden/runtime/journal/sqlite.py) 和 [Worker 恢复入口](../../konden/assistant/host/worker.py)。
 
 范围为两个命令、两个 Worker、一次接管。租约过期后旧执行者仍有提交机会，成功接管才换代。源码中的代次检查用于 Step claim，Attempt 终局按命令、尝试和派发事实核对；Host 先取得独占权并确认旧执行者离场。模型用代次围住两者，并逐条登记 orphan，实际 `prepare_recovery` 在一个事务中登记整批。这里没有验证操作系统的进程隔离，也没有覆盖领域以后补交确定结果的协议。
 

@@ -3,12 +3,12 @@ import { Button, Group, Paper, Stack, Text } from "@mantine/core";
 import type { InboxItem } from "../../api/contracts";
 import { useAnswerAbsenceMutation, useGetInboxQuery } from "../../api/kondenApi";
 
-/** 授权与控制提案由 PendingActions 展示；其余需要人介入的事项留在所属 Bot 的对话中。 */
+/** 控制提案之外，需要人介入的事项留在所属 Bot 的对话中。 */
 export function SessionAttention({ sessionId, connectionId }: { sessionId: string; connectionId: string | null }) {
   const { data: inbox = [] } = useGetInboxQuery();
   const [answerAbsence, answering] = useAnswerAbsenceMutation();
   const items = inbox.filter((item): item is Extract<InboxItem, { kind: "limit" | "absence" }> => item.session_id === sessionId
-    && item.kind !== "authorization" && item.kind !== "control");
+    && item.kind !== "control");
   const disabled = connectionId === null || answering.isLoading;
   if (items.length === 0) return null;
 

@@ -34,20 +34,6 @@ class ReplaceAllInput(BaseModel):
     new_block: str = Field(description="替换后的文本块")
 
 
-def write_authorization_policy(binding: FileAccess):
-    def requires_authorization(arguments):
-        try:
-            binding.resolver.resolve(arguments.get("path"), access="write")
-        except EnvironmentInputError as exc:
-            return {**environment_error(exc),
-                    "hint": "修正目标路径或访问范围后重新调用；批准不会扩大文件访问权限。"}
-        except OSError as exc:
-            return {"ok": False, "code": "FILE_IO_FAILED", "error": file_error_message(exc),
-                    "hint": "检查路径与文件访问状态后重新调用。"}
-        return True
-    return requires_authorization
-
-
 def create_file_write_specs(binding: FileAccess) -> list[ToolSpec]:
     resolver = binding.resolver
 
@@ -83,14 +69,12 @@ def create_file_write_specs(binding: FileAccess) -> list[ToolSpec]:
             description=APPLY_PATCH_DESCRIPTION,
             parameters=PydanticParameters(ApplyPatchInput),
             handler=apply_patch,
-            requires_authorization=write_authorization_policy(binding),
         ),
         ToolSpec(
             name="replace_all",
             description=REPLACE_ALL_DESCRIPTION,
             parameters=PydanticParameters(ReplaceAllInput),
             handler=replace_all,
-            requires_authorization=write_authorization_policy(binding),
         ),
     ]
 

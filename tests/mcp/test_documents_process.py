@@ -89,7 +89,7 @@ def test_documents_render_scanned_pages_crop_and_restore(tmp_path):
             spec = restored.toolset_provider.restore_spec(
                 toolset_id=toolset_id, revision=descriptor.revision,
                 name=inspect.spec.name, description=inspect.spec.description,
-                parameters=inspect.spec.parameters.schema(), requires_authorization=inspect.spec.requires_authorization,
+                parameters=inspect.spec.parameters.schema(),
                 provider_data=inspect.provider_data,
             )
             async with restored.client_manager:

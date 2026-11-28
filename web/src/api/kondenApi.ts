@@ -29,7 +29,6 @@ import {
   avatarsSchema,
   type AvatarSelection,
   type Avatars,
-  autoAuthorizeSchema,
   backgroundCommandSchema,
   type BackgroundCommand,
   conversationViewSchema,
@@ -89,20 +88,9 @@ type UploadAttachment = SelectSession & {
   file: File;
 };
 
-type AuthorizeCommand = SelectSession & {
-  commandSessionId?: string;
-  commandId: string;
-  approved: boolean;
-};
-
 type ResolveControl = SelectSession & {
   requestId: string;
   approved: boolean;
-};
-
-type SetAutoAuthorize = {
-  connectionId: string;
-  enabled: boolean;
 };
 
 export type { AttachmentRef } from "./contracts";
@@ -136,7 +124,7 @@ async function putConversation(
 export const kondenApi = createApi({
   reducerPath: "kondenApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "AutoAuthorize", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities", "CodexConnection", "LocalCodexChat"],
+  tagTypes: ["Agents", "Groups", "Inbox", "Workspaces", "Conversation", "ModelSettings", "SessionModel", "Routines", "SharedMemory", "PersonalMemory", "Avatars", "ExternalConnections", "ExternalSessions", "Capabilities", "CodexConnection", "LocalCodexChat"],
   endpoints: (build) => ({
     getCapabilities: build.query<CapabilityInventory, void>({
       query: () => "/capabilities",
@@ -781,19 +769,6 @@ export const kondenApi = createApi({
         putConversation(dispatch, arg.sessionId, data);
       },
     }),
-    authorizeCommand: build.mutation<ConversationView, AuthorizeCommand>({
-      query: ({ connectionId, sessionId, commandId, approved, commandSessionId }) => ({
-        url: `/sessions/${encodeURIComponent(sessionId)}/commands/${encodeURIComponent(commandId)}/authorize`,
-        method: "POST",
-        body: { connection_id: connectionId, approved, ...(commandSessionId === undefined ? {} : { command_session_id: commandSessionId }) },
-      }),
-      transformResponse: (value: unknown) => conversationViewSchema.parse(value),
-      invalidatesTags: ["Agents", "Inbox"],
-      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled;
-        putConversation(dispatch, arg.sessionId, data);
-      },
-    }),
     resolveControl: build.mutation<ConversationView, ResolveControl>({
       query: ({ connectionId, sessionId, requestId, approved }) => ({
         url: `/sessions/${encodeURIComponent(sessionId)}/control`,
@@ -812,20 +787,6 @@ export const kondenApi = createApi({
           }),
         );
       },
-    }),
-    getAutoAuthorize: build.query<{ enabled: boolean }, void>({
-      query: () => "/auto-authorize",
-      transformResponse: (value: unknown) => autoAuthorizeSchema.parse(value),
-      providesTags: ["AutoAuthorize"],
-    }),
-    setAutoAuthorize: build.mutation<{ enabled: boolean }, SetAutoAuthorize>({
-      query: ({ connectionId, enabled }) => ({
-        url: "/auto-authorize",
-        method: "POST",
-        body: { connection_id: connectionId, enabled },
-      }),
-      transformResponse: (value: unknown) => autoAuthorizeSchema.parse(value),
-      invalidatesTags: ["AutoAuthorize", "Conversation", "Inbox", "Agents"],
     }),
     retryTurn: build.mutation<ConversationView, SelectSession>({
       query: ({ connectionId, sessionId }) => ({
@@ -913,9 +874,6 @@ export const {
   useAnswerClarificationMutation,
   useUploadAttachmentMutation,
   useCancelTurnMutation,
-  useAuthorizeCommandMutation,
   useResolveControlMutation,
-  useSetAutoAuthorizeMutation,
-  useGetAutoAuthorizeQuery,
   useRetryTurnMutation,
 } = kondenApi;

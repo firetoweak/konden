@@ -1,7 +1,6 @@
 import {
   Alert,
   Badge,
-  Button,
   Collapse,
   Group,
   Loader,
@@ -20,7 +19,6 @@ import {
   IconChevronRight,
   IconCode,
   IconTool,
-  IconX,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
@@ -40,8 +38,6 @@ const STATUS_LABEL: Record<ToolStatus, string> = {
   succeeded: "完成",
   failed: "失败",
   unknown: "中断",
-  awaiting_authorization: "待授权",
-  rejected: "已拒绝",
 };
 
 const STATUS_COLOR: Record<ToolStatus, string> = {
@@ -50,21 +46,15 @@ const STATUS_COLOR: Record<ToolStatus, string> = {
   succeeded: "gray",
   failed: "red",
   unknown: "yellow",
-  awaiting_authorization: "orange",
-  rejected: "gray",
 };
 
 interface ExecutionProcessProps {
   steps: VisibleStep[];
-  authorizationDisabled: boolean;
-  onAuthorize: (commandId: string, approved: boolean) => void;
   onObserveSubagent?: (commandId: string) => void;
 }
 
 export function ExecutionProcess({
   steps,
-  authorizationDisabled,
-  onAuthorize,
   onObserveSubagent,
 }: ExecutionProcessProps) {
   const [opened, setOpened] = useState(false);
@@ -87,7 +77,7 @@ export function ExecutionProcess({
         <Stack className="execution-steps" gap={4}>
           {opened ? tools.map((tool) => isSubagentTool(tool.name)
             ? <SubagentCallCard key={tool.commandId} tool={tool} onObserve={onObserveSubagent} />
-            : <ToolCard key={tool.commandId} tool={tool} onAuthorize={onAuthorize} authorizationDisabled={authorizationDisabled} />) : null}
+            : <ToolCard key={tool.commandId} tool={tool} />) : null}
         </Stack>
       </Collapse>
     </Paper>
@@ -97,16 +87,12 @@ export function ExecutionProcess({
 export function StepDisclosure({
   index,
   step,
-  authorizationDisabled = false,
-  onAuthorize,
   onObserveSubagent,
   sessionId,
   expandRunning = false,
 }: {
   index: number;
   step: VisibleStep;
-  authorizationDisabled?: boolean;
-  onAuthorize?: (commandId: string, approved: boolean) => void;
   onObserveSubagent?: (commandId: string) => void;
   sessionId?: string;
   expandRunning?: boolean;
@@ -149,19 +135,16 @@ export function StepDisclosure({
       </Group>
       <Collapse expanded={opened}>
         {opened ? (
-          <StepContent step={step} sessionId={sessionId} onAuthorize={onAuthorize}
-            authorizationDisabled={authorizationDisabled} onObserveSubagent={onObserveSubagent} />
+          <StepContent step={step} sessionId={sessionId} onObserveSubagent={onObserveSubagent} />
         ) : null}
       </Collapse>
     </div>
   );
 }
 
-function StepContent({ step, sessionId, onAuthorize, authorizationDisabled = false, onObserveSubagent }: {
+function StepContent({ step, sessionId, onObserveSubagent }: {
   step: VisibleStep;
   sessionId?: string;
-  onAuthorize?: (commandId: string, approved: boolean) => void;
-  authorizationDisabled?: boolean;
   onObserveSubagent?: (commandId: string) => void;
 }) {
   return <Stack className="step-content" gap="xs">
@@ -181,20 +164,11 @@ function StepContent({ step, sessionId, onAuthorize, authorizationDisabled = fal
     )}
     {step.tools.map((tool) => isSubagentTool(tool.name)
       ? <SubagentCallCard key={tool.commandId} tool={tool} onObserve={onObserveSubagent} />
-      : <ToolCard key={tool.commandId} tool={tool} onAuthorize={onAuthorize} authorizationDisabled={authorizationDisabled} />)}
+      : <ToolCard key={tool.commandId} tool={tool} />)}
   </Stack>;
 }
 
-function ToolCard({
-  tool,
-  authorizationDisabled,
-  onAuthorize,
-}: {
-  tool: VisibleTool;
-  authorizationDisabled: boolean;
-  onAuthorize?: (commandId: string, approved: boolean) => void;
-}) {
-  const awaiting = tool.status === "awaiting_authorization";
+function ToolCard({ tool }: { tool: VisibleTool }) {
   const hasArguments = Object.keys(tool.arguments).length > 0;
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -249,30 +223,6 @@ function ToolCard({
           {formatArguments(tool.arguments)}
         </Text>
       ) : null}
-      {awaiting && onAuthorize !== undefined ? (
-        <Group gap="xs" mt="xs">
-          <Button
-            color="ember"
-            disabled={authorizationDisabled}
-            leftSection={<IconCheck size={14} />}
-            onClick={() => onAuthorize(tool.commandId, true)}
-            size="compact-sm"
-            variant="light"
-          >
-            允许
-          </Button>
-          <Button
-            color="gray"
-            disabled={authorizationDisabled}
-            leftSection={<IconX size={14} />}
-            onClick={() => onAuthorize(tool.commandId, false)}
-            size="compact-sm"
-            variant="light"
-          >
-            拒绝
-          </Button>
-        </Group>
-      ) : null}
       {tool.error === null ? null : (
         <Alert color={STATUS_COLOR[tool.status]} mt="xs" py="xs" variant="light">
           <Text ff="monospace" fz={12} className="pre-wrap">
@@ -289,9 +239,6 @@ function formatArguments(arguments_: Record<string, unknown>) {
 }
 
 function stepStatus(step: VisibleStep): ToolStatus {
-  if (step.tools.some((tool) => tool.status === "awaiting_authorization")) {
-    return "awaiting_authorization";
-  }
   if (step.pending || step.tools.some((tool) => tool.status === "running")) {
     return "running";
   }
@@ -301,21 +248,13 @@ function stepStatus(step: VisibleStep): ToolStatus {
   if (step.tools.some((tool) => tool.status === "unknown")) {
     return "unknown";
   }
-  if (
-    step.tools.some(
-      (tool) => tool.status === "failed" || tool.status === "rejected",
-    )
-  ) {
-    return "rejected";
+  if (step.tools.some((tool) => tool.status === "failed")) {
+    return "failed";
   }
   return "succeeded";
 }
 
 function stepStatusIsRunning(step: VisibleStep): boolean {
   const status = stepStatus(step);
-  return (
-    status === "queued" ||
-    status === "running" ||
-    status === "awaiting_authorization"
-  );
+  return status === "queued" || status === "running";
 }

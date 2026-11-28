@@ -41,9 +41,6 @@ class _IdleSessions:
     def activity(self, session_id: str) -> str:
         return "idle"
 
-    def auto_authorize(self) -> bool:
-        return False
-
     def current_failure(self, session_id: str) -> None:
         return None
 

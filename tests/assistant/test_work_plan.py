@@ -32,6 +32,7 @@ from konden.runtime import (
     UserMessageReceived,
 )
 from konden.runtime.dispatcher import AttemptContext
+from konden.runtime.events import EVENT_SCHEMA_VERSION
 from tests.fixtures.artifacts import MemoryArtifactGateway
 
 PLAN = {
@@ -48,7 +49,7 @@ def event(sequence, payload, *, causation_id=None):
     return Event(
         event_id=f"e{sequence}", session_id="s", sequence=sequence,
         payload=payload, occurred_at=datetime.now(UTC),
-        causation_id=causation_id, correlation_id=None, schema_version=6, artifact_refs=(),
+        causation_id=causation_id, correlation_id=None, schema_version=EVENT_SCHEMA_VERSION, artifact_refs=(),
     )
 
 
@@ -82,7 +83,6 @@ class WorkPlanToolTests(unittest.IsolatedAsyncioTestCase):
     async def test_update_tool_validates_complete_versions_and_explicit_clear(self):
         binding = update_plan_binding()
         context = AttemptContext("s", "c", "a", 1)
-        assert not binding.requires_authorization
         for plan in (PLAN, None):
             result = await binding.handler(context, {"plan": plan})
             assert result["ok"] is True
@@ -138,7 +138,7 @@ def test_request_prefix_and_historical_plan_text_survive_replace_and_clear():
     assert len(third.messages) == len(third.source_sequences)
     view = project_conversation(
         "s", events, StateProjector().project_visible("s", events).steps,
-        session=SessionView("waiting", ("external_fact",), (), False),
+        session=SessionView("waiting", ("external_fact",), False),
     )
     assert view.work_plan is None
     assert len([tool for item in view.items if item.kind == "step" for tool in item.tools]) == 3
@@ -165,7 +165,7 @@ def test_compact_reading_window_keeps_plan_from_full_journal_not_summary():
     assert "修复附件上传" in prepared.messages[-1]["content"]
     view = project_conversation(
         "s", events, StateProjector().project_visible("s", events).steps,
-        session=SessionView("waiting", ("external_fact",), (), False),
+        session=SessionView("waiting", ("external_fact",), False),
     )
     assert view.work_plan == PLAN
 

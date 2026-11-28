@@ -87,7 +87,6 @@ class MemoryReviewTest(unittest.IsolatedAsyncioTestCase):
             **personal_memory_bindings(self.personal, "Ada"),
         }
         self.llm = ReviewModel()
-        self.authorized = True
         self.input_number = 0
 
     def review(self):
@@ -95,7 +94,6 @@ class MemoryReviewTest(unittest.IsolatedAsyncioTestCase):
             runtime=self.runtime, session_id=self.session_id, bot_name="Ada", llm=self.llm,
             model=lambda: "test-model", reasoning_effort=lambda: None,
             memory=self.memory, bindings=self.bindings, gateway=MemoryArtifactGateway(),
-            authorized=lambda: self.authorized,
         )
 
     async def turn(self, text=None):
@@ -192,27 +190,6 @@ class MemoryReviewTest(unittest.IsolatedAsyncioTestCase):
         shown = json.dumps(self.llm.requests[0]["messages"], ensure_ascii=False)
         self.assertIn("已接收但尚未处理的新要求", shown)
         self.assertNotIn("旧记录只用于基线", shown)
-
-    async def test_revoking_authorization_during_call_recording_prevents_write(self):
-        # Recheck after the last awaited record, not just before or after the model request.
-        review = self.review()
-        await self.make_due(review)
-        self.llm.response = self.write_response()
-        original_record = self.runtime.receive_domain_fact
-
-        async def record_then_revoke(session_id, fact_type, data, **kwargs):
-            event = await original_record(session_id, fact_type, data, **kwargs)
-            if fact_type == REVIEW_FACT and data["phase"] == "call:0":
-                self.authorized = False
-            return event
-
-        self.runtime.receive_domain_fact = record_then_revoke
-        try:
-            await review.run_if_due()
-        finally:
-            self.runtime.receive_domain_fact = original_record
-        self.assertEqual(self.personal.read().version, 0)
-        self.assertEqual((await self.finished())[-1]["status"], "disabled")
 
     async def test_provider_failure_is_recorded_without_claiming_memory_was_saved(self):
         review = self.review()

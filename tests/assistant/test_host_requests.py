@@ -135,13 +135,12 @@ class HostRequestFailureTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(worker.requests, 0)
                 host._stop_idle.assert_not_awaited()
 
-    async def test_startup_policy_does_not_send_to_a_worker_already_failed(self):
+    async def test_request_does_not_send_to_a_worker_already_failed(self):
         host = object.__new__(HostSupervisor)
         host.lifecycle = SimpleNamespace(is_deleted=AsyncMock(return_value=False))
         host.closed = False
         host.locks = {}
         host.workers = {}
-        host._auto_authorize_lock = asyncio.Lock()
         peer = SimpleNamespace(request=AsyncMock(side_effect=AssertionError("closed pipe")))
         worker = Worker(None, peer)
         worker.failure = WorkerFailed("session", ProcessFailure(

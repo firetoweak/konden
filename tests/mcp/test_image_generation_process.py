@@ -36,7 +36,7 @@ def test_image_tool_starts_restores_and_obeys_disable_and_read_only(tmp_path):
             descriptor = next(item for item in second.toolset_provider.descriptors() if item.id == toolset_id)
             restored = second.toolset_provider.restore_spec(toolset_id=toolset_id, revision=descriptor.revision,
                 name=loaded.spec.name, description=loaded.spec.description, parameters=loaded.spec.parameters.schema(),
-                requires_authorization=loaded.spec.requires_authorization, provider_data=loaded.provider_data)
+provider_data=loaded.provider_data)
             result = await restored.handler({"prompt":" "})
             assert result["ok"] is False and "不能为空白" in result["error"]
             service.save(ImageConfig(model="openai/gpt-image-1.5"))

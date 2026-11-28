@@ -144,9 +144,7 @@ class Journal(Protocol):
         lease_seconds: float = 30.0,
     ) -> Event | None: ...
 
-    async def grant_command(self, draft: EventDraft) -> Event | None: ...
 
-    async def reject_command(self, draft: EventDraft) -> Event | None: ...
 
     async def renew_attempt(
         self,

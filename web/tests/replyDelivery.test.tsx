@@ -45,9 +45,9 @@ it("私信留在原线程，用户能看到正文、原生会话入口和新消�
     compact_count: 0, compact_phase: null, waiting_until: null, work_plan: null, work_plan_updates: [], context_input_tokens: null,
     deleted: false, agent_name: "Atlas",
     session: {
-      status: "waiting", waiting_for: ["external_fact"], pending_authorization_ids: [], pending_authorization_commands: [],
+      status: "waiting", waiting_for: ["external_fact"],
       should_wake: false, has_open_subagents: false, control_approval: null,
-      control_message: null, auto_authorize: false, last_error: null,
+      control_message: null, last_error: null,
     },
     items: [
       { kind: "user", message_id: "hi", text: "你好", occurred_at: "2026-10-19T00:00:00Z", images: [], files: [] },

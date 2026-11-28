@@ -101,8 +101,6 @@ def _status(command):
         if outcome.status is OutcomeStatus.SUCCEEDED:
             return "failed" if isinstance(outcome.value, Mapping) and outcome.value.get("ok") is False else "passed"
         return outcome.status.value
-    if command.authorization_rejected_by_event_id is not None:
-        return "rejected"
     return "unknown" if command.attempts else "pending"
 
 

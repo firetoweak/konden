@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 
 COMMAND_DESCRIPTION = """
 用途：用 {shell_name} 执行非交互命令与脚本，包括安装、构建、测试、格式化、静态检查和 Git；文件查找、读取和修改用专用文件工具。
-文件：直接作用于工作区真实目录，不提供文件回退。命令可以访问工作区之外和网络，执行前需要用户授权；执行后根据实际结果核对影响。
+文件：直接作用于工作区真实目录，不提供文件回退。命令以本机进程的权限访问文件和网络，执行后根据实际结果核对影响。
 限制：不支持中途的 UAC、sudo 密码或硬件确认；遇到时停止，告诉用户需要在工具外完成的步骤。
 执行环境：每次调用独立，不继承上次的环境激活、变量或目录；需要特定环境就在 command 里显式调用解释器或环境管理器。陌生 CLI 或遇到 unknown option 时逐层查 `--help`，不要猜 flag。
 {background_behavior}
@@ -144,7 +144,6 @@ def create_command_execution_spec(
         )),
         parameters=PydanticParameters(CommandInput if commands.background_supported else ForegroundCommandInput),
         handler=execute_command,
-        requires_authorization=True,
     )
 
 

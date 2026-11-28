@@ -135,7 +135,7 @@ def test_a2a_toolset_replaces_the_old_bot_registration_contract():
     assert toolset.restore(A2A_TOOLSET.id, 1, (Mock(),)) == ()
     listing, delegate = asyncio.run(toolset.load(A2A_TOOLSET.id, A2A_TOOLSET.revision))
     assert listing.name == A2A_LIST == "list_codex_sessions"
-    assert delegate.name == A2A_DELEGATE and delegate.requires_authorization
+    assert delegate.name == A2A_DELEGATE
     assert "bot_id" not in delegate.parameters["properties"]
     assert asyncio.run(delegate.execute({"brief": "核对稿件"}))["ok"]
     assert transport.await_args.args[2]["codex_session_id"] is None

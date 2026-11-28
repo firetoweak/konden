@@ -29,9 +29,6 @@ class WebEventHub:
     async def avatars_changed(self) -> None:
         await self._broadcast("avatars_changed", {})
 
-    async def auto_authorize_changed(self) -> None:
-        await self._broadcast("auto_authorize_changed", {})
-
     async def external_sessions_changed(self) -> None:
         await self._broadcast("external_sessions_changed", {})
 
@@ -244,29 +241,6 @@ class WebEventHub:
                 "command_id": command_id,
                 "name": name,
                 "status": "running" if phase == "start" else "settled",
-            },
-        )
-
-    async def authorization_required(
-        self,
-        session_id: str,
-        command_id: str,
-        name: str,
-        arguments: dict,
-    ) -> None:
-        if type(session_id) is not str or not session_id:
-            raise ValueError("session_id must be a non-empty str")
-        if type(command_id) is not str or not command_id:
-            raise ValueError("command_id must be a non-empty str")
-        if type(name) is not str or not name:
-            raise ValueError("name must be a non-empty str")
-        await self._broadcast(
-            "authorization_required",
-            {
-                "session_id": session_id,
-                "command_id": command_id,
-                "name": name,
-                "arguments": arguments,
             },
         )
 

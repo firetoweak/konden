@@ -1,6 +1,4 @@
 import {
-  authorizationRequiredEventSchema,
-  autoAuthorizeChangedEventSchema,
   avatarsChangedEventSchema,
   connectedEventSchema,
   externalSessionsChangedEventSchema,
@@ -22,7 +20,6 @@ import {
 import { kondenApi } from "../api/kondenApi";
 import type { AppDispatch } from "../app/store";
 import {
-  authorizationRequired,
   connected,
   conversationStatus,
   disconnected,
@@ -67,7 +64,7 @@ export function openEventBridge(dispatch: AppDispatch): () => void {
   source.addEventListener("connected", (event) => {
     const payload = connectedEventSchema.parse(JSON.parse(event.data));
     dispatch(connected(payload.connection_id));
-    refresh(["Conversation", "Agents", "Groups", "Inbox", "AutoAuthorize", "Avatars", "ExternalSessions", "ExternalConnections", "CodexConnection", "LocalCodexChat"]);
+    refresh(["Conversation", "Agents", "Groups", "Inbox", "Avatars", "ExternalSessions", "ExternalConnections", "CodexConnection", "LocalCodexChat"]);
     flushRefresh();
   });
   source.addEventListener("external_sessions_changed", (event) => {
@@ -77,10 +74,6 @@ export function openEventBridge(dispatch: AppDispatch): () => void {
   source.addEventListener("avatars_changed", (event) => {
     avatarsChangedEventSchema.parse(JSON.parse(event.data));
     refresh(["Avatars"]);
-  });
-  source.addEventListener("auto_authorize_changed", (event) => {
-    autoAuthorizeChangedEventSchema.parse(JSON.parse(event.data));
-    refresh(["AutoAuthorize", "Conversation", "Inbox", "Agents"]);
   });
   source.addEventListener("session_activity", (event) => {
     const payload = sessionActivityEventSchema.parse(JSON.parse(event.data));
@@ -229,14 +222,6 @@ export function openEventBridge(dispatch: AppDispatch): () => void {
       }),
     );
     refresh([{ type: "Conversation", id: payload.session_id }]);
-  });
-  source.addEventListener("authorization_required", (event) => {
-    const payload = authorizationRequiredEventSchema.parse(JSON.parse(event.data));
-    dispatch(authorizationRequired({ sessionId: payload.session_id }));
-    refresh([
-      { type: "Conversation", id: payload.session_id },
-      "Inbox",
-    ]);
   });
   source.addEventListener("error", () => {
     preview.flushNow();

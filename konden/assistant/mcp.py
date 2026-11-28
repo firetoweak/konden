@@ -86,7 +86,6 @@ class McpToolsetAdapter:
                     name=tool.name,
                     description=tool.description,
                     parameters=tool.parameters,
-                    requires_authorization=tool.requires_authorization,
                     provider_data=tool.provider_data,
                 ),
                 self._attachments,
@@ -159,6 +158,5 @@ def _loaded_from_spec(
         description=spec.description,
         parameters=dict(spec.parameters.schema()),
         execute=execute,
-        requires_authorization=spec.requires_authorization,
         provider_data=provider_data,
     )
