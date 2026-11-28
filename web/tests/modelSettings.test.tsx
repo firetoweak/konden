@@ -9,7 +9,7 @@ import type { CatalogModel, ModelSettingsApi, ModelTestResult, Preferences } fro
 import type { SearchApi, SearchSettings, SearchTestResult } from "../src/features/models/searchTypes";
 
 const CONNECTIONS = [{provider:"openai",configured:true},{provider:"deepseek",configured:true}];
-const CHATGPT = { local: true, waiting: false, message: null, completed: null, start: () => {} };
+const CHATGPT = { local: true, waiting: false, opening: false, message: null, completed: null, start: () => {} };
 const MODELS: CatalogModel[] = [
   { id: "openai/alpha", provider: "openai", webSearch:true, name: "Alpha", description: "alpha", contextTokens: 100_000,
     efforts: [{ value: "medium", label: "中" }, { value: "high", label: "高" }], defaultEffort: "medium" },
@@ -106,6 +106,8 @@ it("在供应商行独立授权，成功后显示连接勾并加载当前 ChatGP
   expect(screen.getByRole("button", { name: "ChatGPT 订阅 · ChatGPT 登录", pressed: true })).toBeVisible();
   view.rerender(pane(true, false));
   expect(screen.getByText("等待授权…")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "重新打开授权页" }));
+  expect(start).toHaveBeenCalledTimes(2);
   view.rerender(pane(false, true));
   expect(screen.getByRole("img", { name: "ChatGPT 订阅已连接" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "Continue with ChatGPT" })).not.toBeInTheDocument();

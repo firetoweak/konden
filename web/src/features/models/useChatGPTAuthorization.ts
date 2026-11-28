@@ -8,6 +8,7 @@ import { useAppDispatch } from "../../app/hooks";
 export type ChatGPTAuthorization = {
   local: boolean;
   waiting: boolean;
+  opening: boolean;
   message: string | null;
   completed: string | null;
   start(): void;
@@ -24,7 +25,7 @@ export function useChatGPTAuthorization(connectionId: string | null): ChatGPTAut
   });
   const local = window.location.protocol === "http:" &&
     ["127.0.0.1", "localhost"].includes(window.location.hostname);
-  const waiting = isLoading || attempt !== null;
+  const waiting = attempt !== null;
 
   useEffect(() => {
     if (attempt === null) return;
@@ -42,7 +43,7 @@ export function useChatGPTAuthorization(connectionId: string | null): ChatGPTAut
   }, [attempt, currentData, dispatch, error]);
 
   async function start() {
-    if (!connectionId || !local || waiting) return;
+    if (!connectionId || !local || isLoading) return;
     setMessage(null);
     const tab = window.open("about:blank", "_blank");
     if (!tab) {
@@ -60,5 +61,5 @@ export function useChatGPTAuthorization(connectionId: string | null): ChatGPTAut
     }
   }
 
-  return { local, waiting, message, completed, start };
+  return { local, waiting, opening: isLoading, message, completed, start };
 }
