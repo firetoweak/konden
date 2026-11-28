@@ -213,7 +213,6 @@ def local_transport(runtime, scheduler, host):
             return None
         if operation == "fact":
             await runtime.receive_domain_fact(session_id, **arguments)
-            await host.refresh_activity(session_id)
             if await host.note_returned(session_id):
                 return None
         elif operation != "resume":

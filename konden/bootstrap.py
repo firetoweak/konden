@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from functools import partial
 import os
 from pathlib import Path
-import shutil
 
 from konden.assistant.conversations import AssistantQueries
 from konden.assistant.host.data_root import hold_data_root
@@ -21,7 +20,7 @@ from konden.config import (
     load_app_config,
     write_json,
 )
-from konden.filesystem.registry import WorkspaceRecord, WorkspaceRegistry
+from konden.filesystem.registry import WorkspaceRegistry
 from konden.llm.connections import ModelConnections
 from konden.mcp.composition import build_mcp
 from konden.model_settings import ModelSettings
@@ -30,10 +29,6 @@ from konden.skills.composition import build_skills
 from konden.skills.summarizer import LlmSkillDiffSummarizer
 from konden.timing import install_timing_logging
 from thinllm import create_client
-
-
-class DataRootHasAgents(RuntimeError):
-    """要求全新会话的入口不能清空一个承载长期 Agent 的数据根。"""
 
 
 class UnboundHostLlm:
@@ -55,7 +50,6 @@ class BootstrappedAssistant:
     skill_service: object
     queries: AssistantQueries
     workspaces: WorkspaceRegistry
-    workspace: WorkspaceRecord | None
 
 
 @asynccontextmanager
@@ -65,7 +59,6 @@ async def bootstrap_assistant(
     app_config: AppConfig | None = None,
     workspace_path: Path | None = None,
     context_usage_sink=None,
-    subagent_activity_sink=None,
     conversation_status_sink=None,
     tool_progress_sink=None,
     preview_sink=None,
@@ -75,31 +68,14 @@ async def bootstrap_assistant(
     session_failed_sink=None,
     schedule_changed_sink=None,
     group_changed_sink=None,
-    command_environment: dict[str, str] | None = None,
-    fresh_sessions: bool = False,
 ) -> AsyncIterator[BootstrappedAssistant]:
-    """Host 将各会话已交付的输出和可用的预览交给 Channel。
-
-    ``fresh_sessions``：每次启动都是全新会话的入口，先丢弃上次运行留下的会话与状态。
-
-    长期 Agent 的会话与工作树也在这些状态里；数据根里已有 Agent 时拒绝清空。
-    """
+    """Host 将各会话已交付的输出和可用的预览交给 Channel。"""
     install_timing_logging()
-    if command_environment is None:
-        command_environment = dict(os.environ)
+    command_environment = dict(os.environ)
     install_host_environment()
     home = KondenHome.default()
     # 先独占数据根，再碰任何 Journal、定时或持续进程。
     with hold_data_root(home):
-        if fresh_sessions:
-            if home.agent_directories_root.exists() or home.agent_worktrees_root.exists():
-                raise DataRootHasAgents(
-                    f"数据根 {home.root} 里有长期 Bot 的数据，"
-                    "每次启动都清空会话的入口不能使用它；请换一个数据目录。"
-                )
-            for root in (home.runtime_sessions_root, home.state_root):
-                if root.exists():
-                    shutil.rmtree(root)
         config = load_app_config() if app_config is None else app_config
         home.initialize()
         store = SessionStore(home.runtime_sessions_root)
@@ -110,11 +86,8 @@ async def bootstrap_assistant(
             models.save(app_config.to_dict())
         llm = ModelConnections(home.connections_path, client_factory=create_client)
         workspaces = WorkspaceRegistry.load(home.workspaces_path)
-        # 只有调用方明确给出路径才登记。TUI 传入启动目录或 --workspace；
-        # Web 缺省不从进程 cwd 偷建工作区。
-        workspace = (
-            None if workspace_path is None else workspaces.register_path(workspace_path)
-        )
+        if workspace_path is not None:
+            workspaces.register_path(workspace_path)
         host = HostSupervisor(
             store,
             partial(worker_config, config),
@@ -125,7 +98,6 @@ async def bootstrap_assistant(
             command_environment=command_environment,
             models=models,
             context_usage_sink=context_usage_sink,
-            subagent_activity_sink=subagent_activity_sink,
             conversation_status_sink=conversation_status_sink,
             tool_progress_sink=tool_progress_sink,
             preview_sink=preview_sink,
@@ -153,7 +125,6 @@ async def bootstrap_assistant(
                     skills.service,
                     AssistantQueries(store, host),
                     workspaces,
-                    workspace,
                 )
             finally:
                 await host.close()

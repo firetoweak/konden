@@ -1,6 +1,6 @@
 # 扩展能力：MCP、Skill、CLI
 
-助手可按需加载和管理外部能力；安装、更新、删除等都以 `propose_*` 形式请用户确认。终端入口另有 `/mcp`、`/skill` 命令（没有 `/cli` 命令）。来源：`konden/mcp/`（`approval.py`、`console.py`、`application.py`）、`konden/skills/`（`approval.py`、`console.py`）、`konden/cli/`（`approval.py`、`management_tools.py`、`models.py`、`runtime.py`）、`konden/assistant/management.py`、`konden/assistant/toolsets.py`、`konden/assistant/sessions.py`（终端的 yes/no 回答）、`web/src/features/conversation/PendingActions.tsx`（输入框上方待处理条）。
+助手可按需加载和管理外部能力；安装、更新、删除等都以 `propose_*` 形式请用户确认。来源：`konden/mcp/`（`approval.py`、`application.py`）、`konden/skills/`（`approval.py`）、`konden/cli/`（`approval.py`、`management_tools.py`、`models.py`、`runtime.py`）、`konden/assistant/management.py`、`konden/assistant/toolsets.py`、`web/src/features/conversation/ControlConfirmation.tsx`（输入框上方待处理条）。
 
 需求依据：[工具与能力：MCP 的加载与恢复、Skill](../../../../docs/架构/能力/工具与能力.md#mcp-的加载与恢复)、[普通文件与工作副本](../../../../docs/架构/上下文/多模态附件.md#普通文件与工作副本)。能力按需加载，旧契约不可静默换新，上传材料不自动解析，读取方法不授予执行许可。
 
@@ -25,15 +25,11 @@
 - `skill-source`：来源 `local` / `url` / `github`；`local` 的 locator 必须是本机绝对目录，否则 `local locator 必须是本机绝对目录`；`requested_ref` 只用于 `github`，其他来源传了即 `requested_ref 仅适用于 github 来源`。
 - `cli-register`：`propose_cli_install` 的 `locator` 登记本机已有程序；`repo` 从 GitHub Release 下载，两者二选一。Release 提案展示确定的 tag，下载在批准后发生；修复重新下载同一 tag，卸载审批明确会删除下载的程序与安装目录。本机手工安装的软件在移除登记后保留。`name` 须匹配 `^[a-z0-9][a-z0-9-]{0,63}$`，不合规返回 `code: CLI_INVALID`；已登记返回 `CLI_ALREADY_INSTALLED`；找不到程序或下载失败返回 `CLI_SOURCE_ERROR`。登记后立即可用，没有启用/停用开关。
   - `control-startup-recovery`：重启会继续已提交的控制准备、已批准但尚未开始的操作；提案仍待批准时不执行，已开始而结果未知时不自动重试，人已停止执行的会话不自动执行。连续重启不能重复已完成的操作。
-- `console-commands`：
-  - `/mcp list [--runtime]`、`/mcp upsert <json>`、`/mcp enable|disable|remove|test|retry <id>`、`/mcp resources|resource-templates|prompts <id> [--cursor TOKEN]`、`/mcp read-resource <id> <uri>`、`/mcp get-prompt <id> <name> [json-args]`、`/mcp help`（`/mcp` 不带子命令同样显示帮助）。
-  - `/skill list [id]`、`/skill install [local|url|github] <locator> [ref]`、`/skill test <id>`、`/skill set_enabled <id> <true|false>`、`/skill uninstall <id>`、`/skill update <id> [[local|url|github] <locator> [ref]]`、`/skill help`。
 
 ## How to get to it (user POV)
 
 - Web 清单：点击侧栏底部 `能力`；窄屏先打开 `打开 Agent 名册`。分类为 `Skill`、`MCP`、`CLI`，搜索为 `搜索 Skill` 等，`查看 <名字>` 展开详情。
 - Web：发 `请列出已安装的 MCP 服务器、Skill 和 CLI。`；安装时发 `请从本地目录 <绝对路径> 安装这个 skill。`；登记 CLI 发 `请把本机的 git 登记为 CLI，名称 git。`
-- 终端：见 console-chat，直接输入 `/mcp list`、`/skill list`。
 
 ## Driving it with the browser
 
@@ -52,9 +48,8 @@
 
 - **列出**：
   - (a) 回复与 `$KONDEN_HOME/mcp/`、`skills/`、`clis/` 实际内容一致（新 home 应为空）。
-  - (b) 模型调用的是 `list_mcp_servers` / `list_installed_skills` / `list_installed_clis`；终端 `/mcp list` 在空 home 打印 `尚未注册任何 MCP Server。`。
+  - (b) 模型调用的是 `list_mcp_servers` / `list_installed_skills` / `list_installed_clis`。
   - (c) 列出不写文件。
-  - (d) `/mcp list --foo` → `/mcp list 只接受可选参数 --runtime`。
 - **PDF 阅读**：准备环境后，从侧栏 `能力 → MCP` 搜索 `PDF`，展开 `查看 PDF Reader · AnyMD`，点击 `检测 PDF Reader · AnyMD 连接`。准备一份双栏 PDF 和一份带可独立核对内容、没有文字层的扫描 PDF；用支持视觉的聊天模型创建无项目 Bot，通过文件附件或明确的本机文件路径，请它实际查看指定页，并把扫描页中的小字或图形区域放大核对。
   - (a) `GET /api/capabilities` 显示启用的内置服务，连接测试成功；工具按需加载，用户安装登记不新增项。调用与原件字节、整页和区域图像对照，不以 Markdown 图片引用或工具调用结束代替看图证据。
   - (b) 会话记录实际的 `load_skill`、`load_toolset`、`render_page` 和 `extract_regions`；回答与双栏原页、扫描图内的独立对照一致，页码清楚。刷新后回答与执行过程仍可查看。
@@ -78,11 +73,8 @@
   - (b) 待处理条中该项摘要含 `准备登记 CLI`、`解析路径：`、`体检：`。
   - (c) 不下载任何软件，只登记已有程序；`取消` 后 `clis/` 不变。
   - (d) 名称用 `Git_Tool` → `CLI_INVALID`，提示里有 `^[a-z0-9][a-z0-9-]{0,63}$`；不弹确认。
-- **MCP upsert 校验**（终端）：
-  - (d) `/mcp upsert {}` → `/mcp upsert 缺少字段: id, transport`；多余字段 → `/mcp upsert 包含未知字段: ...`；非法 JSON → `/mcp upsert 需要合法 JSON`；`/mcp upsert` 不带参数 → 打印带示例的用法。以上 `mcp/` 都不变。
 - **MCP 命令解释器拦截**（对话）：
   - (d) 让助手安装 stdio `command` 为 `bash`/`sh`/`pwsh`/`cmd.exe` 等的 MCP → 工具校验失败 `MCP stdio 不接受 Shell 解释器作为 command`，待处理条不出现该请求，`mcp/` 不变。
-- **未知子命令**：(d) `/skill foo` → `未知 /skill 子命令: foo`；`/skill set_enabled x maybe` → `/skill set_enabled <id> <true|false>`；`/mcp foo` → `未知 /mcp 子命令: foo`。
 - **密钥**：安装带密钥的 MCP 后，(c) 回复、journal、`GET /api/sessions/<id>` 里不出现明文密钥（`konden/mcp/secrets.py`）。
 
 - **加载版本与 PDF 材料**：目录或 Skill 内容更新后，旧判断保持原契约；旧版本不可用应明确失败，不能按旧引用静默加载新版本，历史加载记录不能消失。Skill 中脚本使用普通命令执行环境。PDF 上传只生成原文件材料路径，不自动解析；模型按需加载 `pdf-reading`，分别读取目录与已有文字（显式 `ocr:false`）、页图和局部，核对页码、回答、原件哈希及当前数据根内的独立缓存。没有视觉模型时，只能验证文本／连接，不能声称已看图。
@@ -105,10 +97,7 @@
 
 2026-10-26 能力清单增量：Windows 隔离 Web，经侧栏真实打开并操作 Skill/MCP/CLI 清单；停用项仍可查，启停持久保存且 MCP 原检测结果不变，断网错误可重试恢复。1440×900、390×844 明暗主题与 220px 侧栏通过。证据留在本地 `.tools/capabilities-evidence/`；无默认模型，未发模型消息，未重验外部服务连接、模型侧安装与完整控制流程。
 
-- Web 端没有 `/mcp` `/skill` 斜杠命令，只能经对话由助手调用工具；斜杠命令只在终端入口生效。CLI 没有斜杠命令，只能经对话。
 - `skill_help` 工具已删除，不要再按它验证。
-- Shell 解释器拦截只在 `propose_mcp_install` / `propose_mcp_update` 的参数校验里；终端 `/mcp upsert` 走 `McpApplicationService.upsert_server`，不经过这条校验，能直接登记 `bash` 作 command（2026-10-18 源码核对）。验证时不要用 `/mcp upsert` 判定拦截。
-- 已知产品缺口（2026-10-18 源码核对）：`/mcp help` 列出 `/mcp reload`，但分发里没有 `reload` 分支，输入后得到 `未知 /mcp 子命令: reload`。正确预期是帮助里列出的子命令都能执行；验证时记为失败而不是跳过。
 - github/url 来源需要网络，离线时只验 local。
 - 历史验证：2026-10-12（main@1a4790a）未跑。2026-10-18 按源码改写，未 live 复跑。
 

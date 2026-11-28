@@ -14,7 +14,6 @@ from konden.skills.approval import (
     create_skill_uninstall_proposal_spec,
     create_skill_update_proposal_spec,
 )
-from konden.skills.console import SkillCommandError, SkillConsoleAdapter
 from konden.skills.installer import LocalSkillInstaller
 from konden.skills.models import (
     SkillBundle,
@@ -46,8 +45,6 @@ __all__ = [
     "LocalSkillPackageReader",
     "SkillApplicationService",
     "SkillBundle",
-    "SkillCommandError",
-    "SkillConsoleAdapter",
     "SkillDiffSummarizer",
     "SkillFile",
     "SkillInstallApprovalHandler",

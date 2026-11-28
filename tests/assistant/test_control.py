@@ -41,6 +41,7 @@ from konden.runtime import (
     LeaseLostError,
     RuntimeStatus,
     StepCommitted,
+    UserMessageReceived,
 )
 from konden.runtime.json_values import thaw_value
 from konden.tools.control import (
@@ -453,6 +454,26 @@ class ConversationalControlTest(unittest.IsolatedAsyncioTestCase):
                 facts = _facts(await journal.snapshot(SESSION_ID), fact_type)
                 self.assertEqual(len(facts), 1)
                 self.assertTrue(facts[0].requests_decision)
+
+    async def test_chat_text_leaves_a_pending_proposal_for_explicit_resolution(self):
+        handler = ApprovalHandler()
+        journal, runtime, control, request = await _build_pending(handler=handler)
+        sessions = _sessions(runtime, control)
+
+        for answer in ("yes", "no"):
+            with self.subTest(answer=answer):
+                view = await sessions.accept_input(
+                    SESSION_ID, answer, delivery_id=f"chat-{answer}", source="web",
+                )
+                self.assertEqual(view.control_approval.request_id, request.id)
+        events = await journal.snapshot(SESSION_ID)
+        self.assertEqual(
+            [event.payload.content for event in events
+             if isinstance(event.payload, UserMessageReceived)
+             and event.delivery is not None and event.delivery.source == "web"],
+            ["yes", "no"],
+        )
+        self.assertEqual(handler.payloads, [])
 
     async def test_approval_records_decision_start_and_terminal_before_wake(self):
         handler = ApprovalHandler()

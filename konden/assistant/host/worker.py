@@ -99,7 +99,6 @@ async def _run_session(connection, session_id, journal, config_factory, home_roo
                 parent = project_parent(await journal.snapshot(session_id))
                 if parent is not None:
                     assembly.subagents._parents[session_id] = parent
-                await assembly.subagents.refresh_activity(session_id)
                 if not await assembly.subagents.note_returned(session_id):
                     await assembly.scheduler.wake(session_id)
                 result = None
@@ -186,7 +185,6 @@ async def _run_session(connection, session_id, journal, config_factory, home_roo
         workspace=workspace,
         command_environment=command_environment,
         context_usage_sink=lambda *values: notify("usage", *values),
-        subagent_activity_sink=lambda *values: notify("activity", *values),
         tool_progress_sink=lambda *values: notify("tool", *values),
         session_failed_sink=lambda *values: notify("session_failed", *values),
         preview_sink=preview_sink,

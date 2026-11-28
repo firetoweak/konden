@@ -16,7 +16,6 @@ from konden.mcp.approval import (
 )
 from konden.mcp.bundled import create_bundled_servers
 from konden.mcp.client_manager import McpClientManager
-from konden.mcp.content import McpContentService
 from konden.mcp.management_tools import create_mcp_management_specs
 from konden.mcp.registry import McpRegistry
 from konden.mcp.secrets import McpSecretStore
@@ -54,12 +53,10 @@ def build_mcp(
         if client_manager is None
         else client_manager
     )
-    content = McpContentService(registry, manager)
     service = McpApplicationService(
         registry,
         secret_store,
         manager,
-        content_service=content,
         bundled_servers=create_bundled_servers(home, task_root),
     )
     control_operations = (

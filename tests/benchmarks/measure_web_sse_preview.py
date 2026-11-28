@@ -1,6 +1,6 @@
 """Measure whether Web preview deltas stay separate on the SSE socket.
 
-Injects TUI-sized deltas into WebEventHub and records how they arrive on a
+Injects small text deltas into WebEventHub and records how they arrive on a
 real uvicorn TCP connection. This isolates transport coalescing from React.
 """
 

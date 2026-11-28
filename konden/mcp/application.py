@@ -8,7 +8,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 from konden.mcp.bundled import BUILTIN_SERVER_IDS
 from konden.mcp.client_manager import McpClientError, McpClientManager
-from konden.mcp.content import McpContentService
 from konden.mcp.errors import (
     McpConfigurationError,
     McpRecoveryPreconditionError,
@@ -60,7 +59,6 @@ class McpApplicationService:
         registry: McpRegistry,
         secret_store: McpSecretStore,
         client_manager: McpClientManager,
-        content_service: McpContentService | None = None,
         *,
         bundled_servers: Callable[[], tuple[McpServerRecord, ...]] = tuple,
     ) -> None:
@@ -68,11 +66,6 @@ class McpApplicationService:
         self.secret_store = secret_store
         self.client_manager = client_manager
         self._bundled_servers = bundled_servers
-        self.content = (
-            McpContentService(registry, client_manager)
-            if content_service is None
-            else content_service
-        )
         self.toolset_provider = McpToolsetProvider(
             registry, client_manager, bundled_servers=bundled_servers,
         )

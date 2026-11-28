@@ -101,7 +101,7 @@ class SelectIdleSessionTest(unittest.IsolatedAsyncioTestCase):
                 workspaces=workspaces,
             )
             try:
-                await host.create("session-1", workspace.workspace_id)
+                await host.store.create("session-1", workspace_id=workspace.workspace_id)
                 view = await host.select("web", "session-1")
                 self.assertEqual(view.status, "waiting")
                 self.assertFalse(view.should_wake)
@@ -132,8 +132,8 @@ class ResumeUnfinishedOnStartupTest(unittest.IsolatedAsyncioTestCase):
                 workspaces=workspaces,
             )
             try:
-                await host.create("session-waiting", workspace.workspace_id)
-                await host.create("session-open", workspace.workspace_id)
+                await host.store.create("session-waiting", workspace_id=workspace.workspace_id)
+                await host.store.create("session-open", workspace_id=workspace.workspace_id)
                 await SqliteJournal(store.require("session-open")).accept_delivery(
                     EventDraft(
                         event_id="user-1",
@@ -153,7 +153,7 @@ class ResumeUnfinishedOnStartupTest(unittest.IsolatedAsyncioTestCase):
                 )
 
                 # 上一个进程死在命令执行中：Attempt 已开始，没有结果。
-                await host.create("session-crashed", workspace.workspace_id)
+                await host.store.create("session-crashed", workspace_id=workspace.workspace_id)
 
                 async def unfinished(_context, _arguments):
                     await asyncio.Event().wait()

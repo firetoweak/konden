@@ -23,7 +23,6 @@
 | 类型 | 对照 | 验收处理 |
 |---|---|---|
 | 已登记设计例外 | [通用工具 handler](tool-coding-round.md#gotchas) 在架构测试中明确登记，允许转为可见 `TOOL_HANDLER_ERROR` | 按该显式例外验收，不误报为 Worker 故障；不得扩展到其他内部异常。 |
-| 产品提示冲突 | [终端输入](console-chat.md)：启动提示说会打断，接纳规则和当前实现均不隐式打断 | 按普通输入不打断验收，提示另记问题。 |
 | 依据冲突 | [运行指南](../../../../docs/运行指南.md#运行环境)仍提“只读子 Agent”，[当前 SubAgent](../../../../docs/架构/运行/SubAgent.md#执行能力)与委派入口没有此模式 | 当前父子按实际可达的读写能力验收；受限目录过滤与不存在的只读子模式分开，不凭此报浏览器回归。 |
 | 依据冲突 | [Web](../../../../docs/架构/入口/Web.md#对话与操作)仍定义回复耗时，地图和界面已只显示提交时间 | 时间来源继续核对；是否恢复耗时未作需求决定。 |
 | 依据冲突 | [模型配置指南](../../../../docs/模型配置.md)称首次准备自动进入终端向导，[运行指南](../../../../docs/运行指南.md#准备选项)规定默认网页、显式选项才进向导 | 分别记录实际默认流程与显式向导范围，不误报默认不进向导为产品失败。 |
@@ -109,7 +108,6 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | extensions | [extensions.md](./extensions.md) | 侧栏 `能力` 清单、MCP / Skill / CLI 的管理与检测 | 空安装清单可发现内置 `independent-verification`。单独批准本地测试包安装，关闭操作结果后草稿和会话版本保留。PDF 与其他扩展未重验。 |
 | realtime-events | [realtime-events.md](./realtime-events.md) | `/api/events` SSE、连接状态、多标签页同步 | 验证连接状态、会话更新及重连同步。 |
 | layout-appearance | [layout-appearance.md](./layout-appearance.md) | 三栏布局、资料栏、`外观`、侧栏宽度与窄屏名册 | 桌面键盘调宽、64px 头像栏搜索及刷新保留通过。390px 名册仍显示全名，选中后输入可达。减少动态效果与实体触屏未验。 |
-| console-chat | [console-chat.md](./console-chat.md) | 终端单会话入口 `console_chat.py`、`/new` | 独立 ConPTY 的 `/mcp list`、`/new`、真实回复和 Ctrl+D 退出通过。启动“输入会打断”提示仍与规则冲突，授权与粘贴未重验。 |
 | subagents-parallel | [subagents-parallel.md](./subagents-parallel.md) | 并行委派、共享文件、选择性回收与父会话控制 | 同一决策派出两子，两者有运行重叠，各写独立文件。选择性回收、后台结果归属及回收失败未重验。 |
 | crash-recovery | [crash-recovery.md](./crash-recovery.md) | 进程、网络与模型故障恢复、重试与去重 | 隔离连接使用无效 Key，失败刷新保留。恢复连接后点击「再试」收到显式回复，原用户输入只有一条。杀进程、429、断流和未知副作用恢复未重验。 |
 | setup-and-launch | [setup-and-launch.md](./setup-and-launch.md) | `setup.sh`/`setup.ps1` 四步准备、模型向导、`start.sh`/`dev.sh` | 新 worktree 完成 Windows setup 四步、构建、`--check`、Doctor 和隔离首页。复用固定工具缓存，未重验从零下载、向导或其他平台。 |
@@ -186,7 +184,6 @@ Bot 可不挂项目独立使用；代码任务需显式选择项目。名册以 
 | 入口 | 条目 |
 |---|---|
 | `web_chat.py [--dev] [--host] [--port] [--workspace]` | web-session-chat（`--workspace` 见 workspace-management Gotchas） |
-| `console_chat.py [--home] [--workspace]`，会内 `/new` `/mcp ...` `/skill ...` | console-chat、extensions |
 | `scripts/setup.sh`、`scripts/setup.ps1`、`scripts/setup.py [--configure] [--check]` | setup-and-launch |
 | `python -m konden.initialize --configure / --if-needed` | setup-and-launch |
 | `scripts/start.sh`、`scripts/start.ps1`（→ `scripts/launch.py` → `web_chat.py`） | setup-and-launch |
@@ -234,7 +231,6 @@ Harness 修正已在 Windows 上按 `../SKILL.md` 原文实跑 Launch → Doctor
 - extensions：`/control` 决定冲突与无待确认请求没有异常处理器，返回 500 而非 409。
 - crash-recovery（已修复）：同一 `delivery_id` 改文本重放，2026-10-20 live 确认修复前为 500 + Worker 失败，修复后为 409、原事件不变且后续对话可用。历史 Worker 卡死在同日后续实测未复现，范围见条目。
 - workspace-management：空名称创建工作区可能 500（界面已拦）。
-- extensions：`/mcp help` 列出 `/mcp reload`，实际没有该子命令。另记一项待定：终端 `/mcp upsert` 不经过模型路径上的 Shell 解释器拦截，是否应拦截由产品决定。
 - composer-attachments：隐藏的文件 `input` 没有任何入口触发。
 
 ## 2026-10-18 Windows live 轮次
@@ -247,7 +243,7 @@ Harness 修正已在 Windows 上按 `../SKILL.md` 原文实跑 Launch → Doctor
 | 失败（产品缺口） | tool-coding-round（Windows 退出码折叠为 1）、crash-recovery（Worker 崩溃后会话永久卡死） |
 | 走不到 | workspace-management（重命名/移除）、layout-appearance（外观菜单）、composer-attachments、extensions、console-chat——中途浏览器面板隐藏后 `requestAnimationFrame`/`ResizeObserver` 不触发（实测 0 次），弹窗、菜单与虚拟时间线无法渲染；console-chat 需要交互终端 |
 
-当时记为通过、现已从地图删除：agent-workspace-restore、file-rewind、rewind-edge-cases、edit-and-branch。setup-and-sandbox-install 已改为 setup-and-launch。
+已从地图删除的功能包括终端聊天，以及当时记为通过 agent-workspace-restore、file-rewind、rewind-edge-cases、edit-and-branch。setup-and-sandbox-install 已改为 setup-and-launch。
 
 本轮 live 新发现的产品缺口（已写入对应文件 `Gotchas`）：Windows 命令退出码折叠为 1；Worker 崩溃后会话永久卡死；自动放行批准后 `等待授权` 弹窗不关闭（已随待处理条消除）；会话页高频轮询 `/model` 与 `/model-settings`。地图漂移已按实测修正：停止命令后不出现 `继续`（run-control）、SSE keep-alive 实际为 `: ping`（realtime-events）。
 

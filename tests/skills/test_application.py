@@ -5,7 +5,6 @@ import unittest
 from konden.llm.api import LLMTransientError
 from konden.paths import KondenHome
 from konden.skills.application import SkillApplicationService
-from konden.skills.console import SkillConsoleAdapter
 from konden.skills.models import SkillSourceRef
 from tests.skills.test_package import write_skill
 
@@ -207,26 +206,3 @@ class SkillApplicationServiceTest(unittest.IsolatedAsyncioTestCase):
             report.candidate.old_source,
             report.candidate.source,
         )
-
-
-class SkillConsoleAdapterTest(unittest.IsolatedAsyncioTestCase):
-    async def test_local_install_and_management_commands(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            workspace = KondenHome(root / ".konden")
-            workspace.initialize()
-            source = root / "source"
-            write_skill(source, name="demo", description="Demo")
-            adapter = SkillConsoleAdapter(SkillApplicationService(workspace))
-
-            install = await adapter.execute_if_handled(
-                f"/skill install {source}"
-            )
-            listing = await adapter.execute_if_handled("/skill list")
-            test = await adapter.execute_if_handled("/skill test demo")
-            enable = await adapter.execute_if_handled("/skill set_enabled demo true")
-
-            self.assertIn("已安装并启用", install)
-            self.assertIn("demo [enabled]", listing)
-            self.assertIn("校验通过", test)
-            self.assertIn("下一个 Step", enable)

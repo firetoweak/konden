@@ -224,7 +224,7 @@ class AgentRosterTest(unittest.IsolatedAsyncioTestCase):
     async def test_identity_rebuilds_from_journals(self):
         agent = await self.create()
         journal = SqliteJournal(self.store.require(agent.session_id))
-        await self.host.create("ordinary", self.workspace.workspace_id)
+        await self.host.store.create("ordinary", workspace_id=self.workspace.workspace_id)
         roster = AgentRoster(SessionStore(self.store.root))
         self.assertEqual(await roster.by_session(agent.session_id), agent)
         self.assertIsNone(await roster.by_session("ordinary"))
