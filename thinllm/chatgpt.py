@@ -1,4 +1,6 @@
 """ChatGPT plan usage over the public Responses endpoint."""
+from uuid import NAMESPACE_URL, uuid5
+
 from thinllm.auth import ChatGPTAuth
 from thinllm.errors import LLMAuthenticationError, LLMProviderError, LLMTransientError
 from thinllm.responses import ResponsesClient
@@ -7,6 +9,11 @@ from thinllm.responses import ResponsesClient
 class ChatGPTResponsesClient(ResponsesClient):
     def __init__(self, endpoint, **kwargs):
         super().__init__(endpoint, auth=ChatGPTAuth(endpoint.auth_file), **kwargs)
+
+    def _request_headers(self, session_id: str | None) -> dict[str, str] | None:
+        if session_id is None:
+            return None
+        return {"session-id": str(uuid5(NAMESPACE_URL, f"konden:chatgpt-session:{session_id}"))}
 
     def _payload(self, messages, model, tools, reasoning_effort, tool_choice="auto"):
         payload = super()._payload(messages, model, tools, reasoning_effort, tool_choice)

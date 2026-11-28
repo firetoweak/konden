@@ -13,6 +13,7 @@ class _FakeLlm:
     def __init__(self):
         self.efforts = []
         self.tool_choices = []
+        self.session_ids = []
 
     async def chat(
         self,
@@ -24,9 +25,11 @@ class _FakeLlm:
         on_reasoning_delta=None,
         reasoning_effort=None,
         tool_choice="auto",
+        session_id=None,
     ):
         self.efforts.append(reasoning_effort)
         self.tool_choices.append(tool_choice)
+        self.session_ids.append(session_id)
         if model == "fail":
             raise LLMTransientError("provider timeout")
         if on_reasoning_delta is not None:
@@ -65,7 +68,7 @@ class LlmPortTest(unittest.IsolatedAsyncioTestCase):
                 )
 
             return await complete_llm_chat(
-                llm, arguments, on_delta, on_reasoning_delta
+                llm, arguments, on_delta, on_reasoning_delta, session_id=session_id
             )
 
         async def unused_handle(operation, session_id, arguments):
@@ -95,9 +98,10 @@ class LlmPortTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(deltas, ["hel", "lo"])
             self.assertEqual(thoughts, ["想"])
             with self.assertRaises(LLMTransientError):
-                await port.chat([{"role": "user", "content": "hi"}], "fail")
+                await WorkerLlmPort(worker, "session-b").chat([{"role": "user", "content": "hi"}], "fail")
             self.assertEqual(llm.efforts, ["high", None])
             self.assertEqual(llm.tool_choices, ["required", "auto"])
+            self.assertEqual(llm.session_ids, ["session-a", "session-b"])
         finally:
             await host.close(RuntimeError("done"))
             await worker.close(RuntimeError("done"))

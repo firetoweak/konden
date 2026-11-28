@@ -32,7 +32,7 @@ class CompactLlm:
         return None
 
     async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None, reasoning_effort=None,
-                   tool_choice="auto"):
+                   tool_choice="auto", session_id=None):
         if any("<self_handoff>" in str(m["content"]) for m in messages):
             request = self.workspace / "handoff_request.json"
             if not request.exists():
@@ -104,7 +104,7 @@ class CompactLlm:
 
 class ChildCompactLlm(CompactLlm):
     async def chat(self, messages, model, *, tools=None, on_content_delta=None, on_reasoning_delta=None,
-                   tool_choice="auto"):
+                   tool_choice="auto", session_id=None):
         if any("<self_handoff>" in str(m["content"]) for m in messages):
             return await super().chat(
                 messages, model, tools=tools,
