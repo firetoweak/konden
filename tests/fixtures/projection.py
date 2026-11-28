@@ -49,13 +49,8 @@ def parse_tool_result_meta(content: object) -> tuple[bool, str | None]:
 def decision_from_llm(
     response: LLMResponse,
     allowed_tool_names: Set[str],
-    exclusive_tool_names: Set[str] = frozenset(),
 ) -> ModelDecision:
     return ModelDecision(
         content=response.content,
-        command_requests=_invoke_requests(
-            response.calls,
-            allowed_tool_names,
-            exclusive_tool_names,
-        ),
+        command_requests=_invoke_requests(response.calls, allowed_tool_names),
     )

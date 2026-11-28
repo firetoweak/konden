@@ -11,8 +11,6 @@ SYNC = "sync_branch"
 LINK = "link_project"
 UNLINK = "unlink_project"
 AGENT_GIT_TOOLS = frozenset({LAND, SYNC, LINK, UNLINK})
-# Each merges into a worktree, so nothing else runs beside it in one step.
-EXCLUSIVE_PROJECT_TOOLS = frozenset({LAND, SYNC})
 
 _PROJECT = {"type": "string", "minLength": 1, "description": "你挂上的项目名。"}
 
@@ -67,7 +65,7 @@ AGENT_GIT_SCHEMAS: list[dict[str, object]] = [
                 "未提交的修改不会带走，需要时先提交再落地。"
                 "能快进则快进，否则产生一个以你为作者的合并提交。"
                 "与集成分支冲突时集成分支不变，结果列出冲突文件，先用 sync_branch 同步并解决冲突再落地。"
-                "落地不需要用户批准，适合小步频繁落地。必须单独调用。"
+                "落地不需要用户批准，适合小步频繁落地。同批调用没有固定先后，依赖落地结果时，等结果返回后再调用。"
             ),
             "parameters": _project_only("要落地的项目名。"),
         },
@@ -81,7 +79,7 @@ AGENT_GIT_SCHEMAS: list[dict[str, object]] = [
                 "能快进则快进，否则产生一个合并提交。"
                 "有冲突时合并停在冲突状态，由你在这个项目的工作树里解决后用 git add 和 git commit 完成；"
                 "也可以用 git merge --abort 放弃这次同步。"
-                "工作区里未提交的改动会被同步覆盖时，同步不执行。必须单独调用。"
+                "工作区里未提交的改动会被同步覆盖时，同步不执行。同批调用没有固定先后，依赖同步结果时，等结果返回后再调用。"
             ),
             "parameters": _project_only("要同步的项目名。"),
         },

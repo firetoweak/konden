@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -109,6 +110,39 @@ class AgentLandingTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sorted(path.name for path in self.integration.glob("part*.txt")),
                          [f"part{index}.txt" for index in range(4)])
         self.assertEqual(git(self.integration, "status", "--porcelain"), "")
+
+    async def test_sync_waits_for_an_in_progress_landing_on_the_same_worktree(self):
+        agent = await self.agent("甲")
+        commit = self.change(agent, "part.txt", "landed\n")
+        worktrees = self.host.agent_worktrees
+        land, sync = worktrees.land, worktrees.sync
+        loop = asyncio.get_running_loop()
+        land_started, sync_started = asyncio.Event(), asyncio.Event()
+        resume_land = Event()
+
+        def paused_land(*args):
+            loop.call_soon_threadsafe(land_started.set)
+            if not resume_land.wait(10):
+                raise TimeoutError("test did not release the landing")
+            return land(*args)
+
+        def tracked_sync(*args):
+            loop.call_soon_threadsafe(sync_started.set)
+            return sync(*args)
+
+        with patch.object(worktrees, "land", paused_land), patch.object(worktrees, "sync", tracked_sync):
+            async with asyncio.TaskGroup() as group:
+                landing = group.create_task(self.call(LAND, agent))
+                try:
+                    await asyncio.wait_for(land_started.wait(), 5)
+                    syncing = group.create_task(self.call(SYNC, agent))
+                    with self.assertRaises(TimeoutError):
+                        await asyncio.wait_for(sync_started.wait(), 0.25)
+                finally:
+                    resume_land.set()
+        self.assertEqual(landing.result()["code"], "LAND_COMPLETED")
+        self.assertEqual(syncing.result()["code"], "SYNC_UNCHANGED")
+        self.assertEqual(git(self.integration, "rev-parse", "HEAD"), commit)
 
     async def test_sync_does_not_overwrite_uncommitted_files(self):
         first, second = await self.agent("甲"), await self.agent("乙")

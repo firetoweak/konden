@@ -108,7 +108,9 @@ class WorktreeLlm(ProcessLlm):
                     "command": commit, **here,
                 })),)
         elif text == "LAND_AGENT" and "land_branch" not in results:
-            calls = (ToolCall("agent-land", "land_branch", json.dumps({"project": project})),)
+            arguments = json.dumps({"project": project})
+            calls = (ToolCall("agent-land", "land_branch", arguments),
+                     ToolCall("agent-sync", "sync_branch", arguments))
         elif text == "DELEGATE_FOR_DELETE" and "delegate" not in results:
             calls = (ToolCall("child-delete", "delegate", json.dumps({"task": "DELETE_CHILD"})),)
         elif text == "READ_AGENT" and "read_file" not in results:
@@ -228,6 +230,10 @@ class AgentWorkerTest(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(git("rev-parse", agents[1].projects[0].branch).stdout, base)
                     await current.receive_user_message(agents[0].session_id, "LAND_AGENT", delivery_id="land")
                     await asyncio.wait_for(current.wait_quiescent(agents[0].session_id), 30)
+                    self.assertIsNone(current.current_failure(agents[0].session_id))
+                    result_codes = {json.loads(message["content"])["code"]
+                                    for message in llm.requests[-1]["messages"] if message["role"] == "tool"}
+                    self.assertTrue({"LAND_COMPLETED", "SYNC_UNCHANGED"} <= result_codes)
                     integration = current.agent_worktrees.integration(workspace.workspace_id)
                     self.assertEqual(git("rev-parse", integration.branch).stdout, committed)
                     self.assertEqual((integration.path / "note.txt").read_text(), "WRITE_AGENT_0")

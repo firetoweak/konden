@@ -2,7 +2,7 @@
 
 `land_branch` 把 Agent 分支上已经提交的工作合入项目集成分支。`sync_branch` 把集成分支上同事已经落地的工作合进自己的分支。两个工具都只接受 `project`（Bot 挂上的项目名），都不进入待处理条，也不改人当前检出的分支和工作目录。未提交的修改不跟着落地。冲突时落地放弃、集成分支不动；同步则停在冲突状态，留给 Agent 用普通 Git 命令解决或放弃。来源：`konden/assistant/agent_tools.py`、`konden/assistant/host/agent_worktrees.py`。
 
-Bot 的项目工作树位于其个人目录的 `projects/<挂载项目名>`；以名册 `projects[].directory` 或 `link_project` 返回的目录为准。集成工作树仍在 `$KONDEN_HOME/state/coding_bot/<sha256(workspace_id) 的前 20 位>/integration`。提交可以直接在 Agent 工作树里用 Git 准备，再请模型单独调用工具；工具只搬已提交的内容。
+Bot 的项目工作树位于其个人目录的 `projects/<挂载项目名>`；以名册 `projects[].directory` 或 `link_project` 返回的目录为准。集成工作树仍在 `$KONDEN_HOME/state/coding_bot/<sha256(workspace_id) 的前 20 位>/integration`。提交可以直接在 Agent 工作树里用 Git 准备，再请模型调用工具；工具只搬已提交的内容。
 
 需求依据：[Git 历史、落地与同步](../../../../docs/架构/多智能体/项目与工作树.md#git-历史落地与同步)、[未知结果](../../../../docs/架构/运行语义规约.md#四条约束)。真实 Git 拥有成果关系，不自动提交、不压缩历史，不猜测中断操作的结果。
 
@@ -17,12 +17,12 @@ Bot 的项目工作树位于其个人目录的 `projects/<挂载项目名>`；�
 ## How to get to it (user POV)
 
 - 同一项目的 `Ada` 与 `Lin`，项目是 `$SCRATCH_WORKSPACE`。
-- 在 Agent 工作树里准备提交，再在该 Agent 的 `消息` 里请它只调用 `land_branch` 或 `sync_branch`。
+- 在 Agent 工作树里准备提交，再在该 Agent 的 `消息` 里请它调用 `land_branch` 或 `sync_branch`。
 - 没有「落地」或「同步」按钮。
 
 ## Driving it with the browser
 
-需要 `live_model_ready` 才能请模型调用工具。`code` 在该会话 journal 的命令结果里。成功调用的那一步 `tools` 里只有这一个工具。
+需要 `live_model_ready` 才能请模型调用工具。`code` 在该会话 journal 的命令结果里。
 
 - **落地已提交的工作**：在 `Ada` 的工作树提交 `landed.txt`，内容 `landed`。请它调用 `land_branch`。
   - (a) 结果 `LAND_COMPLETED`，`data.fast_forward` 为 true 时集成分支 HEAD 等于 `Ada` 分支 HEAD；否则集成工作树多一个作者为 `Ada`、说明为 `合入 Ada 的工作` 的合并提交。`integration` 工作树里有 `landed.txt`。用 `GET /api/sessions/<Ada>` 核对调用，再用 `git log`、`git diff` 和真实文件核对落地；Web 没有 changes 接口或文件改动页。
@@ -56,7 +56,7 @@ Bot 的项目工作树位于其个人目录的 `projects/<挂载项目名>`；�
 
 - 2026-11-10 需求对齐（`origin/main@bab1ca4b`，Windows 隔离 Web／Chrome、真实 DeepSeek；终端为独立 ConPTY）：真实 land_branch 保留两次原始提交，未提交草稿排除，人的 HEAD 和文件不变。同步、冲突、停止与未知合并恢复未重验。证据与原始记录留在本地 `.tools/verification/requirements-20261110114551-evidence/`；本轮没有修改产品代码。
 
-- 两个工具都必须单独调用。同一步里还有别的工具时，这一步不会落地或同步，Git 状态保持调用前的样子。
+- 两个工具可以同批调用，同一工作树上的两项操作依次完成，先后顺序不保证。核对模型分别收到落地与同步结果，再用 Git 历史确认两边包含预期提交。
 - 两个工具都要求唯一非空参数 `project`。缺失、空白或带其他参数时得到 `INVALID_ARGUMENT`，提示 `<工具名> 只接受非空的 project。`。
 - Git 的其他失败（例如 `index.lock`、文件被占用）是 `LAND_FAILED` 或 `SYNC_FAILED`，`data.git` 为 Git 原文。不要把这类失败说成「文件会被覆盖」。
 - 落地不经人批准。
