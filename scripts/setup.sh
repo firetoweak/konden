@@ -41,8 +41,7 @@ if [ ! -x "$uv" ]; then
   exit 1
 fi
 
-"$uv" python install "$python_version" --install-dir "$managed_python_dir" --no-bin
-
+# uv venv downloads managed Python when needed; repeated setup should not touch a valid runtime.
 environment_dir="$project_root/konden-env"
 venv_python="$environment_dir/bin/python"
 create_environment=0

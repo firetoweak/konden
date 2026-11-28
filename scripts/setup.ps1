@@ -32,11 +32,7 @@ try {
         throw "uv install failed: $uv was not found"
     }
 
-    & $uv python install $pythonVersion --install-dir $managedPythonDir --no-bin --no-registry
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install project Python $pythonVersion."
-    }
-
+    # uv venv downloads managed Python when needed; repeated setup should not touch a valid runtime.
     $environmentDir = Join-Path $projectRoot "konden-env"
     $python = Join-Path $environmentDir "Scripts\python.exe"
     $createEnvironment = -not (Test-Path -LiteralPath $python -PathType Leaf)
