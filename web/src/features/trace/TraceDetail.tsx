@@ -152,7 +152,7 @@ function DetailContent({ detail, entry, scope }: { detail: Detail; entry: TraceE
 
 export function CallStatus({ entry }: { entry: TraceEntry }) {
   if (!entry.status) return null;
-  const symbol = entry.status === "passed" ? "✓" : entry.status === "failed" || entry.status === "rejected" ? "×" : "·";
+  const symbol = entry.status === "passed" ? "✓" : entry.status === "failed" ? "×" : "·";
   return <span className={`trace-status-chip ${entry.status}`}>{symbol} {statusLabel[entry.status]}</span>;
 }
 

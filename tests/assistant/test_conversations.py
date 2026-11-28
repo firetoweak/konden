@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import unittest
-from unittest.mock import AsyncMock, patch
 
 from konden.assistant.compact.core import MODEL_USAGE, WINDOW
 from konden.assistant.conversations import (
@@ -15,7 +14,6 @@ from konden.runtime import (
     Command,
     CommandOutcome,
     CommandOutcomeReceived,
-    CommandRejected,
     DispatchAttemptStarted,
     DomainFactCommitted,
     Event,
@@ -27,6 +25,7 @@ from konden.runtime import (
     StepCommitted,
     UserMessageReceived,
 )
+from konden.runtime.events import EVENT_SCHEMA_VERSION
 
 
 def event(sequence, event_id, payload, causation_id=None, artifact_refs=()):
@@ -38,7 +37,7 @@ def event(sequence, event_id, payload, causation_id=None, artifact_refs=()):
         occurred_at=datetime(2026, 9, 15, sequence, tzinfo=UTC),
         causation_id=causation_id,
         correlation_id=None,
-        schema_version=6,
+        schema_version=EVENT_SCHEMA_VERSION,
         artifact_refs=artifact_refs,
     )
 
@@ -91,13 +90,13 @@ class ConversationProjectionTest(unittest.TestCase):
                 occurred_at=datetime(2026, 9, 15, 1, tzinfo=UTC),
                 causation_id=None,
                 correlation_id=None,
-                schema_version=6,
+                schema_version=EVENT_SCHEMA_VERSION,
                 artifact_refs=(),
                 delivery=DeliveryIdentity("web:conn-1", "web-delivery-1"),
             ),
             event(2, "user-2", UserMessageReceived("无投递身份")),
         )
-        view = SessionView("waiting", ("external_fact",), (), False)
+        view = SessionView("waiting", ("external_fact",), False)
         conversation = project_conversation("session-1", events, timeline(events), session=view)
         self.assertEqual(
             [(item.message_id, item.delivery_id) for item in conversation.items if item.kind == "user"],
@@ -126,7 +125,7 @@ class ConversationProjectionTest(unittest.TestCase):
             )), causation_id="attempt-1"),
             event(6, "step-2", committed_step("decision-2", "outcome-1", "已请 Ada 检查。", ())),
         )
-        view = SessionView("waiting", ("external_fact",), (), False)
+        view = SessionView("waiting", ("external_fact",), False)
         pending = project_conversation("session-1", events[:4], timeline(events[:4]), session=view)
         self.assertEqual([item.direction for item in pending.items if item.kind == "private_message"],
                          ["received"])
@@ -160,7 +159,7 @@ class ConversationProjectionTest(unittest.TestCase):
             )), causation_id="attempt-1"),
         )
         conversation = project_conversation("session-1", events, timeline(events),
-            session=SessionView("waiting", ("external_fact",), (), False))
+            session=SessionView("waiting", ("external_fact",), False))
         self.assertEqual([(item.thread_id, item.reply_to, item.text) for item in conversation.items
                           if item.kind == "private_message"], [
             ("private-in", None, "请调整卡片"), ("private-in", "private-in", "已处理，请复核"),
@@ -178,7 +177,7 @@ class ConversationProjectionTest(unittest.TestCase):
                     )), causation_id="attempt-1"),
                 )
                 conversation = project_conversation("session-1", events, timeline(events),
-                    session=SessionView("waiting", ("external_fact",), (), False))
+                    session=SessionView("waiting", ("external_fact",), False))
                 self.assertEqual([item.kind for item in conversation.items], ["step"])
                 self.assertEqual(conversation.items[0].tools[0].name, "send_message")
 
@@ -204,7 +203,7 @@ class ConversationProjectionTest(unittest.TestCase):
             ))
         conversation = project_conversation(
             "session-1", tuple(events), timeline(tuple(events)),
-            session=SessionView("waiting", ("external_fact",), (), False),
+            session=SessionView("waiting", ("external_fact",), False),
         )
         self.assertEqual(conversation.work_plan, active)
         self.assertEqual(
@@ -225,7 +224,7 @@ class ConversationProjectionTest(unittest.TestCase):
         )
         conversation = project_conversation(
             "session-1", events, timeline(events),
-            session=SessionView("waiting", ("external_fact",), (), False),
+            session=SessionView("waiting", ("external_fact",), False),
         )
         self.assertEqual(conversation.context_input_tokens, 1500)
 
@@ -239,7 +238,7 @@ class ConversationProjectionTest(unittest.TestCase):
             })),
             event(3, "window-1", DomainFactCommitted(WINDOW, {"id": "w1", "parent": None})),
         )
-        view = SessionView("waiting", ("external_fact",), (), False)
+        view = SessionView("waiting", ("external_fact",), False)
         before_call = project_conversation("session-1", events, timeline(events), session=view)
         self.assertIsNone(before_call.context_input_tokens)
         new_step = committed_step("decision-2", "user-2", "新的回复", ())
@@ -262,7 +261,7 @@ class ConversationProjectionTest(unittest.TestCase):
                 committed_step("decision-1", "user-1", "", (search,)),
             ),
         )
-        view = SessionView("waiting", ("external_fact",), (), False)
+        view = SessionView("waiting", ("external_fact",), False)
 
         queued = project_conversation(
             "session-1", events, timeline(events), session=view
@@ -293,7 +292,7 @@ class ConversationProjectionTest(unittest.TestCase):
                 causation_id="step-1",
             ),
         )
-        view = SessionView("waiting", ("command:cmd-search",), (), False)
+        view = SessionView("waiting", ("command:cmd-search",), False)
 
         conversation = project_conversation(
             "session-1", events, timeline(events), session=view
@@ -342,50 +341,13 @@ class ConversationProjectionTest(unittest.TestCase):
             "session-1",
             events,
             timeline(events),
-            session=SessionView("waiting", ("external_fact",), (), False),
+            session=SessionView("waiting", ("external_fact",), False),
         )
         self.assertEqual(conversation.items[0].tools[0].status, "unknown")
         self.assertEqual(
             conversation.items[0].tools[0].error,
             "命令已被打断，执行结果未知。",
         )
-
-    def test_pending_authorization_and_rejection_are_distinct_statuses(self):
-        write = Command(
-            "cmd-write",
-            InvokeTool("write_file", (("path", "a.md"), ("content", "x"))),
-            requires_authorization=True,
-        )
-        events = (
-            event(
-                1,
-                "step-1",
-                committed_step("decision-1", "user-1", "", (write,)),
-            ),
-        )
-        waiting = project_conversation(
-            "session-1",
-            events,
-            timeline(events),
-            session=SessionView(
-                "waiting",
-                ("authorization:cmd-write",),
-                ("cmd-write",),
-                False,
-            ),
-        )
-        self.assertEqual(waiting.items[0].tools[0].status, "awaiting_authorization")
-        self.assertEqual(waiting.items[0].tools[0].arguments, {"path": "a.md", "content": "x"})
-
-        turned_down = (*events, event(2, "reject-1", CommandRejected("cmd-write"), causation_id="step-1"))
-        rejected = project_conversation(
-            "session-1",
-            turned_down,
-            timeline(turned_down),
-            session=SessionView("waiting", ("external_fact",), (), False),
-        )
-        self.assertEqual(rejected.items[0].tools[0].status, "rejected")
-
 
 class _Workspaces:
     """查询只问 registry 一件事：这个工作区还在不在。"""
@@ -399,7 +361,6 @@ class _Workspaces:
 
 class Idle:
     workspaces = _Workspaces("workspace-1")
-    auto_authorize_enabled = True
 
     def __init__(self, store):
         from konden.assistant.host.agent_roster import AgentRoster
@@ -408,9 +369,6 @@ class Idle:
 
     def activity(self, session_id):
         return "idle"
-
-    def auto_authorize(self):
-        return self.auto_authorize_enabled
 
     def current_failure(self, session_id):
         return None
@@ -551,7 +509,7 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                 "coding_bot",
             )
             await commit(store, "quiet", commands=(
-                Command("cmd-quiet", InvokeTool("apply_patch", (("path", "note.txt"),)), requires_authorization=True),
+                Command("cmd-quiet", InvokeTool("apply_patch", (("path", "note.txt"),))),
             ))
             await wake(
                 store, "named",
@@ -592,42 +550,16 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
                 },
             })
             await propose(store, "old", "req-old")
-            sessions.auto_authorize_enabled = False
-            await sessions.agents.list()
-            with patch.object(store, "projected", new=AsyncMock(wraps=store.projected)) as read:
-                inbox = await queries.list_inbox()
-                self.assertEqual({call.args[0] for call in read.call_args_list}, {"quiet", "named"})
-                self.assertEqual(read.call_count, 2)
+            inbox = await queries.list_inbox()
+            conversation = await queries.conversation("quiet")
+            self.assertEqual(conversation.items[0].tools[0].status, "queued")
+            self.assertEqual((await queries.agent_entry("quiet")).status, "idle")
+            self.assertEqual((await queries.agent_entry("named")).status, "control")
 
-            # Read the exact interval between issuing an ask command and recording
-            # its automatic authorization; no Worker is running to close it.
-            journal = SqliteJournal(store.require("quiet"))
-            before = await journal.snapshot("quiet")
-            for enabled in (True, False):
-                sessions.auto_authorize_enabled = enabled
-                conversation = await queries.conversation("quiet")
-                self.assertEqual(conversation.session.auto_authorize, enabled)
-                self.assertEqual(conversation.session.pending_authorization_ids,
-                                 () if enabled else ("cmd-quiet",))
-                self.assertEqual(len(conversation.session.pending_authorization_commands),
-                                 0 if enabled else 1)
-                self.assertEqual(conversation.items[0].tools[0].status,
-                                 "queued" if enabled else "awaiting_authorization")
-                self.assertEqual((await queries.agent_entry("quiet")).status,
-                                 "idle" if enabled else "authorization")
-                current_inbox = await queries.list_inbox()
-                self.assertEqual([item.kind for item in current_inbox],
-                                 ["control"] if enabled else ["authorization", "control"])
-                self.assertEqual(await journal.snapshot("quiet"), before)
-
-        self.assertEqual(
-            [(item.kind, item.label, item.session_id) for item in inbox],
-            [("authorization", "安静熊猫", "quiet"), ("control", "验证熊猫", "named")],
-        )
-        self.assertEqual(inbox[0].name, "apply_patch")
-        self.assertEqual(inbox[0].arguments, {"path": "note.txt"})
-        self.assertEqual(inbox[1].summary, "删除工作区")
-        self.assertEqual(inbox[1].risk, "high")
+        self.assertEqual([(item.kind, item.label, item.session_id) for item in inbox],
+                         [("control", "验证熊猫", "named")])
+        self.assertEqual(inbox[0].summary, "删除工作区")
+        self.assertEqual(inbox[0].risk, "high")
 
     async def test_inbox_reports_limits_but_pending_messages_do_not_require_human_continuation(self):
         from pathlib import Path
@@ -701,8 +633,6 @@ class QueriesTest(unittest.IsolatedAsyncioTestCase):
             def activity(self, session_id):
                 return "idle"
 
-            def auto_authorize(self):
-                return None
 
             def current_failure(self, session_id):
                 return None

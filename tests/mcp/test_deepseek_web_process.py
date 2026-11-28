@@ -46,7 +46,7 @@ def test_configured_search_is_available_without_registration_or_a_second_secret_
             restored = reopened.toolset_provider.restore_spec(
                 toolset_id=descriptor.id, revision=descriptor.revision,
                 name=tool.spec.name, description=tool.spec.description,
-                parameters=tool.spec.parameters.schema(), requires_authorization=False,
+                parameters=tool.spec.parameters.schema(),
                 provider_data=tool.provider_data,
             )
             # Invalid URL proves transport and restoration without a paid request.

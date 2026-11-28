@@ -786,7 +786,6 @@ class McpProviderTest(unittest.IsolatedAsyncioTestCase):
             name=discovered.spec.name,
             description=discovered.spec.description,
             parameters=discovered.spec.parameters.schema(),
-            requires_authorization=discovered.spec.requires_authorization,
             provider_data=discovered.provider_data,
         )
 

@@ -1,13 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 from dataclasses import dataclass
 
-from konden.assistant.authorization import (
-    AuthorizationConflict,
-    AuthorizationTargetNotFound,
-)
 from konden.assistant.catalog import CapabilityCatalog
 from konden.assistant.clarification import ANSWER_SOURCE, questions_by_id
 from konden.assistant.control import (
@@ -25,7 +20,6 @@ from konden.assistant.inputs import InputConflict
 from konden.assistant.management import ManagementSurface
 from konden.assistant.runner import (
     SessionScheduler,
-    pending_authorization_ids,
     resume_session,
 )
 from konden.assistant.subagent.subagent import SubAgentHost, project_pending
@@ -35,25 +29,13 @@ from konden.runtime.model import CanonicalState, CommandPhase
 
 
 @dataclass(frozen=True, slots=True)
-class PendingAuthorization:
-    """待授权命令的展示信息：用户确认前需要看到自己在批准什么。"""
-
-    command_id: str
-    name: str
-    arguments: Mapping[str, object]
-
-
-@dataclass(frozen=True, slots=True)
 class SessionView:
     status: str
     waiting_for: tuple[str, ...]
-    pending_authorization_ids: tuple[str, ...]
     should_wake: bool
     has_open_subagents: bool = False
     control_approval: ControlApprovalView | None = None
     control_message: str | None = None
-    auto_authorize: bool = False
-    pending_authorization_commands: tuple[PendingAuthorization, ...] = ()
     last_error: str | None = None
 
 
@@ -63,18 +45,11 @@ def session_view(
     control_approval: ControlApprovalView | None = None,
     control_message: str | None = None,
     has_open_subagents: bool = False,
-    auto_authorize: bool = False,
     last_error: str | None = None,
 ) -> SessionView:
-    pending_ids = () if auto_authorize else pending_authorization_ids(state)
-    by_id = {
-        command_state.command.command_id: command_state.command
-        for command_state in state.commands
-    }
     return SessionView(
         status=state.status.value,
         waiting_for=state.waiting_for,
-        pending_authorization_ids=pending_ids,
         should_wake=(
             state.status is RuntimeStatus.RUNNABLE
             or any(
@@ -84,17 +59,7 @@ def session_view(
         has_open_subagents=has_open_subagents,
         control_approval=control_approval,
         control_message=control_message,
-        auto_authorize=auto_authorize,
         last_error=last_error,
-        pending_authorization_commands=tuple(
-            PendingAuthorization(
-                command_id=command_id,
-                name=by_id[command_id].effect.name,
-                arguments=by_id[command_id].effect.argument_dict(),
-            )
-            for command_id in pending_ids
-            if command_id in by_id
-        ),
     )
 
 
@@ -119,7 +84,6 @@ class AssistantSessions:
         self._management = management
         self._catalog = catalog
         self._subagents = subagents
-        self._auto_authorize: dict[str, bool] = {}
         self._control_locks: dict[str, asyncio.Lock] = {}
 
     def _view(
@@ -134,7 +98,6 @@ class AssistantSessions:
             control_approval=pending_approval_view(events),
             control_message=project_control_message(events),
             has_open_subagents=has_open_subagents,
-            auto_authorize=self._auto_authorize.get(state.session_id, False),
         )
 
     async def create(self, session_id: str) -> SessionView:
@@ -315,12 +278,6 @@ class AssistantSessions:
                 approved=answer in {"yes", "y"},
             )
             return await self.view(session_id)
-        if view.pending_authorization_ids and answer in {"yes", "y", "no", "n"}:
-            await self.resolve_authorizations(
-                session_id,
-                approved=answer in {"yes", "y"},
-            )
-            return await self.view(session_id)
         await self.receive_user_message(
             session_id,
             content,
@@ -329,66 +286,6 @@ class AssistantSessions:
             artifact_refs=tuple(artifact_refs),
         )
         return await self.view(session_id)
-
-    async def resolve_authorization(
-        self,
-        session_id: str,
-        command_id: str,
-        *,
-        approved: bool,
-    ) -> None:
-        state = await self._runtime.state(session_id)
-        if command_id not in {item.command.command_id for item in state.commands}:
-            raise AuthorizationTargetNotFound(f"授权目标不存在：{command_id}")
-        if approved:
-            event = await self._runtime.grant_command(session_id, command_id)
-        else:
-            event = await self._runtime.reject_command(session_id, command_id)
-        if event is None:
-            raise AuthorizationConflict(f"该操作已处理或当前不可授权：{command_id}")
-        await self._scheduler.wake(session_id)
-
-    async def resolve_authorizations(
-        self,
-        session_id: str,
-        *,
-        approved: bool,
-    ) -> None:
-        state = await self._runtime.state(session_id)
-        pending = pending_authorization_ids(state)
-        if not pending:
-            raise AuthorizationConflict("当前没有待授权的操作。")
-        for command_id in pending:
-            if approved:
-                event = await self._runtime.grant_command(session_id, command_id)
-            else:
-                event = await self._runtime.reject_command(session_id, command_id)
-            if event is None:
-                raise AuthorizationConflict(f"该操作已处理或当前不可授权：{command_id}")
-        await self._scheduler.wake(session_id)
-
-    def is_auto_authorized(self, session_id: str) -> bool:
-        return self._auto_authorize.get(session_id, False)
-
-    async def apply_auto_authorize(
-        self,
-        session_id: str,
-        *,
-        enabled: bool,
-    ) -> SessionView:
-        self._auto_authorize[session_id] = bool(enabled)
-        if enabled:
-            await self._grant_pending(session_id)
-        return await self.view(session_id)
-
-    async def _grant_pending(self, session_id: str) -> None:
-        state = await self._runtime.state(session_id)
-        pending = pending_authorization_ids(state)
-        if not pending:
-            return
-        for command_id in pending:
-            await self._runtime.grant_command(session_id, command_id)
-        await self._scheduler.wake(session_id)
 
     async def cancel_turn(self, session_id: str) -> SessionView:
         await self._scheduler.cancel_turn(session_id)

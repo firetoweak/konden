@@ -8,7 +8,7 @@
 
 - `list`：`list_colleagues` 不接受参数。每位同事有 `name`、`directory`、`projects`、`status`、`since`。
 - `roster-facts`：第二位 Agent 创建后，已在的同事收到 `bot.colleague_joined`；这些事实都不请求决策。
-- `shared-memory`：所有长期 Bot 用 `read_shared_memory` 查阅、用 `update_shared_memory` 修改同一份正文，最多500字符，含标点、空白和换行，可以为空。修改需要已读的 `version` 和完整 `content`；沿用工具授权。状态在 `$KONDEN_HOME/state/shared_memory.sqlite`，修改者与来源一起保存。判断前读取产品中的当前正文；首次或版本变化时先提交 `bot.shared_memory` 观察，再呈现在 `<working_memory>` 中。未变化不重复追加，不唤醒空闲同事。Journal 只拥有观察，不能反写当前正文；compact 从观察原文重述。
+- `shared-memory`：所有长期 Bot 用 `read_shared_memory` 查阅、用 `update_shared_memory` 修改同一份正文，最多500字符，含标点、空白和换行，可以为空。修改需要已读的 `version` 和完整 `content`。状态在 `$KONDEN_HOME/state/shared_memory.sqlite`，修改者与来源一起保存。判断前读取产品中的当前正文；首次或版本变化时先提交 `bot.shared_memory` 观察，再呈现在 `<working_memory>` 中。未变化不重复追加，不唤醒空闲同事。Journal 只拥有观察，不能反写当前正文；compact 从观察原文重述。
 
 - `personal-memory`：每个长期 Bot 用 `read_personal_memory` / `update_personal_memory` 读写自己的工作约束，最多200字符，可以为空。人从该 Bot 资料的 `个人记忆` 页签直接编辑；版本冲突、重试与修改来源沿用共同记忆规则。个人正文同样先形成 `bot.personal_memory` 观察，再按原位置追加呈现。两者都只收短、常用、常改、场景无关的工作约束，知识结论与技能文档归档后按需检索。
 
@@ -24,7 +24,7 @@
 Bot 工具和下一轮读取验证需要 `live_model_ready`；Web 共同记忆编辑本身不需要模型。工具结果的 `code` 在该会话 journal（`$KONDEN_HOME/runtime_sessions/<sha256(session_id)>/journal.sqlite`）的命令结果里。`GET /api/sessions/<id>` 的 `tools` 含调用身份、名字、状态、错误和参数，但不含工具结果正文：`ok: false` 的已知结果也显示徽标 `完成`。
 
 - **查询同事**：请 `Ada` 调用 `list_colleagues`，不要带参数。
-  - (a) 结果 `code` 为 `COLLEAGUES_READ`。`colleagues` 含 `Lin` 的 `name`、`directory`、`projects`、`status`、`since`；没有 `Ada`；没有 `session_id`、`workspace_id`、`branch`。`directory` 是 Lin 的个人目录，挂上的项目在其 `projects/<项目名>` 下，`projects` 是这些项目名。`status` 对照 Web 名册：`干活` → `working`，`等授权` → `awaiting_authorization`，`等人回话` 和 `空闲` 都是 `idle`。打断当前轮后，状态继续按实际运行情况投影；后续新消息仍能唤醒。
+  - (a) 结果 `code` 为 `COLLEAGUES_READ`。`colleagues` 含 `Lin` 的 `name`、`directory`、`projects`、`status`、`since`；没有 `Ada`；没有 `session_id`、`workspace_id`、`branch`。`directory` 是 Lin 的个人目录，挂上的项目在其 `projects/<项目名>` 下，`projects` 是这些项目名。`status` 对照 Web 名册：`干活` → `working`，`待确认` → `awaiting_confirmation`，`等人回话` 和 `空闲` 都是 `idle`。打断当前轮后，状态继续按实际运行情况投影；后续新消息仍能唤醒。
   - (b) 工具卡 `list_colleagues` 徽标 `完成`。
   - (c) 查询不改两边工作树，也不改人检出目录里的 `note.txt`。
   - (d) 带任意参数调用 → `INVALID_ARGUMENT`，错误为 `list_colleagues 不接受参数。`。用返回的 `directory` 请 `Ada` `read_file` 读 `Lin` 项目工作树（`projects/<项目名>` 下）里尚未提交的文件，读得到；`write_file` 写进该目录 → `ENVIRONMENT_PERMISSION_DENIED`，错误含 `path 不在可写入范围内`，`Lin` 的文件不变。
@@ -41,8 +41,8 @@ Web 编辑增量：输入500个表情，计数是 `500 / 500` 且可保存；501
 
 个人记忆增量：Ada 从工具实际读取并保存个人约束，用户随后从页面修订；Ada 下一次判断应读到新正文，Lin 的个人记忆保持为空，共同正文也不变。检查 `GET /api/agents/<id>/memory`、`GET /api/shared-memory`、实际模型请求和操作结果。200个表情按200字符计数且可保存，201字禁止保存；清空可保存。用户编辑草稿期间 Bot 先写入新版本，应展示新正文、保留草稿并禁止保存，核对后才能继续。改名及服务重启保留归属；缺失或删除的 Bot、失效连接不能写入。不得以自动化测试代替页面子路径，未实测的范围单独注明。
 
-- **约束的适用范围**：共同记忆设“默认中文”，用户明确“仅本轮用英文”；本轮应遵从，下一轮恢复中文，两份正文与版本不因临时要求改变。个人例外需明确用户依据，仅影响该 Bot；项目关联／解除不改变个人记忆归属。记忆中的“允许操作”不能代替 [工具授权](tool-authorization.md)，应对照实际请求和结果，不只看保存成功。
-- **主动记忆检查**：按[主动检查](../../../../docs/架构/上下文/记忆.md#主动检查)，在隔离 Bot 私聊发送五条新增输入，包含一条明确的长期约束和一条仅本轮有效的要求。等前台处理结束，检查独立记录与个人／共同记忆 GET。是否需要保存由模型判断，检查最多各改一次，临时要求不应持久化，无需出现在普通聊天里。另在关闭自动放行时重复，核对没有检查请求和写入。受控模型下的阈值、取消、检测期间撤销授权与并发版本冲突由 `tests/assistant/test_memory_review.py` 覆盖。
+- **约束的适用范围**：共同记忆设“默认中文”，用户明确“仅本轮用英文”；本轮应遵从，下一轮恢复中文，两份正文与版本不因临时要求改变。个人例外需明确用户依据，仅影响该 Bot；项目关联／解除不改变个人记忆归属。记忆中的“允许操作”不能替代用户对敏感操作的明确批准，应对照实际请求和结果，不只看保存成功。
+- **主动记忆检查**：按[主动检查](../../../../docs/架构/上下文/记忆.md#主动检查)，在隔离 Bot 私聊发送五条新增输入，包含一条明确的长期约束和一条仅本轮有效的要求。等前台处理结束，检查独立记录与个人／共同记忆 GET。是否需要保存由模型判断，检查最多各改一次，临时要求不应持久化，无需出现在普通聊天里。受控模型下的阈值、取消与并发版本冲突由 `tests/assistant/test_memory_review.py` 覆盖。
 
 ## Gotchas
 

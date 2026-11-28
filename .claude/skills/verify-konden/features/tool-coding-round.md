@@ -1,6 +1,6 @@
 # 工具编码回合
 
-在侧栏底部打开全局 `自动放行写文件等工具`，让模型改文件、跑命令，时间线依次出现 `read_file`、`apply_patch`、`execute_command`，任务根真实目录里的文件真的变了。工具来源 `konden/tools/builtin/`（`file_read.py`、`file_write.py`、`file_manage.py`、`command_execution.py`、`background_commands.py`），参数校验与 handler 异常转换在 `konden/tools/executor.py`；路径解析与文本读写在 `konden/filesystem/`。所有文件工具与命令直接作用于任务根，没有回退。
+让模型改文件、跑命令，时间线依次出现 `read_file`、`apply_patch`、`execute_command`，任务根真实目录里的文件真的变了。工具来源 `konden/tools/builtin/`（`file_read.py`、`file_write.py`、`file_manage.py`、`command_execution.py`、`background_commands.py`），参数校验与 handler 异常转换在 `konden/tools/executor.py`；路径解析与文本读写在 `konden/filesystem/`。所有文件工具与命令直接作用于任务根，没有回退。
 
 需求依据：[执行环境：文件范围与任务根、命令环境](../../../../docs/架构/能力/执行环境.md)、[工具结果边界](../../../../docs/架构/能力/工具与能力.md#归属与呈现)。真实文件与退出结果是判据；产品环境不覆盖项目工具链，未登记的内部异常原样暴露，通用工具 handler 适用显式登记的边界例外。
 
@@ -13,7 +13,7 @@
 - `command-errors`：`execute_command` 的其他结果码（`command_execution.py`）：
   - `ok:false`：`EMPTY_COMMAND`（「command 不能为空」）、`CWD_NOT_FOUND`（「工作目录不存在: …」）、`CWD_NOT_A_DIRECTORY`（「工作目录不是目录: …」）、`SHELL_NOT_FOUND`（带 `shell`、`executable`）、`COMMAND_START_FAILED`、`COMMAND_IO_FAILED`（「命令管道 I/O 失败，采集结果可能不完整」）。
   - `ok:null`（结果不确定，工具状态投影为 `unknown`/「中断」）：`COMMAND_INTERRUPTED`（「命令被用户停止，可能已部分执行。」）。
-- `command-authorization`：Web 的 Windows、Linux 和 macOS 父子会话中，`execute_command` 支持 `cwd`、`command`、`wait_seconds`。不提供后台执行的入口使用 `cwd`、`command` 并等待结束。每次调用都需要授权，自动放行时由系统批准。核对实际文件和退出结果，Git 核对方法见适用 Skill。
+- `command-execution`：Web 的 Windows、Linux 和 macOS 父子会话中，`execute_command` 支持 `cwd`、`command`、`wait_seconds`。不提供后台执行的入口使用 `cwd`、`command` 并等待结束。调用提交后直接执行。核对实际文件和退出结果，Git 核对方法见适用 Skill。
 - `search-tools`：`glob`、`grep` 在工作区内查找；`glob` 依赖 `fd`/`fdfind`，找不到时返回 `GLOB_NOT_FOUND`（「未找到 fd」）。
 - `write-tools`：`write_file`（新建/覆盖）、`replace_all`（替换文件中所有精确匹配文本）。
 - `referenced-content`：`read_content` 读取工具结果或历史检索返回的真实 `reference`；可按 `offset`/`limit` 连续读取，或用 `query` 查找字面关键词，按 `next_offset` 续读。来源 `konden/assistant/content.py`。
@@ -27,13 +27,12 @@
 
 ## How to get to it (user POV)
 
-- 打开会话（见 web-session-chat），打开开关 `自动放行写文件等工具`，在 `消息` 里点名要用的工具后 `发送`。
+- 打开会话（见 web-session-chat），在 `消息` 里点名要用的工具后 `发送`。
 
 ## Driving it with the browser
 
 前置：`$SCRATCH_WORKSPACE` 是已提交 `note.txt`（内容 `verify`）的 Git 仓库，已在名册里用它创建 Agent；Doctor 返回 0。
 
-- **确认开关开启**：现有和新会话共用全局选择，不要无条件点击切换；仅在关闭时点击 `自动放行写文件等工具`。`GET /api/sessions/<id>` 中 `session.auto_authorize` 为 true。
 - **发请求**：
 
 ```text
@@ -49,7 +48,7 @@ Windows 将第三条命令换成 `Write-Output edited`；不要在 PowerShell �
 - **判据**：
   - (a) `note.txt` 内容为 `edited`；`GET /api/sessions/<id>` 的 `items` 里有依次调用这三个工具的步骤，每个工具 `status` 为 `succeeded`。界面上成功步骤的标题行不显示状态徽标，展开后工具徽标为 `完成`（带勾）。
   - (b) 不出现待处理条（区域 `待处理`）；回复含 `CODING_ROUND_DONE`。
-  - **命令退出码**（同会话或后续轮，自动放行开启）：
+  - **命令退出码**（同会话或后续轮）：
     1. `execute_command` 跑 `bash -c 'echo boom >&2; exit 2'`→ journal/`outcome.value` 中 `ok=true`、`code=COMMAND_EXIT_NONZERO`、`data.exit_code=2`、`hint` 含「退出码非零」或「不要当作成功」；该工具 `status` 为 `succeeded`（「完成」），不是工具失败。
     2. 再跑 `printf 'ok\n'`（或 `true`）→ `code=COMMAND_COMPLETED`、`data.exit_code=0`。
     Windows 上用 `cmd /c exit 2` 核对原生退出码为 2，再用 `Write-Output ok` 核对成功；`Write-Error "failed"` 可作纯 PowerShell 失败对照。
@@ -58,12 +57,12 @@ Windows 将第三条命令换成 `Write-Output edited`；不要在 PowerShell �
 - **已知错误与未知异常**：`glob` 的 pattern 为 `""` / `"."` / 仅空白时返回工具结果 `ok:false`、`code:EMPTY_PATTERN`，会话与 Worker 继续存活。参数不合 schema → `VALIDATION_ERROR`。通用工具 handler 是显式登记的边界：普通 `Exception` 返回可见的 `ok:false`、`code:TOOL_HANDLER_ERROR`，包含异常类型与原始错误，不伪装为成功、不自动重试；`asyncio.CancelledError` / `KeyboardInterrupt` / `SystemExit` 等 `BaseException` 仍上抛。其他未登记的内部异常与持久化损坏不能借此降级，登记依据见 Gotchas。
 - **搜索/写入**：让模型 `glob` 找 `*.txt`、`grep` 找 `edited`、`write_file` 新建 `new.txt` 写 `hi`、`replace_all` 把 `hi` 换成 `yo`。(a) `new.txt` 为 `yo`。(d) 实例 PATH 里没有 `fd`/`fdfind` 时 `glob` → `GLOB_NOT_FOUND`，记录为环境问题而非功能通过。
 - **结果引用**：某个工具或历史检索实际返回 `data.reference` 后，请模型用 `read_content` 先连续读取，再用 `query` 找一个已知标识。(a) `CONTENT_READ` 的片段与原文一致，续读使用真实 `next_offset`。(b) 时间线出现 `read_content` 调用。(c) 读取不修改源文件。(d) 合法格式但不存在的引用 → `CONTENT_NOT_FOUND`；偏移超出原文 → `OFFSET_OUT_OF_RANGE`。没有取得真实引用时记录未覆盖，不编造成功路径。
-- **命令授权**：在侧栏**全局关闭**自动放行后，在会话里让模型 `execute_command` 跑一个只读命令（如 `git status`）→ (b) 待处理条出现该调用（自动放行开启时所有待授权调用都会被自动批准，看不到这一步）；(a) 批准后才执行。(c) 不存在按命令文本放行的情况。(d) 拒绝后命令不执行，模型收到「用户拒绝」。
-- **后台接管与响应**：从页面请求 `execute_command` 跑长命令，`wait_seconds=0`，接管后用私信回执并结束本轮；命令运行中另发消息，要求私聊回复包含标识。(a) `GET /api/sessions/<id>/commands` 仍为 running，后台列表展示时长，新消息已回复。(b) 启动须批准，读取与停止不另授权。(c) 页面 `停止命令` 后状态 stopped，任务从资料列表消失，完成事实恰好一条并唤醒 Agent；只有主动停止，没有自动重跑。(d) 再停同一条不再产生完成事实。短命令用 `wait_seconds=1` 等待较长于一秒的操作，确认到点转后台且自然结束后主动通知；列表不再展示已完成任务，仍在运行的其他任务继续显示。核对模型显式发送的结果在刷新后仍可见。
+- **后台接管与响应**：从页面请求 `execute_command` 跑长命令，`wait_seconds=0`，接管后用私信回执并结束本轮；命令运行中另发消息，要求私聊回复包含标识。(a) `GET /api/sessions/<id>/commands` 仍为 running，后台列表展示时长，新消息已回复。(b) 启动、读取与停止直接执行。(c) 页面 `停止命令` 后状态 stopped，任务从资料列表消失，完成事实恰好一条并唤醒 Agent；只有主动停止，没有自动重跑。(d) 再停同一条不再产生完成事实。短命令用 `wait_seconds=1` 等待较长于一秒的操作，确认到点转后台且自然结束后主动通知；列表不再展示已完成任务，仍在运行的其他任务继续显示。核对模型显式发送的结果在刷新后仍可见。
 - **证据**：三个工具名可见时快照+截图；会话 JSON 与 `note.txt` 副本存到 `$EVIDENCE_DIR/tool-coding-round/`。
-- **关开关的反向路径**：新开会话，先关闭自动放行，发 `请用 apply_patch 把 note.txt 改成 edited，然后停止。`，在待处理条点 `允许 apply_patch`（详见 tool-authorization）；`read_file` 是只读工具，不会进入待处理。
 
 - **命令环境**：项目准备带标识的独立解释器／命令，明确指定后核对实际路径与输出；产品工具路径不覆盖项目环境。两次调用分别核对临时变量不延续，环境初始化失败时不擅自换环境继续。检查退出码及未执行的哨兵文件，不能只用工具“完成”判业务成功。
+
+- **同批直接执行**：请模型同批调用 `write_file` 创建 `verify-write.txt`，并用 `execute_command` 生成独立的 `verify-command.txt`。核对两个文件和执行过程里的结果，名册无自动放行开关，输入区无需批准。受控模型还可核对只在两项结果齐全后继续一次。
 
 ## Gotchas
 

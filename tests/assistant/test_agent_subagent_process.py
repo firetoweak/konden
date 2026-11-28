@@ -1,4 +1,4 @@
-"""Shared files, child execution, human authorization and resource reclamation across Workers."""
+"""Shared files, child execution and resource reclamation across Workers."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +9,6 @@ import sys
 import pytest
 
 from konden.assistant.commands import COMMAND_FINISHED
-from konden.assistant.conversations import AssistantQueries
 from konden.assistant.host.session_store import SessionStore
 from konden.assistant.host.supervisor import HostSupervisor
 from konden.assistant.subagent.subagent import (
@@ -86,7 +85,6 @@ def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_command
             llm.directory = execution_root
             (execution_root / "note.txt").write_text("uncommitted")
             before = git(root, "rev-parse", "HEAD")
-            await host.set_auto_authorize(not long)
             await host.accept_input(parent.session_id, "运行子任务", delivery_id="start")
             async def delegated():
                 return bool(project_delegate_intents(await host.store.journal(parent.session_id).snapshot(parent.session_id)))
@@ -95,16 +93,6 @@ def test_child_executes_in_shared_uncommitted_files_and_reclaim_releases_command
             [intent] = project_delegate_intents(events)
             child = intent.child_session_id
             if long:
-                queries = AssistantQueries(host.store, host)
-                async def pending():
-                    return bool(await queries.list_inbox())
-                await until(pending)
-                [item] = await queries.list_inbox()
-                assert item.session_id == parent.session_id
-                assert item.command_session_id == child
-                assert not (execution_root / "child.txt").exists()
-                assert (await queries.agent_entry(parent.session_id)).status == "authorization"
-                await host.resolve_child_authorization(parent.session_id, child, item.command_id, approved=True)
                 async def ready():
                     return (execution_root / "ready").exists()
                 await until(ready)

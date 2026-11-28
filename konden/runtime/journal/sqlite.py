@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import replace
 from datetime import UTC, datetime
 import json
 from pathlib import Path
@@ -23,9 +22,7 @@ from konden.runtime.codec import (
 )
 from konden.runtime.events import (
     AttemptOrphaned,
-    CommandAuthorized,
     CommandOutcomeReceived,
-    CommandRejected,
     DecisionCancelled,
     DeliveryIdentity,
     DispatchAttemptStarted,
@@ -49,7 +46,7 @@ from konden.runtime.model import (
 )
 
 _T = TypeVar("_T")
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 _READ_BATCH = 256
 
 
@@ -126,13 +123,7 @@ CREATE TABLE IF NOT EXISTS commands (
     command_id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(session_id),
     issued_event_id TEXT NOT NULL REFERENCES events(event_id),
-    dispatch_eligible_event_id TEXT REFERENCES events(event_id),
-    authorization_rejected_event_id TEXT UNIQUE REFERENCES events(event_id),
-    canonical_outcome_event_id TEXT UNIQUE REFERENCES events(event_id),
-    CHECK (
-        dispatch_eligible_event_id IS NULL
-        OR authorization_rejected_event_id IS NULL
-    )
+    canonical_outcome_event_id TEXT UNIQUE REFERENCES events(event_id)
 );
 
 CREATE TABLE IF NOT EXISTS attempts (
@@ -156,7 +147,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     state_json TEXT NOT NULL
 );
 
-PRAGMA user_version = 7;
+PRAGMA user_version = 8;
 """
 
 
@@ -424,22 +415,6 @@ class SqliteJournal:
                 await _await_task_uninterruptibly(compensation)
             raise
 
-    async def grant_command(self, draft: EventDraft) -> Event | None:
-        self._validate_internal_draft(draft)
-        if not isinstance(draft.payload, CommandAuthorized):
-            raise TypeError(type(draft.payload).__name__)
-        return await self._write(
-            lambda connection: self._grant_command_tx(connection, draft)
-        )
-
-    async def reject_command(self, draft: EventDraft) -> Event | None:
-        self._validate_internal_draft(draft)
-        if not isinstance(draft.payload, CommandRejected):
-            raise TypeError(type(draft.payload).__name__)
-        return await self._write(
-            lambda connection: self._reject_command_tx(connection, draft)
-        )
-
     async def renew_attempt(
         self,
         attempt_id: str,
@@ -541,6 +516,11 @@ class SqliteJournal:
             connection.execute("PRAGMA foreign_keys = ON")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, SCHEMA_VERSION):
+                event = connection.execute(
+                    "SELECT schema_version FROM events ORDER BY sequence LIMIT 1"
+                ).fetchone()
+                if event is not None and event[0] != EVENT_SCHEMA_VERSION:
+                    raise ValueError(f"unsupported event schema version: {event[0]}")
                 raise ValueError(f"unsupported database schema version: {version}")
             if version == 0:
                 connection.execute("PRAGMA journal_mode = WAL")
@@ -1110,85 +1090,12 @@ class SqliteJournal:
             raise KeyError(payload.command_id)
         if command["canonical_outcome_event_id"]:
             return None
-        if (
-            command["dispatch_eligible_event_id"] is None
-            or draft.causation_id != command["dispatch_eligible_event_id"]
-        ):
-            return None
-        count = connection.execute(
-            "SELECT COUNT(*) AS count FROM attempts WHERE command_id = ?",
-            (payload.command_id,),
-        ).fetchone()["count"]
-        if payload.attempt_number != count + 1:
+        if draft.causation_id != command["issued_event_id"] or payload.attempt_number != 1:
             return None
         return self._append_tx(
             connection,
             draft,
             attempt_lease_expires_at=self._clock() + lease_seconds,
-        ).event
-
-    def _authorization_causation_id_tx(
-        self,
-        connection: sqlite3.Connection,
-        session_id: str,
-        command_id: str,
-    ) -> str | None:
-        command = connection.execute(
-            "SELECT * FROM commands WHERE command_id = ?",
-            (command_id,),
-        ).fetchone()
-        if command is None or command["session_id"] != session_id:
-            raise KeyError(command_id)
-        if command["canonical_outcome_event_id"]:
-            return None
-        if command["dispatch_eligible_event_id"] is not None:
-            return None
-        if command["authorization_rejected_event_id"] is not None:
-            return None
-        if (
-            connection.execute(
-                "SELECT 1 FROM attempts WHERE command_id = ?",
-                (command_id,),
-            ).fetchone()
-            is not None
-        ):
-            return None
-        return command["issued_event_id"]
-
-    def _grant_command_tx(
-        self,
-        connection: sqlite3.Connection,
-        draft: EventDraft,
-    ) -> Event | None:
-        payload = draft.payload
-        causation_id = self._authorization_causation_id_tx(
-            connection,
-            draft.session_id,
-            payload.command_id,
-        )
-        if causation_id is None:
-            return None
-        return self._append_tx(
-            connection,
-            replace(draft, causation_id=causation_id),
-        ).event
-
-    def _reject_command_tx(
-        self,
-        connection: sqlite3.Connection,
-        draft: EventDraft,
-    ) -> Event | None:
-        payload = draft.payload
-        causation_id = self._authorization_causation_id_tx(
-            connection,
-            draft.session_id,
-            payload.command_id,
-        )
-        if causation_id is None:
-            return None
-        return self._append_tx(
-            connection,
-            replace(draft, causation_id=causation_id),
         ).event
 
     def _renew_attempt_tx(
@@ -1288,50 +1195,15 @@ class SqliteJournal:
                     INSERT INTO commands(
                         command_id,
                         session_id,
-                        issued_event_id,
-                        dispatch_eligible_event_id
-                    ) VALUES (?, ?, ?, ?)
+                        issued_event_id
+                    ) VALUES (?, ?, ?)
                     """,
                     (
                         command.command_id,
                         event.session_id,
                         event.event_id,
-                        None if command.requires_authorization else event.event_id,
                     ),
                 )
-        elif isinstance(payload, CommandAuthorized):
-            cursor = connection.execute(
-                """
-                UPDATE commands SET dispatch_eligible_event_id = ?
-                WHERE command_id = ?
-                    AND dispatch_eligible_event_id IS NULL
-                    AND canonical_outcome_event_id IS NULL
-                    AND authorization_rejected_event_id IS NULL
-                    AND NOT EXISTS (
-                        SELECT 1 FROM attempts
-                        WHERE attempts.command_id = commands.command_id
-                    )
-                """,
-                (event.event_id, payload.command_id),
-            )
-            if cursor.rowcount != 1:
-                raise ValueError(f"command is not grantable: {payload.command_id}")
-        elif isinstance(payload, CommandRejected):
-            cursor = connection.execute(
-                """
-                UPDATE commands SET authorization_rejected_event_id = ?
-                WHERE command_id = ?
-                    AND authorization_rejected_event_id IS NULL
-                    AND dispatch_eligible_event_id IS NULL
-                    AND canonical_outcome_event_id IS NULL
-                    AND NOT EXISTS (
-                        SELECT 1 FROM attempts WHERE command_id = ?
-                    )
-                """,
-                (event.event_id, payload.command_id, payload.command_id),
-            )
-            if cursor.rowcount != 1:
-                raise ValueError(f"command is not rejectable: {payload.command_id}")
         elif isinstance(payload, DispatchAttemptStarted):
             if attempt_lease_expires_at is None:
                 raise ValueError("attempt lease is required")
@@ -1357,13 +1229,6 @@ class SqliteJournal:
                     payload.worker_id,
                 ),
             )
-            connection.execute(
-                """
-                UPDATE commands SET dispatch_eligible_event_id = NULL
-                WHERE command_id = ?
-                """,
-                (payload.command_id,),
-            )
         elif isinstance(payload, CommandOutcomeReceived):
             current = connection.execute(
                 """
@@ -1377,9 +1242,7 @@ class SqliteJournal:
             if current["canonical_outcome_event_id"] is None:
                 connection.execute(
                     """
-                    UPDATE commands SET
-                        canonical_outcome_event_id = ?,
-                        dispatch_eligible_event_id = NULL
+                    UPDATE commands SET canonical_outcome_event_id = ?
                     WHERE command_id = ?
                     """,
                     (event.event_id, payload.command_id),
@@ -1635,8 +1498,6 @@ class SqliteJournal:
             draft.payload,
             (
                 StepCommitted,
-                CommandAuthorized,
-                CommandRejected,
                 DecisionCancelled,
                 StepContinuationCancelled,
                 DispatchAttemptStarted,

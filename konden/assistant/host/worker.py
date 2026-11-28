@@ -188,7 +188,6 @@ async def _run_session(connection, session_id, journal, config_factory, home_roo
         context_usage_sink=lambda *values: notify("usage", *values),
         subagent_activity_sink=lambda *values: notify("activity", *values),
         tool_progress_sink=lambda *values: notify("tool", *values),
-        authorization_required_sink=lambda *values: notify("authorization", *values),
         session_failed_sink=lambda *values: notify("session_failed", *values),
         preview_sink=preview_sink,
         thinking_sink=thinking_sink,

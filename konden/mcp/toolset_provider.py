@@ -169,7 +169,6 @@ class McpToolsetProvider:
         name: str,
         description: str,
         parameters: Mapping[str, object],
-        requires_authorization: bool,
         provider_data: Mapping[str, object],
     ) -> ToolSpec:
         if set(provider_data) != {"tool_name", "output_schema"}:
@@ -196,7 +195,6 @@ class McpToolsetProvider:
                     output_schema,
                 ),
             ),
-            requires_authorization=requires_authorization,
         )
 
     def _make_handler(

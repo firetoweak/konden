@@ -14,12 +14,10 @@ import { visibleTimeline } from "../src/features/conversation/visibleTimeline";
 const session = {
   status: "waiting",
   waiting_for: ["external_fact"],
-  pending_authorization_ids: [],
   should_wake: false,
   has_open_subagents: false,
   control_approval: null,
   control_message: null,
-  auto_authorize: false,
   last_error: null,
 };
 
@@ -165,34 +163,6 @@ describe("visibleTimeline", () => {
       );
       expect(visible[1]).toMatchObject({ tools: [{ commandId: "cmd-1", status, error }] });
     }
-  });
-
-  it("does not let stale running activity override authorization state", () => {
-    const visible = visibleTimeline(
-      {
-        ...conversation,
-        items: [
-          conversation.items[0],
-          {
-            ...conversation.items[1],
-            tools: [
-              {
-                command_id: "cmd-1",
-                name: "write_file",
-                status: "awaiting_authorization",
-                error: null,
-              },
-            ],
-          },
-        ],
-      },
-      {},
-      null,
-      { "cmd-1": { commandId: "cmd-1", name: "write_file", status: "running" } },
-    );
-    expect(visible[1]).toMatchObject({
-      tools: [{ commandId: "cmd-1", status: "awaiting_authorization" }],
-    });
   });
 
   it("lets exact running activity temporarily overlay an unknown journal card", () => {
@@ -654,7 +624,7 @@ describe("turnIsSettled", () => {
     ).toBe(false);
   });
 
-  it("stays open while a tool is still running or awaiting authorization", () => {
+  it("stays open while a tool is queued or running", () => {
     expect(
       turnIsSettled(
         {
@@ -674,7 +644,7 @@ describe("turnIsSettled", () => {
           key: "user-1",
           user,
           communications: [],
-          process: [toolOnlyStep("awaiting_authorization")],
+          process: [toolOnlyStep("queued")],
           active: null,
           final: null,
         },
@@ -768,7 +738,7 @@ function toolOnlyTurn(user: TimelineTurn["user"]): TimelineTurn {
 }
 
 function toolOnlyStep(
-  status: "queued" | "succeeded" | "running" | "awaiting_authorization",
+  status: "queued" | "succeeded" | "running",
 ): TimelineTurn["process"][number] {
   return {
     key: "output:user-1",

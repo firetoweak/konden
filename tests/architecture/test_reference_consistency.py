@@ -114,9 +114,9 @@ GET/PUT `/api/shared-memory`
     def test_feature_map_session_keys_exist_in_both_schemas(self):
         """地图里的 session.* 键必须同时出现在后端视图和前端 schema 里。"""
         backend = dataclass_fields(SESSIONS, "SessionView")
-        self.assertIn("auto_authorize", backend)
+        self.assertIn("control_approval", backend)
         frontend = zod_object_keys(CONTRACTS.read_text(encoding="utf-8"), "sessionViewSchema")
-        self.assertIn("auto_authorize", frontend)
+        self.assertIn("control_approval", frontend)
         offenders = [
             f"{filename}: session.{key} 不在 {'后端视图' if key not in backend else '前端 schema'}"
             for filename, key in map_session_keys()

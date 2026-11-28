@@ -9,7 +9,6 @@ from konden.assistant.runner import SessionScheduler
 from konden.llm.api import InvalidLLMResponse, LLMProviderError, LLMResponse, ToolCall
 from konden.runtime import (
     AgentRuntime,
-    CommandAuthorized,
     InvokeTool,
     ModelDecision,
     RuntimeStatus,
@@ -376,7 +375,6 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
         def follow(frame):
             command = frame.state.commands[0]
             seen["outcome"] = command.outcome
-            seen["authorized"] = command.command.requires_authorization
             return ModelDecision(content="continued")
 
         model = ScriptedDecisionMaker((bad_call, follow))
@@ -385,7 +383,7 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
             model,
             {
                 "execute_command": ToolBinding(
-                    handler, requires_authorization=True,
+                    handler,
                 ),
             },
             SequentialIds(),
@@ -405,7 +403,6 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
             await scheduler.join()
             self.assertEqual(failed, [])
             self.assertFalse(called)
-            self.assertFalse(seen["authorized"])
             self.assertEqual(seen["outcome"].value["ok"], False)
             self.assertEqual(seen["outcome"].value["code"], "INVALID_JSON")
             self.assertEqual(
@@ -433,45 +430,6 @@ class SessionSchedulerTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(tool_results), 1)
             self.assertIn("INVALID_JSON", tool_results[0])
             self.assertIn("JSON 格式无效", tool_results[0])
-        finally:
-            await scheduler.close()
-
-    async def test_auto_authorize_applies_before_a_decision_that_follows_at_once(self):
-        # A fact arriving while the command is issued keeps the Session runnable;
-        # the next decision must not see the command as waiting for the person.
-        runs = 0
-
-        async def handler(_context, _arguments):
-            nonlocal runs
-            runs += 1
-            return {"ok": True}
-
-        async def issue(_frame):
-            await runtime.receive_user_message("session", "group news", delivery_id="user-2")
-            return ModelDecision(command_requests=(InvokeTool("execute_command", ()),))
-
-        seen = []
-
-        async def follow(_frame):
-            events = await runtime.snapshot("session")
-            seen.append(any(isinstance(event.payload, CommandAuthorized) for event in events))
-            return ModelDecision(content="waiting for it")
-
-        model = ScriptedDecisionMaker((issue, follow, lambda _frame: ModelDecision(content="done")))
-        runtime = AgentRuntime(
-            MemoryJournal(), model,
-            {"execute_command": ToolBinding(handler, requires_authorization=True)},
-            SequentialIds(),
-        )
-        scheduler = SettlingScheduler(runtime, "session")
-        scheduler.auto_authorize = lambda _session_id: True
-        await runtime.create_session("session")
-        await runtime.receive_user_message("session", "run it", delivery_id="user-1")
-        try:
-            await scheduler.wake("session")
-            await scheduler.join()
-            self.assertEqual(seen, [True])
-            self.assertEqual(runs, 1)
         finally:
             await scheduler.close()
 

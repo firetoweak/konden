@@ -62,7 +62,6 @@ from konden.assistant.host.agent_roster import (
     AgentRoster,
 )
 from konden.assistant.host.agent_worktrees import AgentWorktrees, GitWorktree
-from konden.assistant.host.auto_authorize import AutoAuthorizeStore
 from konden.assistant.host.codex_delegation import CodexDelegation
 from konden.assistant.host.commands import CommandHost
 from konden.assistant.host.external_messages import ExternalMessages
@@ -180,7 +179,6 @@ class HostSupervisor:
         subagent_activity_sink=None,
         conversation_status_sink=None,
         tool_progress_sink=None,
-        authorization_required_sink=None,
         preview_sink=None,
         thinking_sink=None,
         subagent_output_sink=None,
@@ -204,7 +202,6 @@ class HostSupervisor:
         self.subagent_activity_sink = subagent_activity_sink
         self.conversation_status_sink = conversation_status_sink
         self.tool_progress_sink = tool_progress_sink
-        self.authorization_required_sink = authorization_required_sink
         self.preview_sink = preview_sink
         self.thinking_sink = thinking_sink
         self.subagent_output_sink = subagent_output_sink
@@ -226,8 +223,6 @@ class HostSupervisor:
         self.compact = CompactHost(self)
         self.job = WindowsJob.create() if os.name == "nt" else None
         self.commands = CommandHost(self) if sys.platform in {"win32", "linux", "darwin"} else None
-        self._auto_authorize = AutoAuthorizeStore(store.root)
-        self._auto_authorize_lock = asyncio.Lock()
         self.automation = OneShotClock(
             OneShotSchedules(home.state_root / "automation.sqlite")
         )
@@ -364,7 +359,6 @@ class HostSupervisor:
         return {"ok": True, "code": "PROJECT_LINKED", "data": {"project": linked.name, "directory": linked.worktree}}
 
     async def link_project_by_user(self, session_id: str, *, workspace_id: str | None, path: str | None):
-        """The person links from the Web; no approval because the person is the one acting."""
         project = self.agent_projects.resolve(workspace_id=workspace_id, path=path)
         return await finish_on_cancel(self.agent_projects.link(session_id, project, f"link:user:{uuid4().hex}"))
 
@@ -781,14 +775,6 @@ class HostSupervisor:
                     emitted = self.tool_progress_sink(*values)
                     if isawaitable(emitted):
                         await emitted
-            elif kind == "authorization":
-                if (
-                    self.authorization_required_sink is not None
-                    and self.compact.store.reader_job(session_id) is None
-                ):
-                    emitted = self.authorization_required_sink(*values)
-                    if isawaitable(emitted):
-                        await emitted
             elif kind == "preview":
                 if is_subagent and self.subagent_output_sink is None:
                     return
@@ -1165,7 +1151,6 @@ class HostSupervisor:
         if operation == "fact" and arguments["fact_type"] == CLOSED_FACT and self.commands is not None:
             await self.commands.manager.stop_session(arguments["data"]["child_session_id"])
         lock = self.locks.setdefault(session_id, asyncio.Lock())
-        just_started = False
         while True:
             async with lock:
                 if self.closed:
@@ -1175,22 +1160,14 @@ class HostSupervisor:
                 worker = self.workers.get(session_id)
                 if worker is None:
                     worker = await self._start(session_id)
-                    just_started = True
                 if not worker.stopping:
                     worker.requests += 1
                     worker.idle_revision = None
                     break
             await worker.transition.wait()
         try:
-            if just_started and operation != "apply_auto_authorize":
-                async with self._auto_authorize_lock:
-                    if worker.failure is not None:
-                        raise worker.failure
-                    await worker.peer.request(
-                        "apply_auto_authorize",
-                        session_id,
-                        {"enabled": self.auto_authorize()},
-                    )
+            if worker.failure is not None:
+                raise worker.failure
             exchange = worker.peer.request(operation, session_id, arguments)
             # Only the exchange can still commit the caller's resources. Waiting
             # for a stopping Worker above must remain cancellable by its own peer.
@@ -1208,25 +1185,14 @@ class HostSupervisor:
             if not worker.exited.is_set():
                 await self._stop_idle(session_id, worker)
 
-    def auto_authorize(self):
-        return self._auto_authorize.enabled
-
     def _with_host_metadata(self, view, session_id):
         return replace(
             view,
-            auto_authorize=self.auto_authorize(),
             last_error=self.current_failure(session_id),
         )
 
     def current_failure(self, session_id):
         return self._current_failures.get(session_id)
-
-    async def _push_auto_authorize(self, session_id):
-        return await self.request(
-            "apply_auto_authorize",
-            session_id,
-            {"enabled": self.auto_authorize()},
-        )
 
     def conversation_status(self, session_id):
         return self.compact.store.status(session_id)
@@ -1423,7 +1389,6 @@ class HostSupervisor:
                 control_approval=pending_approval_view(events),
                 control_message=project_control_message(events),
                 has_open_subagents=bool(project_pending(events)),
-                auto_authorize=self.auto_authorize(),
             ),
             session_id,
         )
@@ -1502,25 +1467,6 @@ class HostSupervisor:
                     await self._emit_schedule_changed(session_id)
             return self._with_host_metadata(view, session_id)
 
-    async def resolve_child_authorization(self, parent_id, child_id, command_id, *, approved):
-        from konden.assistant.authorization import AuthorizationTargetNotFound
-
-        async with self.turn_locks.setdefault(child_id, asyncio.Lock()):
-            events = await self.store.journal(parent_id).snapshot(parent_id)
-            if child_id not in project_pending(events):
-                raise AuthorizationTargetNotFound(command_id)
-            child_events = await self.store.journal(child_id).snapshot(child_id)
-            if project_task(child_events).parent_session_id != parent_id or project_returned(child_events):
-                raise AuthorizationTargetNotFound(command_id)
-            return await self.resolve_authorization(child_id, command_id, approved=approved)
-
-    async def resolve_authorization(self, session_id, command_id, *, approved):
-        await self.compact.application(
-            "resolve_authorization",
-            session_id,
-            {"command_id": command_id, "approved": approved},
-        )
-
     async def list_commands(self, session_id):
         self.store.require(session_id)
         return [] if self.commands is None else await self.commands.manager.list(session_id)
@@ -1528,22 +1474,6 @@ class HostSupervisor:
     async def stop_command(self, session_id, command_id):
         self.store.require(session_id)
         return None if self.commands is None else await self.commands.manager.stop(session_id, command_id)
-
-    async def resolve_authorizations(self, session_id, *, approved):
-        await self.compact.application(
-            "resolve_authorizations", session_id, {"approved": approved}
-        )
-
-    async def set_auto_authorize(self, enabled):
-        async with self._auto_authorize_lock:
-            self._auto_authorize.set(enabled)
-            results = await asyncio.gather(
-                *(self._push_auto_authorize(session_id) for session_id in tuple(self.workers)),
-                return_exceptions=True,
-            )
-            errors = [result for result in results if isinstance(result, BaseException)]
-            if errors:
-                raise BaseExceptionGroup("工具自动放行同步失败", errors)
 
     def model_selection(self, session_id):
         self.store.require(session_id)

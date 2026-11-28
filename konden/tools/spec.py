@@ -132,9 +132,7 @@ class JsonSchemaParameters:
         return payload
 
 
-# 授权判定钩子：True = 需要确认；也可返回明确的工具拒绝结果。
 # 不得产生副作用；文件工具可只读检查目标权限，执行时仍须重新检查。
-AuthorizationPolicy = Callable[[Mapping[str, object]], bool | dict[str, object]]
 
 
 @dataclass(frozen=True)
@@ -152,7 +150,6 @@ class ToolSpec:
     ]
     control_boundary: bool = False
     exclusive_batch: bool = False
-    requires_authorization: bool | AuthorizationPolicy = False
 
     def __post_init__(self) -> None:
         if type(self.name) is not str or not self.name:
@@ -165,10 +162,6 @@ class ToolSpec:
             raise TypeError("control_boundary must be bool")
         if type(self.exclusive_batch) is not bool:
             raise TypeError("exclusive_batch must be bool")
-        if type(self.requires_authorization) is not bool and not callable(
-            self.requires_authorization
-        ):
-            raise TypeError("requires_authorization must be bool or AuthorizationPolicy")
 
     def to_openai_tool(self) -> dict[str, Any]:
         """导出当前 OpenAI-compatible 模型接口所需的工具格式。"""
@@ -199,7 +192,6 @@ def pydantic_tool_spec(
     ],
     control_boundary: bool = False,
     exclusive_batch: bool = False,
-    requires_authorization: bool | AuthorizationPolicy = False,
 ) -> ToolSpec:
     return ToolSpec(
         name=name,
@@ -208,5 +200,4 @@ def pydantic_tool_spec(
         handler=handler,
         control_boundary=control_boundary,
         exclusive_batch=exclusive_batch,
-        requires_authorization=requires_authorization,
     )

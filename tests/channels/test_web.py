@@ -17,14 +17,9 @@ from PIL import Image
 
 from konden.assistant.agents import AgentCreated, AgentRecord, GroupCreated
 from konden.assistant.attachments import AttachmentGateway
-from konden.assistant.authorization import (
-    AuthorizationConflict,
-    AuthorizationTargetNotFound,
-)
 from konden.assistant.conversations import (
     AgentProjectView,
     AgentRosterEntry,
-    AuthorizationInboxItem,
     ControlInboxItem,
     ConversationView,
     UserItem,
@@ -158,7 +153,6 @@ class _Sessions:
         self.queries = queries
         self.calls = []
         self.control_message = None
-        self.auto_authorize_enabled = True
 
     def model_selection(self, session_id):
         return self.models.selection(session_id)
@@ -183,20 +177,20 @@ class _Sessions:
         self.calls.append(("select", owner, session_id))
         if session_id == "session-missing":
             raise SessionNotFoundError(session_id)
-        return SessionView("waiting", ("external_fact",), (), False)
+        return SessionView("waiting", ("external_fact",), False)
 
     async def accept_input(self, session_id, content, **kwargs):
         self.calls.append(("accept_input", session_id, content, kwargs))
         self.queries.record(session_id, content)
-        return SessionView("waiting", ("external_fact",), (), False)
+        return SessionView("waiting", ("external_fact",), False)
 
     async def cancel_turn(self, session_id):
         self.calls.append(("cancel_turn", session_id))
-        return SessionView("waiting", ("external_fact",), (), False)
+        return SessionView("waiting", ("external_fact",), False)
 
     async def retry(self, session_id):
         self.calls.append(("retry", session_id))
-        return SessionView("runnable", (), (), True)
+        return SessionView("runnable", (), True)
 
     async def release(self, owner):
         self.calls.append(("release", owner))
@@ -220,21 +214,10 @@ class _Sessions:
             control_message=self.control_message,
         )
 
-    async def resolve_authorization(self, session_id, command_id, *, approved):
-        self.calls.append(("resolve_authorization", session_id, command_id, approved))
-
     async def resolve_control(self, session_id, request_id, *, approved):
         self.calls.append(("resolve_control", session_id, request_id, approved))
         self.control_message = "MCP Server `demo` 安装、测试并启用成功。能力目录已更新，load_toolset 之后工具从下一个 Step 可见。"
         return self.control_message
-
-    def auto_authorize(self):
-        return self.auto_authorize_enabled
-
-    async def set_auto_authorize(self, enabled):
-        self.calls.append(("set_auto_authorize", enabled))
-        self.auto_authorize_enabled = enabled
-
 
 class _Queries:
     def __init__(self):
@@ -254,10 +237,6 @@ class _Queries:
 
     async def list_inbox(self):
         return (
-            AuthorizationInboxItem(
-                "authorization", "session-old", "workspace-old", "验证熊猫",
-                "cmd-1", "apply_patch", {"path": "note.txt"}, "session-old",
-            ),
             ControlInboxItem(
                 "control", "session-old", "workspace-old", "验证熊猫",
                 "req-1", "删除工作区", "high",
@@ -280,7 +259,7 @@ class _Queries:
             "workspace-old",
             len(items),
             items,
-            view or SessionView("waiting", ("external_fact",), (), False),
+            view or SessionView("waiting", ("external_fact",), False),
         )
 
 
@@ -483,42 +462,6 @@ class WebFirstSliceTest(unittest.TestCase):
         self.sessions.agents.by_session.return_value = None
         self.assertEqual(self.client.get(url).status_code, 404)
         self.assertEqual(self.client.put(url, json=body).status_code, 404)
-
-    def test_auto_authorize_is_global_and_notifies_other_pages(self):
-        queue = self.hub.subscribe()
-        self.assertEqual(self.client.get("/api/auto-authorize").json(), {"enabled": True})
-        response = self.client.post("/api/auto-authorize", json={
-            "connection_id": self.connection.connection_id, "enabled": False,
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"enabled": False})
-        self.assertEqual(self.client.get("/api/auto-authorize").json(), {"enabled": False})
-        self.assertIn(("set_auto_authorize", False), self.sessions.calls)
-        self.assertEqual(queue.get_nowait().name, "auto_authorize_changed")
-        self.hub.unsubscribe(queue)
-
-    def test_global_auto_authorize_requires_active_connection_and_boolean(self):
-        for payload, status in (
-            ({"connection_id": "expired", "enabled": False}, 409),
-            ({"connection_id": self.connection.connection_id, "enabled": "false"}, 422),
-        ):
-            self.assertEqual(self.client.post("/api/auto-authorize", json=payload).status_code, status)
-        self.assertTrue(self.sessions.auto_authorize())
-
-    def test_failed_global_sync_notifies_pages_and_exposes_the_failure(self):
-        async def fail(enabled):
-            self.sessions.auto_authorize_enabled = enabled
-            raise RuntimeError("worker synchronization failed")
-
-        self.sessions.set_auto_authorize = fail
-        queue = self.hub.subscribe()
-        with self.assertRaisesRegex(RuntimeError, "worker synchronization failed"):
-            self.client.post("/api/auto-authorize", json={
-                "connection_id": self.connection.connection_id, "enabled": False,
-            })
-        self.assertEqual(self.client.get("/api/auto-authorize").json(), {"enabled": False})
-        self.assertEqual(queue.get_nowait().name, "auto_authorize_changed")
-        self.hub.unsubscribe(queue)
 
     def test_model_connection_reports_known_failure_without_echoing_credentials(self):
         self.model_llm.chat.side_effect = LLMAuthenticationError("private-test-key")
@@ -1098,15 +1041,14 @@ class WebFirstSliceTest(unittest.TestCase):
 
     def test_roster_status_uses_existing_worker_and_wait_facts(self):
         def status(**overrides):
-            facts = {"activity": "idle", "pending_authorization": False,
+            facts = {"activity": "idle",
                          "control_approval": False, "waiting_for": (), "last_error": None}
             facts.update(overrides)
             return project_agent_status(**facts)
 
         self.assertEqual(status(activity="running"), "working")
-        self.assertEqual(status(activity="running", pending_authorization=True), "working")
-        self.assertEqual(status(pending_authorization=True), "authorization")
-        self.assertEqual(status(control_approval=True), "authorization")
+        self.assertEqual(status(activity="running", control_approval=True), "working")
+        self.assertEqual(status(control_approval=True), "control")
         self.assertEqual(status(waiting_for=("external_fact",)), "waiting")
         self.assertEqual(status(last_error="失败"), "waiting")
         self.assertEqual(status(), "idle")
@@ -1137,7 +1079,7 @@ class WebFirstSliceTest(unittest.TestCase):
             )
             self.assertEqual(self.workspaces.workspaces, ())
 
-    def test_known_input_connection_and_authorization_errors_keep_their_meaning(self):
+    def test_invalid_inputs_and_expired_connections_return_client_errors(self):
         body = {"connection_id": self.connection.connection_id, "delivery_id": "input-1", "text": " "}
         self.assertEqual(self.client.post("/api/sessions/session-old/inputs", json=body).status_code, 422)
         body.update(connection_id="expired", text="hello")
@@ -1146,16 +1088,6 @@ class WebFirstSliceTest(unittest.TestCase):
             self.assertEqual(self.client.post("/api/sessions/session-old/attachments/select",
                 json={"connection_id": "expired"}).status_code, 409)
             picker.assert_not_called()
-        for error, expected in ((AuthorizationTargetNotFound("目标不存在"), 404), (AuthorizationConflict("当前不可授权"), 409)):
-            with self.subTest(error=type(error)), patch.object(self.sessions, "resolve_authorization", side_effect=error):
-                response = self.client.post("/api/sessions/session-old/commands/cmd-1/authorize",
-                    json={"connection_id": self.connection.connection_id, "approved": True})
-            self.assertEqual(response.status_code, expected)
-            self.assertEqual(response.json()["detail"], str(error))
-        with patch.object(self.sessions, "resolve_authorization", side_effect=ValueError("broken contract")), self.assertRaisesRegex(ValueError, "broken contract"):
-            self.client.post("/api/sessions/session-old/commands/cmd-1/authorize",
-                json={"connection_id": self.connection.connection_id, "approved": True})
-
     def test_conflicting_input_is_409_but_unknown_input_failure_propagates(self):
         body = {"connection_id": self.connection.connection_id, "delivery_id": "input-1", "text": "hello"}
         message = "该消息编号已用于不同内容，请重新发送消息。"
@@ -1180,21 +1112,11 @@ class WebFirstSliceTest(unittest.TestCase):
         ), self.assertRaisesRegex(ValueError, "broken protocol"):
             self.client.post("/api/workspaces/select-directory")
 
-    def test_inbox_returns_pending_authorization_and_control(self):
+    def test_inbox_returns_pending_control(self):
         response = self.client.get("/api/inbox")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [
-            {
-                "kind": "authorization",
-                "session_id": "session-old",
-                "workspace_id": "workspace-old",
-                "label": "验证熊猫",
-                "command_id": "cmd-1",
-                "command_session_id": "session-old",
-                "name": "apply_patch",
-                "arguments": {"path": "note.txt"},
-            },
             {
                 "kind": "control",
                 "session_id": "session-old",

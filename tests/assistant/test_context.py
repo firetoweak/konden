@@ -359,64 +359,8 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
             messages[call]["tool_calls"][0]["id"],
         )
 
-    async def test_unauthorized_command_still_gets_a_tool_message(self):
-        """未终局的命令也要有工具协议表示，这一帧才配得平。
-
-        用户没有授权就换了话头，下一帧的 tool_calls 至今没有结果。省掉它
-        模型会忘记自己发起过；伪造成功或失败都是假话。
-        """
-
-        async def secret(_context, _arguments):
-            raise AssertionError("unauthorized command must not run")
-
-        runtime = AgentRuntime(
-            MemoryJournal(),
-            ScriptedDecisionMaker(
-                (
-                    lambda _frame: ModelDecision(
-                        content="need approval",
-                        command_requests=(InvokeTool("secret"),),
-                    ),
-                    lambda _frame: ModelDecision(content="dropped it"),
-                )
-            ),
-            {"secret": ToolBinding(secret, requires_authorization=True)},
-            SequentialIds(),
-        )
-        await runtime.receive_user_message(self.SESSION, "go", delivery_id="ask-1")
-        await runtime.advance(self.SESSION)
-        await runtime.receive_user_message(
-            self.SESSION, "never mind", delivery_id="ask-2"
-        )
-        await runtime.advance(self.SESSION)
-
-        events = await runtime._journal.snapshot(self.SESSION)
-        messages = project_chat_messages(
-            events,
-            StateProjector().project_visible(self.SESSION, events),
-            "sys",
-        )
-        call = next(
-            index
-            for index, message in enumerate(messages)
-            if message.get("tool_calls")
-        )
-        answer = messages[call + 1]
-        self.assertEqual(answer["role"], "tool")
-        self.assertEqual(
-            answer["tool_call_id"], messages[call]["tool_calls"][0]["id"]
-        )
-        payload = json.loads(answer["content"])
-        self.assertIsNone(payload["ok"])
-        self.assertEqual(payload["code"], "AWAITING_AUTHORIZATION")
-        self.assertIn("尚未执行", payload["hint"])
-
-    async def test_in_flight_command_is_not_reported_as_awaiting_authorization(self):
-        """起过 attempt 的命令和等授权的命令必须分开。
-
-        派发会清掉 dispatch_eligible_by_event_id，所以这个字段单独不足以
-        判断「在等授权」，得先看 phase。
-        """
+    async def test_in_flight_command_is_reported_as_not_having_a_result(self):
+        """已开始的命令在结果到达前向模型报告结果未知。"""
 
         started = asyncio.Event()
         gate = asyncio.Event()
@@ -840,8 +784,6 @@ class ModelContextProjectorTest(unittest.IsolatedAsyncioTestCase):
             def names(self):
                 return ("blob",)
 
-            def requires_authorization(self, _name):
-                return False
 
             async def execute(self, _name, _arguments):
                 return {"ok": True, "code": "OK", "data": "Z" * 80}

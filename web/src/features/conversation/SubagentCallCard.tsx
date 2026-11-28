@@ -30,8 +30,6 @@ const STATUS_LABEL: Record<ToolStatus, string> = {
   succeeded: "完成",
   failed: "失败",
   unknown: "中断",
-  awaiting_authorization: "待授权",
-  rejected: "已拒绝",
 };
 
 const STATUS_COLOR: Record<ToolStatus, string> = {
@@ -40,8 +38,6 @@ const STATUS_COLOR: Record<ToolStatus, string> = {
   succeeded: "gray",
   failed: "red",
   unknown: "yellow",
-  awaiting_authorization: "orange",
-  rejected: "gray",
 };
 
 export function SubagentCallCard({ tool, onObserve }: {
@@ -101,7 +97,7 @@ export function SubagentCallCard({ tool, onObserve }: {
         <Group justify="space-between" gap="xs" mt={6} wrap="nowrap">
           <Text c="dimmed" fz={12} truncate>{task}</Text>
           <Button size="compact-xs" variant="subtle"
-            disabled={tool.status === "failed" || tool.status === "rejected"}
+            disabled={tool.status === "failed"}
             onClick={() => onObserve(tool.commandId)}>查看过程</Button>
         </Group>
       ) : null}

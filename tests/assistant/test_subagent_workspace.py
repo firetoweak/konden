@@ -4,15 +4,10 @@ from konden.assistant.builtin_tools import build_builtin_tools
 from tests.fixtures.workspaces import workspace_record
 
 
-def test_shared_task_uses_the_same_files_and_write_authorization(tmp_path):
+def test_shared_task_reads_parent_files_and_writes_in_the_same_directory(tmp_path):
     async def scenario():
         (tmp_path / "uncommitted.txt").write_text("parent work")
-        parent = await build_builtin_tools(workspace_record(tmp_path))
         child = await build_builtin_tools(workspace_record(tmp_path))
-        args = {"path": "child.txt", "content": "child work"}
-        assert child.requires_authorization("write_file")(args) is True
-        assert parent.requires_authorization("write_file")(args) is True
-        assert child.requires_authorization("write_file") is not False
         result = await child.execute("write_file", {"path": "child.txt", "content": "child work"})
         assert result["ok"] is True
         assert (tmp_path / "child.txt").read_text() == "child work"

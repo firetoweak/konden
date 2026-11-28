@@ -103,8 +103,7 @@ function stepHasLiveWork(step: VisibleStep): boolean {
     step.tools.some(
       (tool) =>
         tool.status === "queued" ||
-        tool.status === "running" ||
-        tool.status === "awaiting_authorization",
+        tool.status === "running",
     )
   );
 }
@@ -190,8 +189,7 @@ export function turnNeedsThinkingHint(
     step.tools.some(
       (tool) =>
         tool.status === "queued" ||
-        tool.status === "running" ||
-        tool.status === "awaiting_authorization",
+        tool.status === "running",
     ),
   );
 }

@@ -87,7 +87,6 @@ class LoadedTool:
     description: str
     parameters: dict[str, object]
     execute: Callable[[Mapping[str, object]], Awaitable[object]]
-    requires_authorization: bool = False
     provider_data: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -99,8 +98,6 @@ class LoadedTool:
             raise TypeError("loaded tool parameters must be dict")
         if not callable(self.execute):
             raise TypeError("loaded tool execute must be callable")
-        if type(self.requires_authorization) is not bool:
-            raise TypeError("requires_authorization must be bool")
         if not isinstance(self.provider_data, Mapping):
             raise TypeError("loaded tool provider_data must be a mapping")
 
@@ -148,7 +145,6 @@ class LoadedToolSnapshot:
     name: str
     description: str
     parameters: Mapping[str, object]
-    requires_authorization: bool
     provider_data: Mapping[str, object]
 
     def __post_init__(self) -> None:
@@ -158,8 +154,6 @@ class LoadedToolSnapshot:
             raise ValueError("tool snapshot description must be a non-empty str")
         if not isinstance(self.parameters, Mapping):
             raise TypeError("tool snapshot parameters must be a mapping")
-        if type(self.requires_authorization) is not bool:
-            raise TypeError("tool snapshot requires_authorization must be bool")
         if not isinstance(self.provider_data, Mapping):
             raise TypeError("tool snapshot provider_data must be a mapping")
 
@@ -231,14 +225,7 @@ def project_toolset_activations(
         ):
             raise ValueError("load_toolset outcome identity 无效")
         snapshots: list[LoadedToolSnapshot] = [
-            LoadedToolSnapshot(
-                name=tool["name"],
-                description=tool["description"],
-                # Journal 事实值在 Runtime 内被递归冻结；交给 Provider 的契约必须是普通 JSON 容器。
-                parameters=thaw_value(tool["parameters"]),
-                requires_authorization=tool["requires_authorization"],
-                provider_data=thaw_value(tool["provider_data"]),
-            )
+            LoadedToolSnapshot(**thaw_value(tool))
             for tool in data["tools"]
         ]
         activations[toolset_id] = ToolsetActivation(
@@ -438,8 +425,7 @@ class ToolSurface:
         runtime = self._runtime
         if runtime is None:
             raise RuntimeError("ToolSurface 尚未绑定 Runtime")
-        bindings = {tool.name: ToolBinding(_loaded_handler(tool, self._gateway, self._settings),
-                                          requires_authorization=tool.requires_authorization) for tool in tools}
+        bindings = {tool.name: ToolBinding(_loaded_handler(tool, self._gateway, self._settings)) for tool in tools}
         if self._decorate_bindings is not None:
             bindings = self._decorate_bindings(bindings)
         for name, binding in bindings.items():
@@ -523,7 +509,6 @@ def _loaded_payload(
                     "name": tool.name,
                     "description": tool.description,
                     "parameters": tool.parameters,
-                    "requires_authorization": tool.requires_authorization,
                     "provider_data": dict(tool.provider_data),
                 }
                 for tool in tools

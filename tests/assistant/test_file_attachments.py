@@ -46,7 +46,7 @@ class FileAttachmentsTest(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(staged.attachment_id, json.dumps(messages))
             self.assertEqual(len(tuple(store.files.materials.iterdir())), 1)
             self.assertEqual(store.files.materialize(sent.attachment_id).read_bytes(), b"original")
-            view = project_conversation("session", events, (), session=SessionView("waiting", (), (), False), attachments=store)
+            view = project_conversation("session", events, (), session=SessionView("waiting", (), False), attachments=store)
             self.assertEqual(view.items[0].images, ())
             self.assertEqual(view.items[0].files, (sent,))
 

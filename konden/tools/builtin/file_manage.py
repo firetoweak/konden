@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 
 from konden.filesystem import FileAccess, write_text
 from konden.filesystem.workspace import EnvironmentInputError
-from konden.tools.builtin.file_write import write_authorization_policy
 from konden.tools.results import environment_error, file_error_message
 from konden.tools.spec import PydanticParameters, ToolSpec
 
@@ -32,6 +31,8 @@ def create_file_manage_specs(binding: FileAccess) -> list[ToolSpec]:
             resolved_path = resolver.resolve(raw.path, access="write")
         except EnvironmentInputError as exc:
             return environment_error(exc)
+        except OSError as exc:
+            return {"ok": False, "code": "FILE_IO_FAILED", "error": file_error_message(exc), "path": raw.path}
 
         try:
             result = await write_text(resolved_path.native_path, raw.content, overwrite=raw.overwrite)
@@ -45,6 +46,5 @@ def create_file_manage_specs(binding: FileAccess) -> list[ToolSpec]:
             description=WRITE_FILE_DESCRIPTION,
             parameters=PydanticParameters(WriteFileInput),
             handler=write_file,
-            requires_authorization=write_authorization_policy(binding),
         )
     ]

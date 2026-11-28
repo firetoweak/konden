@@ -7,9 +7,7 @@ from konden.runtime.dispatcher import (
 )
 from konden.runtime.events import (
     AttemptOrphaned,
-    CommandAuthorized,
     CommandOutcomeReceived,
-    CommandRejected,
     DecisionCancelled,
     DeliveryIdentity,
     DispatchAttemptStarted,
@@ -73,12 +71,10 @@ __all__ = [
     "AttemptTerminalConflict",
     "CanonicalState",
     "Command",
-    "CommandAuthorized",
     "CommandEffect",
     "CommandOutcome",
     "CommandOutcomeReceived",
     "CommandPhase",
-    "CommandRejected",
     "CommandState",
     "DecisionCancelled",
     "DecisionFrame",

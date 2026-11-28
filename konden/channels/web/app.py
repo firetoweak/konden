@@ -24,10 +24,6 @@ from konden.assistant.attachments import (
     AttachmentRejected,
     is_valid_attachment_id,
 )
-from konden.assistant.authorization import (
-    AuthorizationConflict,
-    AuthorizationTargetNotFound,
-)
 from konden.assistant.external_messages import PostExternal
 from konden.assistant.file_attachments import is_file_attachment_id
 from konden.assistant.host.agent_groups import (
@@ -324,26 +320,9 @@ class InputRequest(BaseModel):
         return value
 
 
-class AuthorizationRequest(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    connection_id: str = Field(min_length=1)
-    approved: bool
-
-
-class CommandAuthorizationRequest(AuthorizationRequest):
-    command_session_id: str | None = Field(default=None, min_length=1)
-
-
-class ControlDecisionRequest(AuthorizationRequest):
+class ControlDecisionRequest(ConnectionRequest):
     request_id: str = Field(min_length=1)
-
-
-class AutoAuthorizeRequest(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-
-    connection_id: str = Field(min_length=1)
-    enabled: bool
+    approved: bool
 
 
 class CapabilityEnabledRequest(ConnectionRequest):
@@ -400,7 +379,6 @@ def create_web_app(
             schedule_changed_sink=events.schedule_changed,
             group_changed_sink=events.group_changed,
             tool_progress_sink=events.tool_progress,
-            authorization_required_sink=events.authorization_required,
             context_usage_sink=events.context_usage,
             conversation_status_sink=events.conversation_status,
         ) as assistant:
@@ -451,14 +429,6 @@ def create_web_app(
 
     @app.exception_handler(InputConflict)
     async def input_conflict(_request: Request, error: InputConflict):
-        return JSONResponse(status_code=409, content={"detail": str(error)})
-
-    @app.exception_handler(AuthorizationTargetNotFound)
-    async def authorization_missing(_request: Request, error: AuthorizationTargetNotFound):
-        return JSONResponse(status_code=404, content={"detail": str(error)})
-
-    @app.exception_handler(AuthorizationConflict)
-    async def authorization_conflict(_request: Request, error: AuthorizationConflict):
         return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(ModelConfigurationError)
@@ -1111,38 +1081,6 @@ def create_web_app(
         request: Request,
     ):
         return await _channel(request).retry(body.connection_id, session_id)
-
-    @app.post("/api/sessions/{session_id}/commands/{command_id}/authorize")
-    async def authorize_command(
-        session_id: str,
-        command_id: str,
-        body: CommandAuthorizationRequest,
-        request: Request,
-    ):
-        return await _channel(request).authorize_command(
-            body.connection_id,
-            session_id,
-            command_id,
-            body.approved,
-            **({"command_session_id": body.command_session_id} if body.command_session_id is not None else {}),
-        )
-
-    @app.get("/api/auto-authorize")
-    def auto_authorize(request: Request):
-        return _channel(request).auto_authorize()
-
-    @app.post("/api/auto-authorize")
-    async def set_auto_authorize(
-        body: AutoAuthorizeRequest,
-        request: Request,
-    ):
-        try:
-            return await _channel(request).set_auto_authorize(
-                body.connection_id,
-                body.enabled,
-            )
-        finally:
-            await request.app.state.hub.auto_authorize_changed()
 
     async def collaboration(scope, receive, send):
         await app.state.collaboration_mcp(scope, receive, send)

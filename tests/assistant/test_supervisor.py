@@ -61,6 +61,8 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
             questions_by_id,
         )
         from konden.assistant.conversations import AssistantQueries
+        from konden.assistant.personal_memory import UPDATE_PERSONAL_MEMORY
+        from konden.assistant.shared_memory import UPDATE_SHARED_MEMORY
         from konden.llm.api import LLMCallResult, LLMResponse, LLMUsage, ToolCall
         from konden.runtime import DomainFactCommitted
 
@@ -83,10 +85,13 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         class Model(ProcessLlm):
             async def chat(client, messages, model, **kwargs):
+                usage = LLMUsage(input_tokens=10, output_tokens=5)
+                tool_names = {tool["function"]["name"] for tool in kwargs["tools"]}
+                if tool_names == {UPDATE_PERSONAL_MEMORY, UPDATE_SHARED_MEMORY}:
+                    return LLMCallResult(LLMResponse(), usage)
                 requests.append(messages)
-                return LLMCallResult(next(replies), LLMUsage(input_tokens=10, output_tokens=5))
+                return LLMCallResult(next(replies), usage)
 
-        await self.host.set_auto_authorize(False)
         sid = (await self.host.create_agent(name="周报助手")).session_id
         await self.host.wait_quiescent(sid)
         self.host.llm = Model(self.root)
@@ -157,6 +162,7 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         class WriteOutside(ProcessLlm):
             calls = 0
+            result_names: tuple[str, ...] = ()
 
             async def chat(client, messages, model, **kwargs):
                 client.calls += 1
@@ -170,15 +176,29 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
                             "command": shell(sys.executable, "-c", "from pathlib import Path;Path('command.txt').write_text('executed')"),
                         })),
                     )), LLMUsage(input_tokens=10, output_tokens=5))
-                return LLMCallResult(LLMResponse(content="done"), LLMUsage(input_tokens=10, output_tokens=5))
+                names = {
+                    call["id"]: call["function"]["name"]
+                    for message in messages for call in message.get("tool_calls", ())
+                }
+                client.result_names = tuple(
+                    names[message["tool_call_id"]] for message in messages
+                    if message["role"] == "tool"
+                    and names[message["tool_call_id"]] in {"write_file", "execute_command"}
+                    and json.loads(message["content"])["ok"] is True
+                )
+                return LLMCallResult(LLMResponse(calls=(ToolCall("done", "rest", "{}"),)),
+                                     LLMUsage(input_tokens=10, output_tokens=5))
 
         agent = await self.host.create_agent(name="default-access-bot")
         await asyncio.wait_for(self.host.wait_quiescent(agent.session_id), 30)
-        self.host.llm = WriteOutside(self.root)
+        llm = WriteOutside(self.root)
+        self.host.llm = llm
         await self.host.accept_input(agent.session_id, "write and run outside the personal directory", delivery_id="outside")
         await asyncio.wait_for(self.host.wait_quiescent(agent.session_id), 30)
         self.assertEqual((outside / "file.txt").read_text(), "written")
         self.assertEqual((outside / "command.txt").read_text(), "executed")
+        self.assertEqual(llm.calls, 2)
+        self.assertCountEqual(llm.result_names, ("write_file", "execute_command"))
         self.assertTrue(self.host.failures.empty())
 
     async def test_large_cli_catalog_does_not_crash_worker_or_hide_registered_clis(self):
@@ -232,47 +252,6 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({item.id for item in project_catalog(updated).clis}, names | {"new-cli"})
         self.assertEqual(self.output.count((sid, "done")), 2)
         self.assertIsNone(self.host.current_failure(sid))
-        self.assertTrue(self.host.failures.empty())
-
-    async def test_web_can_reject_journal_authorization_after_host_restart(self):
-        from types import SimpleNamespace
-        from unittest.mock import AsyncMock
-
-        from konden.assistant.conversations import AssistantQueries
-        from konden.channels.web.channel import WebChannel
-        from konden.runtime import AgentRuntime, InvokeTool, ModelDecision, ToolBinding
-
-        sid = "authorization-restart"
-        await self.host.create(sid, self.workspace.workspace_id)
-        # This scenario exercises manual rejection, including its policy after restart.
-        await self.host.set_auto_authorize(False)
-        journal = SqliteJournal(self.store.require(sid))
-        runtime = AgentRuntime(
-            journal,
-            SimpleNamespace(decide=AsyncMock(return_value=ModelDecision(command_requests=(
-                InvokeTool("write_file", (("path", "probe.md"), ("content", "probe"))),
-            )))),
-            {"write_file": ToolBinding(AsyncMock(), requires_authorization=True)},
-        )
-        await runtime.receive_user_message(sid, "write probe", delivery_id="write")
-        issued = await runtime.advance(sid)
-        command_id = issued.step.commands[0].command_id
-        await self.host.select("web:old", sid)
-        self.assertEqual((await self.host.view(sid)).pending_authorization_ids, (command_id,))
-        await self.host.close()
-        self.host = self.new_host()
-        channel = WebChannel(self.host, AssistantQueries(self.store, self.host))
-        connection = channel.connect()
-        recovered = await channel.select(connection.connection_id, sid)
-        self.assertFalse(recovered.session.auto_authorize)
-        await self.host.create("another-after-restart", self.workspace.workspace_id)
-        self.assertFalse((await self.host.view("another-after-restart")).auto_authorize)
-        self.assertEqual(recovered.session.pending_authorization_ids, (command_id,))
-        resolved = await channel.authorize_command(connection.connection_id, sid, command_id, False)
-        self.assertEqual(resolved.session.pending_authorization_ids, ())
-        self.assertEqual(resolved.items[1].tools[0].status, "rejected")
-        self.assertFalse((self.root / "probe.md").exists())
-        await until(lambda: (sid, "done") in self.output)
         self.assertTrue(self.host.failures.empty())
 
     async def persist_child(self):
@@ -329,34 +308,9 @@ class SupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.host.config_factory = partial(failing_request_config, self.root)
         with self.assertRaises(WorkerFailed):
             await asyncio.wait_for(
-                self.host.resolve_authorizations(CHILD, approved=True), 30
+                self.host.resolve_control(CHILD, "missing", approved=True), 30
             )
         await self.assert_failure_report("application request failed")
-
-    async def test_invalid_authorization_requests_do_not_fail_worker(self):
-        from konden.assistant.authorization import (
-            AuthorizationConflict,
-            AuthorizationTargetNotFound,
-        )
-
-        sid = "authorization-errors"
-        await self.host.create(sid, self.workspace.workspace_id)
-        await self.host.view(sid)
-        before = await SqliteJournal(self.store.require(sid)).snapshot(sid)
-        for approved in (False, True):
-            with self.assertRaises(AuthorizationTargetNotFound):
-                await asyncio.wait_for(self.host.resolve_authorization(
-                    sid, "missing", approved=approved,
-                ), 30)
-            with self.assertRaises(AuthorizationConflict):
-                await asyncio.wait_for(self.host.resolve_authorizations(
-                    sid, approved=approved,
-                ), 30)
-        self.assertEqual(await SqliteJournal(self.store.require(sid)).snapshot(sid), before)
-        self.assertTrue(self.host.failures.empty())
-        await self.host.accept_input(sid, "hello", delivery_id="hello")
-        await until(lambda: (sid, "done") in self.output)
-        self.assertTrue(self.host.failures.empty())
 
     async def test_conflicting_input_replay_preserves_worker_and_original_message(self):
         from konden.assistant.inputs import InputConflict

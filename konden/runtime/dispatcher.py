@@ -17,7 +17,6 @@ from konden.runtime.journal.api import (
     LeaseLostError,
 )
 from konden.runtime.model import (
-    AuthorizationPolicy,
     Command,
     CommandOutcome,
     CommandPhase,
@@ -57,7 +56,6 @@ TaskFailed = Callable[[BaseException], None]
 class ToolBinding:
     handler: ToolHandler
     decision_on_outcome: bool = True
-    requires_authorization: bool | AuthorizationPolicy = False
     ends_step: bool = False
 
     def __post_init__(self) -> None:
@@ -65,10 +63,6 @@ class ToolBinding:
             raise TypeError("decision_on_outcome must be bool")
         if type(self.ends_step) is not bool:
             raise TypeError("ends_step must be bool")
-        if type(self.requires_authorization) is not bool and not callable(
-            self.requires_authorization
-        ):
-            raise TypeError("requires_authorization must be bool or AuthorizationPolicy")
 
 
 async def _stop_heartbeat(task: asyncio.Task[None]) -> None:
@@ -123,8 +117,6 @@ class Dispatcher:
             item
             for item in state.commands
             if item.phase is CommandPhase.PENDING
-            and item.dispatch_eligible_by_event_id is not None
-            and item.authorization_rejected_by_event_id is None
             and (
                 item.command.command_id not in self._tasks
                 or self._tasks[item.command.command_id].done()
@@ -148,7 +140,7 @@ class Dispatcher:
                         self._worker_id,
                     ),
                     occurred_at=datetime.now(UTC),
-                    causation_id=item.dispatch_eligible_by_event_id,
+                    causation_id=item.issued_by_event_id,
                 ),
                 lease_seconds=self._attempt_lease_seconds,
             )

@@ -17,7 +17,7 @@ Init == /\ journal = <<>> /\ generation = 1 /\ expired = FALSE /\ crashed = FALS
 
 StepCommit ==
     /\ journal = <<>> /\ (generation = 2 \/ ~crashed)
-    /\ journal' = <<Entry("step", "group", generation, "authorized")>>
+    /\ journal' = <<Entry("step", "group", generation, "issued")>>
     /\ UNCHANGED <<generation, expired, crashed, evidence>>
 
 Dispatch(c) ==

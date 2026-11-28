@@ -27,9 +27,9 @@ function conversation(items: unknown[] = [user, step]) {
     work_plan: null, work_plan_updates: [], context_input_tokens: null,
     session: {
       status: "waiting", waiting_for: ["external_fact"],
-      pending_authorization_ids: [], pending_authorization_commands: [],
+
       should_wake: false, has_open_subagents: false,
-      control_approval: null, control_message: null, auto_authorize: false, last_error: null,
+      control_approval: null, control_message: null, last_error: null,
     },
   };
 }

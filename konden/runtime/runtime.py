@@ -9,8 +9,6 @@ import json
 
 from konden.runtime.dispatcher import Dispatcher, ToolBinding
 from konden.runtime.events import (
-    CommandAuthorized,
-    CommandRejected,
     DecisionCancelled,
     DeliveryIdentity,
     DomainFactCommitted,
@@ -86,10 +84,6 @@ class AgentRuntime:
             self.projector,
             decision_maker,
             id_factory,
-            requires_authorization={
-                name: binding.requires_authorization
-                for name, binding in tool_bindings.items()
-            },
             decision_on_outcome={
                 name: binding.decision_on_outcome
                 for name, binding in tool_bindings.items()
@@ -116,7 +110,6 @@ class AgentRuntime:
         self.step_runner.bind(
             name,
             decision_on_outcome=binding.decision_on_outcome,
-            requires_authorization=binding.requires_authorization,
             ends_step=binding.ends_step,
         )
 
@@ -270,7 +263,6 @@ class AgentRuntime:
                     command.issued_by_event_id
                     for command in projection.state.commands
                     if command.phase is not CommandPhase.TERMINAL
-                    and command.authorization_rejected_by_event_id is None
                     and command.command.decision_on_outcome
                     and command.issued_by_event_id not in cancelled_step_ids
                 }
@@ -292,37 +284,6 @@ class AgentRuntime:
                     return tuple(recorded)
                 if not step_event_ids:
                     return tuple(recorded)
-
-    async def grant_command(
-        self,
-        session_id: str,
-        command_id: str,
-    ) -> Event | None:
-        event = await self._journal.grant_command(
-            EventDraft(
-                event_id=self._id_factory("event"),
-                session_id=session_id,
-                payload=CommandAuthorized(command_id),
-                occurred_at=datetime.now(UTC),
-            )
-        )
-        if event is not None:
-            await self.dispatcher.start_pending(session_id)
-        return event
-
-    async def reject_command(
-        self,
-        session_id: str,
-        command_id: str,
-    ) -> Event | None:
-        return await self._journal.reject_command(
-            EventDraft(
-                event_id=self._id_factory("event"),
-                session_id=session_id,
-                payload=CommandRejected(command_id),
-                occurred_at=datetime.now(UTC),
-            )
-        )
 
     async def advance(
         self, session_id: str, *, expected_journal_position: int | None = None

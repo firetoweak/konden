@@ -20,10 +20,8 @@ import type { VirtuosoHandle } from "react-virtuoso";
 import { useParams } from "react-router-dom";
 
 import {
-  useAuthorizeCommandMutation,
   useCancelTurnMutation,
   useGetConversationQuery,
-  useGetInboxQuery,
   useResolveControlMutation,
   useSelectSessionMutation,
   useSendInputMutation,
@@ -61,7 +59,7 @@ import { ExecutionProcess } from "./ExecutionProcess";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { formatMessageTime } from "./messageTime";
 import { PrivateMessageNotice } from "./PrivateMessageNotice";
-import { PendingActions } from "./PendingActions";
+import { ControlConfirmation } from "./ControlConfirmation";
 import { SessionAttention } from "./SessionAttention";
 import { ScheduledWait } from "./ScheduledWait";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -113,9 +111,6 @@ export function Conversation({ agentName, agentNames = [], ref }: {
   const connectionId = useAppSelector((state) => state.runtime.connectionId);
   const ownerSessionId = useAppSelector((state) => state.runtime.ownerSessionId);
   const sessionId = routeId;
-  const inbox = useGetInboxQuery(undefined, { skip: connectionId === null || agentName === undefined });
-  const childAuthorizations = (inbox.data ?? []).filter((item) =>
-    item.kind === "authorization" && item.session_id === sessionId && item.command_session_id !== sessionId);
   const [openPage, setOpenPage] = useState<OpenPage | null>(null);
   useImperativeHandle(ref, () => ({
     observeSubagent: (commandId) => setOpenPage({ kind: "subagent", commandId }),
@@ -154,7 +149,6 @@ export function Conversation({ agentName, agentNames = [], ref }: {
   const [restoredDraft, setRestoredDraft] = useState<RestoredComposerDraft | null>(null);
   const [selectSession] = useSelectSessionMutation();
   const [sendInput] = useSendInputMutation();
-  const [authorizeCommand, authorizing] = useAuthorizeCommandMutation();
   const [resolveControl, resolvingControl] = useResolveControlMutation();
   const [cancelTurn, stopping] = useCancelTurnMutation();
   const [retryTurn, retrying] = useRetryTurnMutation();
@@ -365,19 +359,6 @@ export function Conversation({ agentName, agentNames = [], ref }: {
     removeFailedUserMessage(sessionId, deliveryId);
   }
 
-  async function authorize(commandId: string, approved: boolean, targetSessionId = sessionId) {
-    if (connectionId === null) {
-      return;
-    }
-    await authorizeCommand({
-      connectionId,
-      sessionId,
-      commandSessionId: targetSessionId === sessionId ? undefined : targetSessionId,
-      commandId,
-      approved,
-    }).unwrap();
-  }
-
   async function decideControl(approved: boolean) {
     const requestId = conversation?.session.control_approval?.request_id;
     if (connectionId === null || requestId === undefined) {
@@ -460,8 +441,6 @@ export function Conversation({ agentName, agentNames = [], ref }: {
                   {!(replies.length > 0 && settled) && !hasTools && thinking === null ? null : <div className="turn-details" aria-label="消息操作与过程" key="details">
                   {!hasTools ? null : (
                     <ExecutionProcess
-                      authorizationDisabled={connectionId === null}
-                      onAuthorize={authorize}
                       steps={turn.process}
                       onObserveSubagent={(commandId) => setOpenPage({ kind: "subagent", commandId })}
                     />
@@ -555,21 +534,10 @@ export function Conversation({ agentName, agentNames = [], ref }: {
         <Box>
           <Box className="composer-column">
             {agentName === undefined || conversation.deleted ? null : <SessionAttention key={sessionId} sessionId={sessionId} connectionId={connectionId} />}
-            {childAuthorizations.map((item) => item.kind === "authorization" ? (
-              <PendingActions key={`${item.command_session_id}:${item.command_id}`}
-                label={item.label} authorizations={[item]} control={null}
-                authorizationDisabled={conversation.deleted || connectionId === null || authorizing.isLoading}
-                controlDisabled={true}
-                onAuthorize={(commandId, approved) => void authorize(commandId, approved, item.command_session_id)}
-                onControl={() => {}} />
-            ) : null)}
-            <PendingActions
-              authorizations={conversation.session.pending_authorization_commands}
+            <ControlConfirmation
               control={conversation.session.control_approval}
-              authorizationDisabled={conversation.deleted || connectionId === null || authorizing.isLoading}
-              controlDisabled={conversation.deleted || connectionId === null || resolvingControl.isLoading}
-              onAuthorize={(commandId, approved) => void authorize(commandId, approved)}
-              onControl={(approved) => void decideControl(approved)}
+              disabled={conversation.deleted || connectionId === null || resolvingControl.isLoading}
+              onDecide={(approved) => void decideControl(approved)}
             />
           </Box>
           {activePlan === null ? null : (

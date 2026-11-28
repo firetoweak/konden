@@ -112,4 +112,4 @@ def memory_bindings(store: MemoryStore, author: str, read_name: str, update_name
             return {"ok": False, "code": "INVALID_ARGUMENT", "error": str(error)}
         return store.update(change, author=author, source=f"bot:{context.session_id}", operation_id=context.command_id)
 
-    return {read_name: ToolBinding(read), update_name: ToolBinding(update, requires_authorization=True)}
+    return {read_name: ToolBinding(read), update_name: ToolBinding(update)}

@@ -8,10 +8,6 @@ from inspect import isawaitable
 import traceback
 from uuid import uuid4
 
-from konden.assistant.authorization import (
-    AuthorizationConflict,
-    AuthorizationTargetNotFound,
-)
 from konden.assistant.inputs import InputConflict
 
 
@@ -34,16 +30,12 @@ async def finish_on_cancel(awaitable):
 
 
 _REQUEST_ERRORS = {
-    "authorization_target_not_found": AuthorizationTargetNotFound,
-    "authorization_conflict": AuthorizationConflict,
     "input_conflict": InputConflict,
 }
 _REQUEST_ERROR_CODES = {
     error_type: code for code, error_type in _REQUEST_ERRORS.items()
 }
 _REQUEST_ERROR_OPERATIONS = {
-    AuthorizationTargetNotFound: {"resolve_authorization", "resolve_authorizations"},
-    AuthorizationConflict: {"resolve_authorization", "resolve_authorizations"},
     InputConflict: {"accept_input", "receive_user_message"},
 }
 
@@ -130,7 +122,7 @@ class PipePeer:
         try:
             result = await self.handler(operation, session_id, arguments)
             await self.send(("response", request_id, result))
-        except (AuthorizationTargetNotFound, AuthorizationConflict, InputConflict) as error:
+        except InputConflict as error:
             if operation not in _REQUEST_ERROR_OPERATIONS.get(type(error), ()):
                 raise
             code = _REQUEST_ERROR_CODES[type(error)]

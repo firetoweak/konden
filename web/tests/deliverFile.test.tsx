@@ -41,8 +41,6 @@ it("带附件的消息单独成气泡，子 Agent 执行步骤里也能下载", 
   render(
     <MantineProvider>
       <StepDisclosure
-        authorizationDisabled={false}
-        onAuthorize={() => {}}
         sessionId="ada"
         index={0}
         step={step("file", "证据在这", [file])}

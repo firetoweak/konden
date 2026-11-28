@@ -31,13 +31,12 @@ function agent(partial: Partial<AgentRosterEntry> & Pick<AgentRosterEntry, "sess
 const queries = vi.hoisted(() => ({
   agents: [] as AgentRosterEntry[],
   externalSessions: [] as ExternalSessionSummary[],
-  inbox: [] as { kind: "authorization"; label: string; session_id: string }[],
+  inbox: [] as { kind: "control"; label: string; session_id: string }[],
   workspaces: [] as Workspace[],
   deleteWorkspace: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   renameWorkspace: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   createAgent: vi.fn(() => ({ unwrap: () => Promise.resolve(agent({ session_id: "agent-new", name: "konden" })) })),
   groups: [] as GroupSummary[],
-  setAutoAuthorize: vi.fn(),
   deleteAgent: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   deleteExternalSession: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   dissolveGroup: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
@@ -46,8 +45,6 @@ vi.mock("../src/api/kondenApi", () => ({
   useDeleteAgentMutation: () => [queries.deleteAgent, { isLoading: false }],
   useDeleteExternalSessionMutation: () => [queries.deleteExternalSession, { isLoading: false }],
   useDissolveGroupMutation: () => [queries.dissolveGroup, { isLoading: false }],
-  useGetAutoAuthorizeQuery: () => ({ data: { enabled: false } }),
-  useSetAutoAuthorizeMutation: () => [queries.setAutoAuthorize, { isLoading: false }],
   useGetAgentsQuery: () => ({ data: queries.agents, isLoading: false }),
   useGetExternalSessionsQuery: () => ({ data: queries.externalSessions, isLoading: false }),
   useGetCodexConnectionQuery: () => ({ data: { status: "connected", error: null } }),
@@ -302,7 +299,7 @@ it("搜索按需展开并聚焦，清除或关闭后恢复名册折叠偏好", a
   expect(screen.getByRole("textbox", { name: "搜索对话" })).toHaveValue("");
 });
 
-it("名册用干活、等授权、等人回话和空闲标出状态，运行中的活动盖过空闲", () => {
+it("名册用干活、待确认、等人回话和空闲标出状态，运行中的活动盖过空闲", () => {
   browserStubs();
   queries.workspaces = [workspace("workspace", "工作区")];
   queries.agents = [agent({
@@ -325,11 +322,11 @@ it("名册用干活、等授权、等人回话和空闲标出状态，运行中�
   act(() => { store.dispatch(sessionActivity({ sessionId: "parent", activity: "running" })); });
   expect(screen.getByLabelText("干活")).toBeInTheDocument();
 
-  queries.agents = [agent({ session_id: "parent", name: "konden", status: "authorization" })];
+  queries.agents = [agent({ session_id: "parent", name: "konden", status: "control" })];
   view.rerender(sidebar());
-  expect(screen.getByLabelText("等授权")).toBeInTheDocument();
+  expect(screen.getByLabelText("待确认")).toBeInTheDocument();
   act(() => { store.dispatch(viewing("parent")); });
-  expect(screen.getByLabelText("等授权")).toBeInTheDocument();
+  expect(screen.getByLabelText("待确认")).toBeInTheDocument();
 
   act(() => { store.dispatch(sessionActivity({ sessionId: "parent", activity: "idle" })); });
   queries.agents = [agent({ session_id: "parent", name: "konden", status: "waiting" })];
@@ -370,7 +367,7 @@ it("对话入口返回首页，待处理提示所属 Bot", () => {
   browserStubs();
   queries.agents = [agent({ session_id: "ada", name: "Ada" }), agent({ session_id: "lin", name: "Lin" })];
   queries.groups = [];
-  queries.inbox = [{ kind: "authorization", label: "Ada", session_id: "ada" }];
+  queries.inbox = [{ kind: "control", label: "Ada", session_id: "ada" }];
   renderSidebar("/sessions/ada");
 
   expect(within(screen.getByRole("button", { name: "Ada", exact: true })).getByLabelText("空闲 · 需要你处理")).toBeInTheDocument();
@@ -392,18 +389,6 @@ it("群聊直接列在名册中，点击进入群聊", () => {
 
   fireEvent.click(screen.getByLabelText("群聊 开发组"));
   expect(screen.getByTestId("current-path")).toHaveTextContent("/groups/group-1");
-});
-
-it("侧栏自动放行提交全局设置，返回首页仍显示开关", async () => {
-  browserStubs();
-  queries.agents = [agent({ session_id: "ada", name: "Ada" })];
-  queries.groups = [];
-  queries.setAutoAuthorize.mockClear();
-  renderSidebar("/sessions/ada");
-  fireEvent.click(screen.getByRole("switch", { name: "自动放行写文件等工具" }));
-  expect(queries.setAutoAuthorize).toHaveBeenCalledWith({ connectionId: "connection", enabled: true });
-  fireEvent.click(screen.getByRole("button", { name: "所有对话" }));
-  expect(screen.getByRole("switch", { name: "自动放行写文件等工具" })).toBeInTheDocument();
 });
 
 it("头像栏展开折叠分组中的图标，搜索与右键可用，恢复宽度后保留分组偏好", async () => {

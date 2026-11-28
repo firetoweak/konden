@@ -39,9 +39,9 @@ const conversation = {
   }],
   deleted: false, agent_name: null,
   session: {
-    status: "waiting", waiting_for: ["external_fact"], pending_authorization_ids: [],
-    pending_authorization_commands: [], should_wake: false, has_open_subagents: false,
-    control_approval: null, control_message: null, auto_authorize: false, last_error: null,
+    status: "waiting", waiting_for: ["external_fact"],
+ should_wake: false, has_open_subagents: false,
+    control_approval: null, control_message: null, last_error: null,
   },
   compact_count: 0, compact_phase: null, waiting_until: null, work_plan: null,
   work_plan_updates: [], context_input_tokens: null,

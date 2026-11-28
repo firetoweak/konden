@@ -170,8 +170,6 @@ class AgentProjectsTest(unittest.IsolatedAsyncioTestCase):
         other_alpha = repository(self.root / "nested" / "alpha")
         self.registry.register_path(alpha)
         agent = await self.host.create_agent(name="Ada")
-        self.assertEqual(self.tools[LINK].requires_authorization({"project": "alpha"}), False)
-        self.assertEqual(self.tools[LINK].requires_authorization({"path": str(other_alpha)}), True)
 
         linked = await self.call(LINK, agent, {"project": "alpha"})
         self.assertEqual((linked["code"], linked["data"]["project"]), ("PROJECT_LINKED", "alpha"))
