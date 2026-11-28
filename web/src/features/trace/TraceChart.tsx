@@ -272,16 +272,20 @@ export function TraceChart({ axis, window: viewport, setWindow, range, setRange,
           const active = selected === entry.id;
           const muted = brush !== null && !overlaps(interval(entry), brush);
           const layer = layers.rows.get(entry.id);
-          const miss = cacheMiss(entry)?.ratio ?? 0;
+          const miss = cacheMiss(entry);
+          const unreported = entry.kind === "model" && miss === null;
           const mixed = mix.count > 1 && (mix.failed + mix.uncertain > 0) && !active;
           const { left, width: size } = position(mark.plot, bounds);
           const style = { "--mark-x": left, "--mark-width": size, "--lane": lane[entry.kind],
             "--call-row": layer === undefined ? undefined : Math.min(layer, 4), "--call-height": Math.min(layers.count, 5),
-            "--miss": miss ? `max(1px, ${miss * 100}%)` : "0%",
+            "--miss": miss?.ratio ? `max(1px, ${miss.ratio * 100}%)` : "0%",
             "--failed": mixed ? `${mix.failed / mix.count * 100}%` : undefined,
             "--uncertain": mixed ? `${(mix.failed + mix.uncertain) / mix.count * 100}%` : undefined,
           } as CSSProperties;
-          const className = `trace-mark ${entry.kind} ${entry.status ?? ""}${active ? " selected" : ""}${muted ? " muted" : ""}${entry.user ? " has-user" : ""}${mixed ? " mixed" : ""}`;
+          const className = [
+            "trace-mark", entry.kind, entry.status, active && "selected", muted && "muted",
+            entry.user && "has-user", mixed && "mixed", unreported && "cache-unreported",
+          ].filter(Boolean).join(" ");
           const content = entry.user ? <IconMessageFilled size={11} aria-hidden="true" /> : entry.kind === "subagent" ? <span>↳</span> : null;
           if (dense && !active && entry.kind !== "subagent" && entry.kind !== "catalog") {
             return <span key={entry.id} className={className} style={style} aria-hidden="true">{content}</span>;
@@ -309,7 +313,10 @@ export function TraceChart({ axis, window: viewport, setWindow, range, setRange,
             onPointerDown={(event) => startDrag(event, edge)} onKeyDown={adjust} />;
         })}
       </div>
-      <span className="trace-cache-legend"><i />未命中</span>
+      <div className="trace-cache-legend">
+        <span><i />未命中</span>
+        <span><i className="cache-unreported" />无统计</span>
+      </div>
       <div className="trace-ticks" aria-hidden="true">{ticks.map(({ entry, anchor }) => <span key={entry.id}
         style={{ left: `${point(anchor, bounds) * 100}%` }}>第 {entry.step} 步</span>)}</div>
       {zoomed && <div className="trace-horizontal-scroll" ref={scrollbar} tabIndex={0} role="region" aria-label="横向滚动轨迹"

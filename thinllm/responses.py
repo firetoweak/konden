@@ -161,5 +161,10 @@ class ResponsesClient(ChatCompletionsClient):
         details = usage.get("input_tokens_details")
         if details is None:
             details = {}
-        stream.usage = LLMUsage(usage["input_tokens"], usage["output_tokens"], details.get("cached_tokens", 0))
+        stream.usage = LLMUsage(
+            usage["input_tokens"],
+            usage["output_tokens"],
+            cached_input_tokens=details.get("cached_tokens"),
+            cache_write_input_tokens=details.get("cache_write_tokens"),
+        )
         stream.received_done = True

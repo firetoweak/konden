@@ -24,7 +24,7 @@ from konden.runtime.json_values import thaw_value
 from konden.runtime.model import CommandState, OutcomeStatus
 
 _ARGUMENT_KEYS = ("path", "file_path", "command", "query", "pattern", "url", "recipient", "skill_id", "toolset_id", "task")
-_USAGE_KEYS = ("input_tokens", "output_tokens", "cached_input_tokens")
+_USAGE_KEYS = ("input_tokens", "output_tokens", "cache_write_input_tokens")
 
 
 def _preview(value: object) -> str:
@@ -77,7 +77,12 @@ def _usage(payload):
     usage = metadata.get(MODEL_USAGE) if isinstance(metadata, Mapping) else None
     if not isinstance(usage, Mapping):
         return {}
-    return {key: usage[key] for key in _USAGE_KEYS if type(usage.get(key)) is int and usage[key] >= 0}
+    result = {key: usage[key] for key in _USAGE_KEYS if type(usage.get(key)) is int and usage[key] >= 0}
+    # Older records defaulted an unreported count to zero. Their positive counts remain valid.
+    cached = usage.get("cache_read_input_tokens", usage.get("cached_input_tokens") or None)
+    if type(cached) is int and cached >= 0:
+        result["cached_input_tokens"] = cached
+    return result
 
 
 def _command_events(command: CommandState, by_id):

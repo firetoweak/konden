@@ -12,7 +12,8 @@ export function traceParams(branch: string[], entry?: string) {
 const traceKind = z.enum(["input", "model", "tool", "user", "catalog", "compact", "subagent"]);
 const callStatus = z.enum(["passed", "failed", "unknown", "pending", "rejected", "not_applicable"]);
 const usage = z.object({
-  input_tokens: z.number().optional(), output_tokens: z.number().optional(), cached_input_tokens: z.number().optional(),
+  input_tokens: z.number().optional(), output_tokens: z.number().optional(),
+  cached_input_tokens: z.number().optional(), cache_write_input_tokens: z.number().optional(),
 });
 const entry = z.object({
   id: z.string(), kind: traceKind, sequence: z.number(), at: z.number(), start: z.number(), title: z.string(),

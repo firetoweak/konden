@@ -20,16 +20,15 @@ from konden.llm.api import (
 
 class LlmCodecTest(unittest.TestCase):
     def test_roundtrip_result_preserves_calls_and_usage(self):
-        result = LLMCallResult(
-            LLMResponse(
-                content="done",
-                calls=(ToolCall("c1", "read_file", "{}"),),
-                message_extensions={"reasoning_content": ""},
-            ),
-            LLMUsage(3, 2, 1),
+        response = LLMResponse(
+            content="done",
+            calls=(ToolCall("c1", "read_file", "{}"),),
+            message_extensions={"reasoning_content": ""},
         )
-        restored = decode_llm_result(encode_llm_result(result))
-        self.assertEqual(restored, result)
+        for usage in (LLMUsage(3, 2), LLMUsage(3, 2, 0), LLMUsage(3, 2, 1, 2)):
+            with self.subTest(usage=usage):
+                result = LLMCallResult(response, usage)
+                self.assertEqual(decode_llm_result(encode_llm_result(result)), result)
 
     def test_known_errors_reconstitute_their_types(self):
         cases = (

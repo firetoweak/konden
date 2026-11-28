@@ -405,14 +405,9 @@ class ChatCompletionsClient:
             input_tokens = raw_usage["prompt_tokens"]
             output_tokens = raw_usage["completion_tokens"]
             details = raw_usage.get("prompt_tokens_details")
-            if details is None:
-                cached_tokens = 0
-            elif type(details) is dict:
-                cached_tokens = details.get("cached_tokens", 0)
-                if cached_tokens is None:
-                    cached_tokens = 0
-            else:
+            if details is not None and type(details) is not dict:
                 raise TypeError("prompt_tokens_details must be an object|null")
+            cached_tokens = details.get("cached_tokens") if details is not None else None
         except KeyError as exc:
             raise InvalidLLMResponse(
                 "invalid_llm_response",

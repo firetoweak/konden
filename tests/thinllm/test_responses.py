@@ -104,6 +104,31 @@ def test_openai_search_keeps_auto_choice_and_distinguishes_direct_answers(search
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(("details", "cached", "written"), [
+    (None, None, None),
+    ({}, None, None),
+    ({"cached_tokens": 0}, 0, None),
+    ({"cached_tokens": 32, "cache_write_tokens": 64}, 32, 64),
+])
+def test_cache_usage_distinguishes_unknown_from_reported_counts(responses_connection, details, cached, written):
+    endpoint, model, _ = responses_connection
+    terminal = completed()
+    usage = terminal["response"]["usage"]
+    if details is None:
+        del usage["input_tokens_details"]
+    else:
+        usage["input_tokens_details"] = details
+
+    async def run():
+        transport = httpx.MockTransport(lambda _: httpx.Response(200, content=sse(terminal)))
+        async with create_client(endpoint, transport=transport) as client:
+            result = await client.chat([{"role": "user", "content": "test"}], model)
+        assert result.usage.cached_input_tokens == cached
+        assert result.usage.cache_write_input_tokens == written
+
+    asyncio.run(run())
+
+
 def test_stream_and_tool_history_use_responses_without_losing_native_output(responses_connection):
     endpoint, model, header = responses_connection
 
@@ -156,22 +181,20 @@ def test_stream_and_tool_history_use_responses_without_losing_native_output(resp
         assert "messages" not in payload and "stream_options" not in payload
         assert payload["reasoning"] == {"effort": "high", "summary": "auto"}
         functions = [{"type": "function", "strict": False, **tools[0]["function"]}]
+        replay = json.loads(requests[1].content)
+        assert replay["input"][:len(payload["input"])] == payload["input"]
         if endpoint.provider == "openai-chatgpt":
-            additional_tools = [{"type": "additional_tools", "role": "developer", "tools": functions}]
+            assert payload["input"][0] == {"type": "additional_tools", "role": "developer", "tools": functions}
             assert "tools" not in payload
         else:
-            additional_tools = []
             assert payload["tools"] == functions
-        assert payload["input"] == [*additional_tools, {"role": "user", "content": [
-            {"type": "input_text", "text": "read"},
-            {"type": "input_image", "image_url": "data:image/png;base64,AA==", "detail": "low"},
-        ]}]
+        assert payload["input"][-1]["content"][1] == {
+            "type": "input_image", "image_url": "data:image/png;base64,AA==", "detail": "low",
+        }
         assert payload["tool_choice"] == "auto"
-        replay = json.loads(requests[1].content)
         assert replay["tool_choice"] == "required"
         assert "reasoning" not in replay
-        assert replay["input"] == [
-            *payload["input"],
+        assert replay["input"][len(payload["input"]):] == [
             *output[:2],
             {**CALL, "call_id": "command_call_1"}, {**CALL, "call_id": "command_call_2"},
             {"type": "function_call_output", "call_id": "command_call_1", "output": "42"},

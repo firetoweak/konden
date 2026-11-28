@@ -92,6 +92,31 @@ def test_trace_preserves_canonical_failure_and_unknown_and_loads_request_on_sele
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize(("saved", "visible"), [
+    ({"cached_input_tokens": 0}, {}),
+    ({"cached_input_tokens": 75}, {"cached_input_tokens": 75}),
+    ({"cache_read_input_tokens": None}, {}),
+    ({"cache_read_input_tokens": 0, "cache_write_input_tokens": 80},
+     {"cached_input_tokens": 0, "cache_write_input_tokens": 80}),
+])
+def test_trace_distinguishes_reported_cache_miss_from_missing_statistics(tmp_path, saved, visible):
+    async def exercise():
+        session_id = "trace-bot"
+        store = SessionStore(tmp_path / "sessions")
+        await make_bot(store, session_id, tmp_path)
+        usage = {"input_tokens": 100, "output_tokens": 2}
+        runtime = AgentRuntime(store.journal(session_id), ScriptedDecisionMaker((
+            lambda _: RecordedDecision(ModelDecision("OK"), (), {"model_usage": {**usage, **saved}}),
+        )), {}, SequentialIds())
+        await runtime.receive_user_message(session_id, "Read.", delivery_id="message")
+        await runtime.advance(session_id)
+        index = await ExecutionTraceQueries(store).index(session_id, [])
+        model = next(entry for entry in index["entries"] if entry["kind"] == "model")
+        assert model["usage"] == {**usage, **visible}
+
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize("recorded", [True, False])
 def test_model_trace_shows_content_and_complete_tool_calls(tmp_path, recorded):
     async def exercise():

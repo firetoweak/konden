@@ -11,6 +11,7 @@
   --trace-failed: light-dark(#b83731, #ffa299);
   --trace-unknown: light-dark(#966c18, #e8bf75);
   --trace-miss: light-dark(#c36c19, #ffb56d);
+  --trace-cache-unreported: light-dark(#82858c, #81838b);
   display: flex; flex: 1 1 0; flex-direction: column; min-width: 0; min-height: 0;
   padding: 8px 20px 12px; gap: 10px; color: var(--mantine-color-text); font-size: 13px;
   background: var(--konden-canvas); font-variant-numeric: tabular-nums;
@@ -77,6 +78,7 @@
 .trace-mark.unknown, .trace-mark.pending, .trace-mark.not_applicable { --mark-color: var(--trace-unknown); }
 .trace-mark::before { content: ""; height: min(8px, 79%); width: 100%; background: var(--mark-color); }
 .trace-mark.model::before { height: 11px; background: linear-gradient(to top, var(--trace-miss) var(--miss), var(--mark-color) var(--miss)); }
+.trace-mark.model.cache-unreported::before { background: var(--trace-cache-unreported); }
 .trace-mark.tool.mixed::before { background: linear-gradient(to bottom, var(--trace-failed) 0 var(--failed), var(--trace-unknown) var(--failed) var(--uncertain), var(--trace-tool) var(--uncertain)); }
 .trace-mark.catalog::before { border: 1px solid var(--trace-tool); background: var(--konden-hover); }
 .trace-plot span.trace-mark { pointer-events: none; }
@@ -103,8 +105,10 @@
 .trace-handle.tight.start::before { left: calc(100% - 5px); }
 .trace-handle.tight.end::before { left: 0; }
 .trace-cache-legend, .trace-ticks { align-self: center; height: 19px; color: var(--trace-muted); font-size: 11px; line-height: 19px; }
-.trace-cache-legend { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+.trace-cache-legend { display: grid; height: auto; line-height: 14px; white-space: nowrap; }
+.trace-cache-legend span { display: flex; gap: 4px; align-items: center; }
 .trace-cache-legend i { width: 5px; height: 8px; background: var(--trace-miss); }
+.trace-cache-legend .cache-unreported { background: var(--trace-cache-unreported); }
 .trace-ticks { position: relative; margin-inline: 22px; }
 .trace-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .trace-horizontal-scroll { grid-column: 2; height: 12px; overflow-x: scroll; overflow-y: hidden; scrollbar-width: thin; }

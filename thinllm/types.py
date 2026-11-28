@@ -88,7 +88,8 @@ class LLMResponse:
 class LLMUsage:
     input_tokens: int
     output_tokens: int
-    cached_input_tokens: int = 0
+    cached_input_tokens: int | None = None
+    cache_write_input_tokens: int | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -96,8 +97,10 @@ class LLMUsage:
             or self.input_tokens < 0
             or type(self.output_tokens) is not int
             or self.output_tokens < 0
-            or type(self.cached_input_tokens) is not int
-            or not 0 <= self.cached_input_tokens <= self.input_tokens
+            or any(type(count) is not int or count < 0
+                   for count in (self.cached_input_tokens, self.cache_write_input_tokens)
+                   if count is not None)
+            or (self.cached_input_tokens is not None and self.cached_input_tokens > self.input_tokens)
         ):
             raise InvalidLLMResponse(
                 "invalid_llm_usage",
@@ -109,7 +112,9 @@ class LLMUsage:
         return self.input_tokens + self.output_tokens
 
     @property
-    def uncached_input_tokens(self) -> int:
+    def uncached_input_tokens(self) -> int | None:
+        if self.cached_input_tokens is None:
+            return None
         return self.input_tokens - self.cached_input_tokens
 
 
